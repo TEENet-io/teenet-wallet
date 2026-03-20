@@ -86,8 +86,8 @@ func main() {
 		PendingWaitTimeout: 3 * time.Minute,
 	}
 	sdkClient := sdk.NewClientWithOptions(consensusURL, opts)
-	if err := sdkClient.SetDefaultAppIDFromEnv(); err != nil {
-		slog.Warn("APP_INSTANCE_ID not set — SDK signing will require explicit app ID")
+	if err := sdkClient.SetDefaultAppInstanceIDFromEnv(); err != nil {
+		slog.Warn("APP_INSTANCE_ID not set — SDK signing will require explicit app instance ID")
 	}
 	defer sdkClient.Close()
 

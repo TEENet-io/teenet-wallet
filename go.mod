@@ -3,15 +3,16 @@ module github.com/TEENet-io/teenet-wallet
 go 1.24.0
 
 require (
-	github.com/TEENet-io/teenet-sdk/go v0.0.0-20260320023137-908922ec3166
+	filippo.io/edwards25519 v1.2.0
+	github.com/TEENet-io/teenet-sdk/go v0.0.0-20260320163058-95bf425f2f90
 	github.com/ethereum/go-ethereum v1.16.8
 	github.com/gin-gonic/gin v1.10.0
+	github.com/google/uuid v1.6.0
 	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.25.12
 )
 
 require (
-	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/bits-and-blooms/bitset v1.20.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.6 // indirect
@@ -33,7 +34,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.20.0 // indirect
 	github.com/goccy/go-json v0.10.4 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
