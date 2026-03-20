@@ -1,0 +1,74 @@
+[
+  {
+    "name": "ethereum",
+    "label": "Ethereum Mainnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://ethereum-rpc.publicnode.com"
+  },
+  {
+    "name": "solana",
+    "label": "Solana Mainnet",
+    "protocol": "schnorr",
+    "curve": "ed25519",
+    "currency": "SOL",
+    "family": "solana",
+    "rpc_url": "https://api.mainnet-beta.solana.com"
+  },
+  {
+    "name": "sepolia",
+    "label": "Sepolia Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com"
+  },
+  {
+    "name": "holesky",
+    "label": "Holesky Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://ethereum-holesky-rpc.publicnode.com"
+  },
+  {
+    "name": "bsc-testnet",
+    "label": "BSC Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "tBNB",
+    "family": "evm",
+    "rpc_url": "https://bsc-testnet-rpc.publicnode.com"
+  },
+  {
+    "name": "solana-devnet",
+    "label": "Solana Devnet",
+    "protocol": "schnorr",
+    "curve": "ed25519",
+    "currency": "SOL",
+    "family": "solana",
+    "rpc_url": "https://api.devnet.solana.com"
+  },
+  {
+    "name": "optimism",
+    "label": "Optimism Mainnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://optimism-rpc.publicnode.com"
+  },
+  {
+    "name": "base-sepolia",
+    "label": "Base Sepolia Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://base-sepolia-rpc.publicnode.com"
+  }
+]

@@ -1,0 +1,310 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	sdk "github.com/TEENet-io/teenet-sdk/go"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+
+	"github.com/TEENet-io/teenet-wallet/handler"
+	"github.com/TEENet-io/teenet-wallet/model"
+)
+
+func main() {
+	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(slogLogger)
+
+	consensusURL := envOrDefault("CONSENSUS_URL", "http://localhost:8089")
+	host := envOrDefault("HOST", "0.0.0.0")
+	port := envOrDefault("PORT", "8080")
+	dataDir := envOrDefault("DATA_DIR", "/data")
+	baseURL := envOrDefault("BASE_URL", "http://localhost:"+port)
+	frontendURL := envOrDefault("FRONTEND_URL", "")
+	chainsFile := envOrDefault("CHAINS_FILE", "./chains.json")
+	apiKeyRateLimit        := envOrDefaultInt("API_KEY_RATE_LIMIT", 200)       // general: requests per minute per API key
+	walletCreateRateLimit  := envOrDefaultInt("WALLET_CREATE_RATE_LIMIT", 5)  // wallet creation is TEE-DKG-bound
+	registrationRateLimit  := envOrDefaultInt("REGISTRATION_RATE_LIMIT", 10)  // public auth: prevent TEE DKG abuse
+	approvalExpiryMinutes  := envOrDefaultInt("APPROVAL_EXPIRY_MINUTES", 30)
+	maxWalletsPerUser      := envOrDefaultInt("MAX_WALLETS_PER_USER", 20)
+	approvalExpiry         := time.Duration(approvalExpiryMinutes) * time.Minute
+
+	// Load chain configuration.
+	model.LoadChains(chainsFile)
+
+	// Init SQLite DB.
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		log.Fatalf("mkdir data dir: %v", err)
+	}
+	dbPath := filepath.Join(dataDir, "wallet.db")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Warn),
+	})
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	sqlDB, _ := db.DB()
+	sqlDB.Exec("PRAGMA journal_mode=WAL")
+	sqlDB.Exec("PRAGMA busy_timeout=5000")
+
+	if err := db.AutoMigrate(
+		&model.User{},
+		&model.Wallet{},
+		&model.ApprovalPolicy{},
+		&model.ApprovalRequest{},
+		&model.AllowedContract{},
+		&model.AuditLog{},
+		&model.IdempotencyRecord{},
+	); err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
+	// Drop the old single-column unique index on wallet_id (superseded by composite idx_wallet_currency).
+	// GORM AutoMigrate adds new indexes but never removes old ones, so we do it explicitly.
+	db.Exec("DROP INDEX IF EXISTS idx_approval_policies_wallet_id")
+
+	// Init TEENet SDK.
+	opts := &sdk.ClientOptions{
+		RequestTimeout:     3 * time.Minute, // ECDSA DKG can take 1-2 min
+		PendingWaitTimeout: 3 * time.Minute,
+	}
+	sdkClient := sdk.NewClientWithOptions(consensusURL, opts)
+	if err := sdkClient.SetDefaultAppIDFromEnv(); err != nil {
+		slog.Warn("APP_INSTANCE_ID not set — SDK signing will require explicit app ID")
+	}
+	defer sdkClient.Close()
+
+	sessions := handler.NewSessionStore()
+	defer sessions.Stop()
+
+	// Router.
+	r := gin.Default()
+	r.Use(requestIDMiddleware())
+	r.Use(corsMiddleware(frontendURL))
+
+	// Content-Security-Policy for non-API routes (web UI).
+	r.Use(func(c *gin.Context) {
+		if !strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.Header("Content-Security-Policy",
+				"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		}
+		c.Next()
+	})
+
+	// Serve frontend.
+	r.Static("/assets", "./frontend/assets")
+	r.StaticFile("/favicon.ico", "./frontend/favicon.ico")
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(404, gin.H{"error": "api endpoint not found"})
+			return
+		}
+		c.File("./frontend/index.html")
+	})
+
+	// Health check (public).
+	r.GET("/api/health", func(c *gin.Context) {
+		sqlDB, err := db.DB()
+		dbOK := err == nil && sqlDB.Ping() == nil
+		status := "ok"
+		if !dbOK {
+			status = "degraded"
+		}
+		c.JSON(200, gin.H{"status": status, "service": "teenet-wallet", "db": dbOK})
+	})
+
+	// Chain list (public) — used by frontend to populate chain selector.
+	r.GET("/api/chains", func(c *gin.Context) {
+		list := make([]model.ChainConfig, 0, len(model.Chains))
+		for _, cfg := range model.Chains {
+			list = append(list, cfg)
+		}
+		c.JSON(200, gin.H{"success": true, "chains": list})
+	})
+
+	// Auth handlers (public: login + registration flows only).
+	// Registration and login discovery endpoints are IP-rate-limited to prevent
+	// an attacker from spamming TEE DKG operations (each takes 1-2 min of cluster compute).
+	authH := handler.NewAuthHandler(db, sdkClient, sessions, baseURL)
+	ipLimiter := handler.NewIPRateLimiter(registrationRateLimit, time.Minute)
+	defer ipLimiter.Stop()
+	ipRL := handler.IPRateLimitMiddleware(ipLimiter)
+	r.GET("/api/auth/check-name", authH.CheckName)
+	r.GET("/api/auth/passkey/options", authH.PasskeyOptions)
+	r.POST("/api/auth/passkey/verify", authH.PasskeyVerify)
+	r.POST("/api/auth/passkey/register/begin", ipRL, authH.PasskeyRegistrationBegin)   // registration only: rate-limited to prevent DKG abuse
+	r.GET("/api/auth/passkey/register/options", authH.PasskeyRegistrationOptions)       // legacy: invite-token flow
+	r.POST("/api/auth/passkey/register/verify", ipRL, authH.PasskeyRegistrationVerify) // registration only
+
+	// Protected routes (dual auth: API Key or Passkey session).
+	rateLimiter       := handler.NewRateLimiter(apiKeyRateLimit, time.Minute)
+	defer rateLimiter.Stop()
+	walletRateLimiter := handler.NewRateLimiter(walletCreateRateLimit, time.Minute)
+	defer walletRateLimiter.Stop()
+	auth := r.Group("/api")
+	auth.Use(handler.AuthMiddleware(db, sessions))
+	auth.Use(handler.CSRFMiddleware())
+	auth.Use(handler.APIKeyRateLimitMiddleware(rateLimiter))
+
+	// API Key management + session management (Passkey only).
+	passkeyOnly := auth.Group("")
+	passkeyOnly.Use(handler.PasskeyOnlyMiddleware())
+	passkeyOnly.POST("/auth/invite", authH.InviteUser)          // admin action: Passkey only
+	passkeyOnly.DELETE("/auth/session", authH.Logout)           // revoke current session
+	passkeyOnly.DELETE("/auth/account", authH.DeleteAccount)    // delete account + all keys
+	passkeyOnly.POST("/auth/apikey/generate", authH.GenerateAPIKey)
+	passkeyOnly.GET("/auth/apikey/list", authH.ListAPIKeys)
+	passkeyOnly.DELETE("/auth/apikey", authH.RevokeAPIKey)
+
+	// Contract whitelist (dual-auth for read, Passkey-only for write).
+	contractH := handler.NewContractHandler(db, sdkClient, approvalExpiry)
+	auth.GET("/wallets/:id/contracts", contractH.ListContracts)
+	auth.POST("/wallets/:id/contracts", contractH.AddContract)           // passkey: direct; apikey: pending approval
+	auth.PUT("/wallets/:id/contracts/:cid", contractH.UpdateContract)    // passkey: direct; apikey: pending approval
+	passkeyOnly.DELETE("/wallets/:id/contracts/:cid", contractH.DeleteContract)
+
+	// Idempotency store for transfer requests.
+	idempotencyStore := handler.NewIdempotencyStore(db)
+	defer idempotencyStore.Stop()
+
+	// Wallet routes (API Key or Passkey).
+	walletH := handler.NewWalletHandler(db, sdkClient, baseURL, approvalExpiry)
+	walletH.SetMaxWallets(maxWalletsPerUser)
+	walletH.SetIdempotencyStore(idempotencyStore)
+	auth.POST("/wallets", handler.UserRateLimitMiddleware(walletRateLimiter), walletH.CreateWallet)
+	auth.GET("/wallets", walletH.ListWallets)
+	auth.GET("/wallets/:id", walletH.GetWallet)
+	passkeyOnly.DELETE("/wallets/:id", walletH.DeleteWallet) // irreversible: Passkey only
+	auth.POST("/wallets/:id/sign", walletH.Sign)
+
+	// General contract call (API Key or Passkey, with security layers).
+	contractCallH := handler.NewContractCallHandler(db, sdkClient, baseURL, approvalExpiry)
+	auth.POST("/wallets/:id/contract-call", contractCallH.ContractCall)
+	auth.POST("/wallets/:id/approve-token", contractCallH.ApproveToken)
+	auth.POST("/wallets/:id/revoke-approval", contractCallH.RevokeApproval)
+	auth.POST("/wallets/:id/call-read", contractCallH.CallRead)
+
+	auth.POST("/wallets/:id/transfer", walletH.Transfer) // backend builds+broadcasts tx
+	auth.GET("/wallets/:id/pubkey", walletH.GetPubkey)
+	auth.GET("/wallets/:id/policy", walletH.GetPolicy)        // read: API Key or Passkey
+	auth.PUT("/wallets/:id/policy", walletH.SetPolicy)        // passkey: apply directly; API key: creates approval
+	passkeyOnly.DELETE("/wallets/:id/policy", walletH.DeletePolicy) // irreversible: Passkey only
+
+	// Balance (API Key or Passkey).
+	balanceH := handler.NewBalanceHandler(db)
+	auth.GET("/wallets/:id/balance", balanceH.GetBalance)
+
+	// Audit log routes (dual-auth).
+	auditH := handler.NewAuditHandler(db)
+	auth.GET("/audit/logs", auditH.ListLogs)
+
+	// Approval routes.
+	approvalH := handler.NewApprovalHandler(db, sdkClient)
+	auth.GET("/approvals/pending", approvalH.ListPending)
+	auth.GET("/approvals/:id", approvalH.GetApproval)
+
+	// Approve/reject: Passkey only.
+	approveOnly := auth.Group("")
+	approveOnly.Use(handler.PasskeyOnlyMiddleware())
+	approveOnly.POST("/approvals/:id/approve", approvalH.Approve)
+	approveOnly.POST("/approvals/:id/reject", approvalH.Reject)
+
+	addr := host + ":" + port
+	slog.Info("server starting",
+		"addr", addr,
+		"consensus_url", consensusURL,
+		"base_url", baseURL,
+		"chains_file", chainsFile,
+		"chains_loaded", len(model.Chains),
+		"approval_expiry_minutes", approvalExpiryMinutes,
+	)
+
+	srv := &http.Server{Addr: addr, Handler: r}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	slog.Info("shutting down")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("forced shutdown", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("shutdown complete")
+}
+
+func envOrDefault(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return def
+}
+
+func envOrDefaultInt(key string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
+}
+
+func requestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.GetHeader("X-Request-ID")
+		if id == "" {
+			b := make([]byte, 8)
+			rand.Read(b)
+			id = hex.EncodeToString(b)
+		}
+		c.Set("requestID", id)
+		c.Header("X-Request-ID", id)
+		c.Next()
+	}
+}
+
+func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+
+		if allowedOrigin == "*" {
+			c.Header("Access-Control-Allow-Origin", "*")
+		} else if allowedOrigin != "" && origin == allowedOrigin {
+			c.Header("Access-Control-Allow-Origin", allowedOrigin)
+			c.Header("Vary", "Origin")
+		}
+		// If allowedOrigin == "" (default), no CORS header is set — secure by default.
+
+		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Authorization,Content-Type,X-CSRF-Token,Idempotency-Key")
+		c.Header("Access-Control-Allow-Credentials", "true")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	}
+}

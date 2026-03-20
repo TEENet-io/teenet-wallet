@@ -1,0 +1,21 @@
+# Binaries
+teenet-wallet
+*.exe
+*.tar.gz
+
+# Data
+/data/
+*.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*

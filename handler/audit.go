@@ -1,0 +1,102 @@
+package handler
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
+	"github.com/TEENet-io/teenet-wallet/model"
+)
+
+// AuditHandler serves the audit log API.
+type AuditHandler struct {
+	db *gorm.DB
+}
+
+func NewAuditHandler(db *gorm.DB) *AuditHandler {
+	return &AuditHandler{db: db}
+}
+
+// ListLogs returns a paginated list of the current user's audit logs.
+// GET /api/audit/logs?page=1&limit=20&action=transfer&wallet_id=5
+func (h *AuditHandler) ListLogs(c *gin.Context) {
+	userID := mustUserID(c)
+	if c.IsAborted() {
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 30
+	}
+	offset := (page - 1) * limit
+
+	q := h.db.Model(&model.AuditLog{}).Where("user_id = ?", userID)
+	if action := c.Query("action"); action != "" {
+		q = q.Where("action = ?", action)
+	}
+	if wid := c.Query("wallet_id"); wid != "" {
+		q = q.Where("wallet_id = ?", wid)
+	}
+
+	var total int64
+	q.Count(&total)
+
+	var logs []model.AuditLog
+	if err := q.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error; err != nil {
+		jsonError(c, http.StatusInternalServerError, "db error")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"logs":    logs,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
+	})
+}
+
+// ─── Audit helpers ─────────────────────────────────────────────────────────────
+
+// writeAuditLog writes a best-effort audit entry. Errors are logged to stdout but not returned.
+func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *uint, details interface{}) {
+	entry := model.AuditLog{
+		UserID:    userID,
+		Action:    action,
+		Status:    status,
+		AuthMode:  authMode,
+		IP:        ip,
+		WalletID:  walletID,
+		CreatedAt: time.Now(),
+	}
+	if details != nil {
+		b, _ := json.Marshal(details)
+		entry.Details = string(b)
+	}
+	if err := db.Create(&entry).Error; err != nil {
+		slog.Error("audit write failed", "user_id", userID, "action", action, "error", err)
+	}
+}
+
+// writeAuditCtx is a convenience wrapper that extracts userID/authMode/IP from the gin context.
+func writeAuditCtx(db *gorm.DB, c *gin.Context, action, status string, walletID *uint, details interface{}) {
+	userID := mustUserID(c)
+	if c.IsAborted() {
+		return
+	}
+	authMode := ""
+	if am, ok := c.Get("authMode"); ok {
+		authMode, _ = am.(string)
+	}
+	writeAuditLog(db, userID, action, status, authMode, c.ClientIP(), walletID, details)
+}

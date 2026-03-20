@@ -1,0 +1,78 @@
+package model
+
+import (
+	"encoding/json"
+	"log/slog"
+	"os"
+	"time"
+)
+
+// Wallet represents a chain wallet backed by a TEE-DAO key pair.
+// The private key never exists outside TEE hardware.
+type Wallet struct {
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	UserID    uint      `json:"user_id" gorm:"not null;index"`
+	Chain     string    `json:"chain" gorm:"size:32;not null"`
+	KeyName   string    `json:"key_name" gorm:"not null;uniqueIndex"` // TEE-DAO key name
+	PublicKey string    `json:"public_key"`                           // hex-encoded compressed pubkey
+	Address   string    `json:"address" gorm:"size:100;index"`        // chain address
+	Label     string    `json:"label" gorm:"size:100"`
+	Curve     string    `json:"curve"`    // secp256k1, ed25519
+	Protocol  string    `json:"protocol"` // ecdsa, schnorr
+	Status    string    `json:"status" gorm:"default:'creating'"` // creating, ready, error
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ChainConfig describes one blockchain network.
+type ChainConfig struct {
+	Name     string `json:"name"`     // unique key, e.g. "sepolia"
+	Label    string `json:"label"`    // display name, e.g. "Sepolia Testnet"
+	Protocol string `json:"protocol"` // "ecdsa" | "schnorr"
+	Curve    string `json:"curve"`    // "secp256k1" | "ed25519"
+	Currency string `json:"currency"` // e.g. "ETH", "SOL"
+	Family   string `json:"family"`   // "evm" | "solana"
+	RPCURL   string `json:"rpc_url"`  // JSON-RPC endpoint
+}
+
+// Chains is the active chain registry, loaded at startup.
+var Chains map[string]ChainConfig
+
+// defaultChains is the fallback when no chains.json is present.
+var defaultChains = []ChainConfig{
+	{Name: "ethereum", Label: "Ethereum Mainnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-rpc.publicnode.com"},
+	{Name: "solana", Label: "Solana Mainnet", Protocol: "schnorr", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.mainnet-beta.solana.com"},
+	{Name: "sepolia", Label: "Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-sepolia-rpc.publicnode.com"},
+	{Name: "holesky", Label: "Holesky Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-holesky-rpc.publicnode.com"},
+	{Name: "bsc-testnet", Label: "BSC Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "tBNB", Family: "evm", RPCURL: "https://bsc-testnet-rpc.publicnode.com"},
+	{Name: "solana-devnet", Label: "Solana Devnet", Protocol: "schnorr", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.devnet.solana.com"},
+	{Name: "optimism", Label: "Optimism Mainnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://optimism-rpc.publicnode.com"},
+	{Name: "base-sepolia", Label: "Base Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://base-sepolia-rpc.publicnode.com"},
+}
+
+// LoadChains loads chain configuration from a JSON file.
+// Falls back to built-in defaults if the file does not exist or cannot be parsed.
+func LoadChains(path string) {
+	Chains = make(map[string]ChainConfig)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		useDefaultChains()
+		slog.Info("using built-in default chains", "count", len(Chains))
+		return
+	}
+	var list []ChainConfig
+	if err := json.Unmarshal(data, &list); err != nil {
+		slog.Warn("chains file parse failed, using defaults", "path", path, "error", err)
+		useDefaultChains()
+		return
+	}
+	for _, c := range list {
+		Chains[c.Name] = c
+	}
+	slog.Info("chains loaded", "count", len(Chains), "path", path)
+}
+
+func useDefaultChains() {
+	for _, c := range defaultChains {
+		Chains[c.Name] = c
+	}
+}

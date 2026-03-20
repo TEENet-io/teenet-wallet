@@ -1,0 +1,2091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenClaw Wallet</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #080811; color: #e2e8f0; min-height: 100vh; }
+
+    /* ── Layout ── */
+    .app-header { background: #0f0f1a; border-bottom: 1px solid #1e1e35; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
+    .app-header h1 { font-size: 1.1rem; font-weight: 700; color: #a78bfa; letter-spacing: -0.02em; }
+    .app-header .tagline { font-size: 0.75rem; color: #475569; margin-left: auto; }
+    .auth-badge { font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: #1e293b; color: #64748b; }
+    .auth-badge.active { background: #1a103a; color: #a78bfa; border: 1px solid #4c1d95; }
+
+    /* ── User dropdown ── */
+    .user-menu { position: relative; display: none; }
+    .user-menu.visible { display: block; }
+    .user-menu-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.65rem; border-radius: 20px; background: #1a103a; color: #a78bfa; border: 1px solid #4c1d95; font-size: 0.7rem; font-weight: 500; cursor: pointer; user-select: none; white-space: nowrap; }
+    .user-menu-btn:hover { background: #200d4a; }
+    .user-dot { width: 6px; height: 6px; border-radius: 50%; background: #a78bfa; flex-shrink: 0; }
+    .user-chevron { font-size: 0.55rem; color: #7c5fc4; transition: transform 0.15s; }
+    .user-menu.open .user-chevron { transform: rotate(180deg); }
+    .user-dropdown { position: absolute; right: 0; top: calc(100% + 6px); background: #111120; border: 1px solid #2a2a45; border-radius: 10px; min-width: 130px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 1000; overflow: hidden; display: none; }
+    .user-menu.open .user-dropdown { display: block; }
+    .user-dropdown-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.9rem; font-size: 0.78rem; color: #94a3b8; cursor: pointer; transition: background 0.12s; }
+    .user-dropdown-item:hover { background: #1e1e35; color: #e2e8f0; }
+    .user-dropdown-item.danger { color: #f87171; }
+    .user-dropdown-item.danger:hover { background: #450a0a; }
+    .container { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid #1e1e35; margin-bottom: 1.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { padding: 0.6rem 1.1rem; border: none; background: none; color: #64748b; font-size: 0.85rem; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s; white-space: nowrap; flex-shrink: 0; }
+    .tab:hover { color: #94a3b8; }
+    .tab.active { color: #a78bfa; border-bottom-color: #7c3aed; font-weight: 600; }
+    .panel { display: none; } .panel.active { display: block; }
+
+    /* ── Cards ── */
+    .card { background: #111120; border: 1px solid #1e1e35; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+    .card-title { font-size: 0.9rem; font-weight: 600; color: #c4b5fd; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+    /* ── Forms ── */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .form-row.single { grid-template-columns: 1fr; }
+    @media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+    .form-group { margin-bottom: 0.75rem; }
+    label { display: block; font-size: 0.72rem; color: #64748b; margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    input, select, textarea { width: 100%; padding: 0.55rem 0.75rem; background: #0a0a18; border: 1px solid #2a2a45; border-radius: 8px; color: #e2e8f0; font-size: 0.85rem; outline: none; transition: border-color 0.15s; }
+    input:focus, select:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.15); }
+    input::placeholder { color: #374151; }
+    select option { background: #111120; }
+
+    /* ── Buttons ── */
+    .btn { padding: 0.5rem 1.1rem; border-radius: 8px; border: none; cursor: pointer; font-size: 0.82rem; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .btn:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: #7c3aed; color: #fff; }
+    .btn-ghost { background: #1e1e35; color: #94a3b8; }
+    .btn-danger { background: #7f1d1d; color: #fca5a5; }
+    .btn-danger:hover:not(:disabled) { background: #991b1b; }
+    .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.75rem; border-radius: 6px; }
+    .btn-icon { padding: 0.3rem 0.4rem; font-size: 0.75rem; border-radius: 6px; }
+    .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+    /* ── Segment control ── */
+    .segment { display: inline-flex; background: #0a0a18; border: 1px solid #2a2a45; border-radius: 8px; padding: 3px; gap: 3px; }
+    .seg-btn { padding: 0.35rem 0.9rem; border: none; background: none; color: #64748b; cursor: pointer; border-radius: 6px; font-size: 0.8rem; transition: all 0.15s; }
+    .seg-btn.active { background: #7c3aed; color: #fff; font-weight: 600; }
+
+    /* ── Badges ── */
+    .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 20px; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.03em; }
+    .badge-green { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+    .badge-yellow { background: #451a03; color: #fbbf24; border: 1px solid #78350f; }
+    .badge-red { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .badge-purple { background: #2e1065; color: #c4b5fd; border: 1px solid #4c1d95; }
+    .badge-blue { background: #0c1a4d; color: #60a5fa; border: 1px solid #1e3a8a; }
+
+    /* ── Toast notifications ── */
+    #toasts { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; max-width: 340px; }
+    .toast { padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.82rem; animation: slideIn 0.2s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.4); line-height: 1.4; }
+    .toast-success { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+    .toast-error { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .toast-info { background: #0c1a4d; color: #93c5fd; border: 1px solid #1e3a8a; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ── Spinner ── */
+    .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(167,139,250,0.2); border-top-color: #a78bfa; border-radius: 50%; animation: spin 0.65s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Wallet cards ── */
+    .wallet-card { background: #111120; border: 1px solid #1e1e35; border-radius: 12px; margin-bottom: 0.75rem; overflow: hidden; transition: border-color 0.15s; }
+    .wallet-card.expanded { border-color: #4c1d95; }
+    .wallet-header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; cursor: pointer; user-select: none; }
+    .wallet-header:hover { background: rgba(124,58,237,0.04); }
+    .wallet-chain-icon { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+    .chain-eth { background: #1a1a3e; }
+    .chain-sol { background: #0d1f0f; }
+    .wallet-info { flex: 1; min-width: 0; }
+    .wallet-label { font-size: 0.85rem; font-weight: 600; color: #e2e8f0; }
+    .wallet-chain-name { font-size: 0.75rem; color: #7c8db5; font-weight: 500; }
+    .wallet-addr { font-family: 'Courier New', monospace; font-size: 0.72rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wallet-meta { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .wallet-balance { font-size: 0.8rem; color: #94a3b8; font-family: monospace; }
+    .chevron { color: #475569; font-size: 0.75rem; transition: transform 0.2s; }
+    .wallet-card.expanded .chevron { transform: rotate(180deg); }
+
+    /* ── Wallet detail ── */
+    .wallet-detail { border-top: 1px solid #1e1e35; }
+    .wallet-info-block { padding: 0.75rem 1.25rem 0; display: flex; flex-direction: column; gap: 0.4rem; }
+    .info-row { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+    .info-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; width: 5.5rem; flex-shrink: 0; }
+    .info-value { font-family: 'Courier New', monospace; font-size: 0.72rem; color: #cbd5e1; word-break: break-all; flex: 1; }
+    .pubkey-wrap { word-break: break-all; }
+    .sub-tabs { display: flex; gap: 0.25rem; padding: 0.75rem 1.25rem 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .sub-tabs::-webkit-scrollbar { display: none; }
+    .sub-tab { padding: 0.4rem 0.9rem; border: none; background: none; color: #64748b; cursor: pointer; font-size: 0.8rem; border-radius: 6px; transition: all 0.15s; white-space: nowrap; flex-shrink: 0; }
+    .sub-tab:hover { color: #94a3b8; }
+    .sub-tab.active { background: #1e1e35; color: #a78bfa; font-weight: 600; }
+    .sub-panel { display: none; padding: 1rem 1.25rem 1.25rem; }
+    .sub-panel.active { display: block; }
+
+    /* ── Transfer result ── */
+    .tx-result { padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.82rem; margin-top: 0.75rem; line-height: 1.5; overflow-wrap: break-word; word-break: break-all; }
+    .tx-result.success { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+    .tx-result.error { background: #450a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .tx-result.pending { background: #1c1a03; color: #fbbf24; border: 1px solid #78350f; }
+    .tx-hash { font-family: monospace; font-size: 0.75rem; word-break: break-all; }
+    .approval-url { color: #a78bfa; text-decoration: underline; word-break: break-all; }
+
+
+    /* ── Contracts table ── */
+    .contracts-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 1rem; }
+    .contracts-table th { text-align: left; padding: 0.5rem 0.6rem; color: #475569; font-weight: 500; border-bottom: 1px solid #1e1e35; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .contracts-table td { padding: 0.55rem 0.6rem; border-bottom: 1px solid #0f0f20; }
+    .contracts-table tr:last-child td { border-bottom: none; }
+    .contracts-table tr:hover td { background: rgba(124,58,237,0.04); }
+    .addr-cell { font-family: monospace; font-size: 0.72rem; color: #94a3b8; }
+    .add-contract-form { background: #0a0a18; border: 1px solid #2a2a45; border-radius: 8px; padding: 1rem; margin-top: 0.75rem; }
+    .add-contract-form .card-title { margin-bottom: 0.75rem; font-size: 0.82rem; }
+
+    /* ── Approval cards ── */
+    .approval-card { background: #111120; border: 1px solid #4c1d95; border-radius: 12px; padding: 1.25rem; margin-bottom: 0.75rem; }
+    .tx-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.75rem; font-size: 0.8rem; margin: 0.75rem 0; }
+    .tx-k { color: #475569; }
+    .tx-v { color: #e2e8f0; font-family: monospace; word-break: break-all; }
+    .amount-big { font-size: 1.3rem; font-weight: 700; color: #fbbf24; }
+
+    /* ── Filter dropdown ── */
+    .filter-wrap { position: relative; display: inline-block; }
+    .filter-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: #0a0a18; border: 1px solid #2a2a45; border-radius: 8px; color: #e2e8f0; font-size: 0.8rem; cursor: pointer; outline: none; transition: border-color 0.15s; white-space: nowrap; }
+    .filter-btn:hover, .filter-btn.open { border-color: #7c3aed; }
+    .filter-arrow { color: #64748b; font-size: 0.72rem; transition: transform 0.2s; }
+    .filter-btn.open .filter-arrow { transform: rotate(180deg); }
+    .filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; min-width: 160px; background: #111120; border: 1px solid #2a2a45; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 200; overflow: hidden; display: none; }
+    .filter-dropdown.open { display: block; }
+    .filter-option { padding: 0.45rem 0.85rem; font-size: 0.8rem; color: #94a3b8; cursor: pointer; transition: background 0.1s; }
+    .filter-option:hover { background: #1e1e35; color: #e2e8f0; }
+    .filter-option.active { color: #a78bfa; background: #1a103a; }
+
+    /* ── Misc ── */
+    .empty-state { text-align: center; padding: 2rem; color: #374151; font-size: 0.85rem; }
+    .divider { height: 1px; background: #1e1e35; margin: 1rem 0; }
+    .note { font-size: 0.75rem; color: #475569; margin-top: 0.5rem; }
+    .mono { font-family: monospace; }
+    .copy-btn { background: none; border: 1px solid #2a2a45; border-radius: 4px; color: #64748b; cursor: pointer; padding: 0.1rem 0.35rem; font-size: 0.65rem; transition: all 0.15s; }
+    .copy-btn:hover { color: #a78bfa; border-color: #4c1d95; }
+
+    /* ── Auth screen ── */
+    #view-auth { display: flex; flex-direction: column; align-items: center; padding: 3rem 1rem 2rem; min-height: calc(100vh - 60px); }
+    .auth-box { width: 100%; max-width: 420px; }
+    .auth-toggle { display: flex; background: #0a0a18; border: 1px solid #2a2a45; border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 1.25rem; }
+    .auth-toggle-btn { flex: 1; padding: 0.55rem; border: none; background: none; color: #64748b; cursor: pointer; border-radius: 7px; font-size: 0.85rem; font-weight: 500; transition: all 0.15s; }
+    .auth-toggle-btn.active { background: #7c3aed; color: #fff; }
+    .auth-panel { display: none; } .auth-panel.active { display: block; }
+
+    /* ── Custom confirm modal ── */
+    #confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px); }
+    #confirm-overlay.open { display: flex; }
+    #confirm-box { background: #111120; border: 1px solid #2a2a45; border-radius: 14px; padding: 1.5rem; width: 100%; max-width: 380px; box-shadow: 0 8px 40px rgba(0,0,0,0.6); animation: modalIn 0.18s ease; }
+    @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    #confirm-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+    #confirm-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; margin-bottom: 0.5rem; }
+    #confirm-message { font-size: 0.85rem; color: #94a3b8; line-height: 1.55; margin-bottom: 1.25rem; white-space: pre-line; }
+    #confirm-actions { display: flex; gap: 0.6rem; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+<div id="toasts"></div>
+
+<!-- ── Custom Confirm Modal ── -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <div id="confirm-icon"></div>
+    <div id="confirm-title"></div>
+    <div id="confirm-message"></div>
+    <div id="confirm-actions">
+      <button id="confirm-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="confirm-ok" class="btn btn-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="app-header">
+  <span style="font-size:1.4rem">🔐</span>
+  <h1>OpenClaw Wallet</h1>
+  <span class="tagline">TEE-secured · keys never leave hardware</span>
+  <div id="user-menu" class="user-menu" onclick="toggleUserMenu(event)">
+    <div class="user-menu-btn">
+      <span class="user-dot"></span>
+      <span id="user-menu-name"></span>
+      <span class="user-chevron">▼</span>
+    </div>
+    <div class="user-dropdown">
+      <div class="user-dropdown-item danger" onclick="logout()">⏻ Logout</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Auth View (logged out) ── -->
+<div id="view-auth">
+  <div class="auth-box">
+    <div class="auth-toggle">
+      <button class="auth-toggle-btn active" id="atbtn-login" onclick="showAuthTab('auth-login')">Login</button>
+      <button class="auth-toggle-btn" id="atbtn-register" onclick="showAuthTab('auth-register')">Register</button>
+    </div>
+
+    <div id="auth-login" class="auth-panel active">
+      <div class="card">
+        <div class="card-title">🔑 Passkey Login</div>
+        <p style="font-size:0.8rem;color:#475569;margin-bottom:1.25rem;">Authenticate with your device passkey — Face ID, fingerprint, or security key.</p>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:0.65rem" onclick="passkeyLogin()">Login with Passkey</button>
+      </div>
+    </div>
+
+    <div id="auth-register" class="auth-panel">
+      <div class="card">
+        <div class="card-title">🔐 Register Passkey</div>
+        <p style="font-size:0.8rem;color:#475569;margin-bottom:0.6rem;">Register your device passkey — Face ID, fingerprint, or security key.</p>
+        <div style="font-size:0.78rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;color:#1e40af;">
+          💡 Use <strong>Chrome</strong> for best passkey compatibility. Other browsers may not work correctly.
+        </div>
+        <div style="position:relative;margin-bottom:0.75rem;">
+          <input id="reg-display-name" type="text" placeholder="Your name or email (e.g. alice@example.com)"
+            style="width:100%;padding:0.6rem 2.2rem 0.6rem 0.75rem;border:1px solid #cbd5e1;border-radius:8px;font-size:0.9rem;box-sizing:border-box;outline:none;" />
+        </div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:0.65rem" onclick="registerPasskey()">Register Device</button>
+        <div id="reg-result" style="margin-top:0.75rem;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── App View (logged in) ── -->
+<div id="view-app" style="display:none">
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('tab-wallets')">Wallets</button>
+      <button class="tab" onclick="showTab('tab-approvals')">Approvals</button>
+      <button class="tab" onclick="showTab('tab-account')">Account</button>
+      <button class="tab" onclick="showTab('tab-history')">History</button>
+    </div>
+
+    <!-- ── Wallets Tab ── -->
+    <div id="tab-wallets" class="panel active">
+      <div class="card">
+        <div class="card-title" style="cursor:pointer;margin-bottom:0" onclick="toggleCreate()">
+          <span>＋ Create Wallet</span>
+          <span id="create-chevron" style="margin-left:auto;color:#475569;font-size:0.75rem;">▼</span>
+        </div>
+        <div id="create-form" style="display:none;margin-top:1rem;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Chain</label>
+              <select id="create-chain"></select>
+            </div>
+            <div class="form-group">
+              <label>Label (optional)</label>
+              <input id="create-label" placeholder="My main wallet" />
+            </div>
+          </div>
+          <button class="btn btn-primary" id="create-btn" onclick="createWallet()">Create Wallet</button>
+          <div id="create-result" style="margin-top:0.75rem;"></div>
+        </div>
+      </div>
+      <div id="wallets-list"></div>
+    </div>
+
+    <!-- ── Approvals Tab ── -->
+    <div id="tab-approvals" class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <p style="font-size:0.82rem;color:#475569;">Approve or reject transactions requiring hardware passkey.</p>
+        <button class="btn btn-ghost btn-sm" onclick="loadApprovals()">Refresh</button>
+      </div>
+      <div id="approvals-list"></div>
+    </div>
+
+    <!-- ── Account Tab ── -->
+    <div id="tab-account" class="panel">
+      <div class="card">
+        <div class="card-title">👤 Account</div>
+        <div id="account-info" class="tx-grid" style="margin-bottom:1rem;"></div>
+        <div class="btn-group">
+          <button class="btn btn-primary btn-sm" onclick="generateAPIKey()">Generate API Key</button>
+          <button class="btn btn-ghost btn-sm" onclick="listAPIKeys()">List Keys</button>
+          <button class="btn btn-danger btn-sm" onclick="revokeAPIKey()">Revoke Key</button>
+        </div>
+        <div id="apikey-result" style="margin-top:0.75rem;"></div>
+      </div>
+      <div class="card" style="border-color:#7f1d1d;">
+        <div class="card-title" style="color:#f87171;">⚠ Danger Zone</div>
+        <p style="font-size:0.8rem;color:#94a3b8;margin-bottom:1rem;">Permanently delete your account, all wallets, and all TEE keys. This cannot be undone.</p>
+        <button class="btn btn-danger btn-sm" onclick="deleteAccount()">Delete Account</button>
+      </div>
+    </div>
+
+    <!-- ── History Tab ── -->
+    <div id="tab-history" class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <p style="font-size:0.82rem;color:#475569;">Your recent operations (login, transfers, approvals, etc.)</p>
+        <button class="btn btn-ghost btn-sm" onclick="loadAuditLogs()">Refresh</button>
+      </div>
+      <div id="audit-filter-bar" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+        <div class="filter-wrap" id="audit-filter-wrap">
+          <button class="filter-btn" id="audit-filter-btn" onclick="toggleAuditFilter(event)">
+            <span id="audit-filter-label">All actions</span>
+            <span class="filter-arrow">▾</span>
+          </button>
+          <div class="filter-dropdown" id="audit-filter-dropdown">
+            <div class="filter-option active" onclick="setAuditFilter('', 'All actions', this)">All actions</div>
+            <div class="filter-option" onclick="setAuditFilter('login', 'Login', this)">Login</div>
+            <div class="filter-option" onclick="setAuditFilter('wallet_create', 'Wallet Create', this)">Wallet Create</div>
+            <div class="filter-option" onclick="setAuditFilter('wallet_delete', 'Wallet Delete', this)">Wallet Delete</div>
+            <div class="filter-option" onclick="setAuditFilter('transfer', 'Transfer', this)">Transfer</div>
+            <div class="filter-option" onclick="setAuditFilter('sign', 'Sign', this)">Sign</div>
+            <div class="filter-option" onclick="setAuditFilter('policy_update', 'Policy Update', this)">Policy Update</div>
+            <div class="filter-option" onclick="setAuditFilter('approval_approve', 'Approve', this)">Approve</div>
+            <div class="filter-option" onclick="setAuditFilter('approval_reject', 'Reject', this)">Reject</div>
+            <div class="filter-option" onclick="setAuditFilter('contract_call', 'Contract Call', this)">Contract Call</div>
+            <div class="filter-option" onclick="setAuditFilter('approve_token', 'Token Approve', this)">Token Approve</div>
+            <div class="filter-option" onclick="setAuditFilter('revoke_approval', 'Revoke Approval', this)">Revoke Approval</div>
+            <div class="filter-option" onclick="setAuditFilter('apikey_generate', 'API Key Generate', this)">API Key Generate</div>
+            <div class="filter-option" onclick="setAuditFilter('apikey_revoke', 'API Key Revoke', this)">API Key Revoke</div>
+          </div>
+        </div>
+      </div>
+      <div id="audit-list"></div>
+      <div id="audit-pagination" style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── Safe DOM helpers (XSS prevention) ────────────────────────────────────────
+function safeSetResult(el, text, className) {
+  el.textContent = '';
+  var div = document.createElement('div');
+  div.className = 'tx-result ' + (className || '');
+  div.textContent = text;
+  el.appendChild(div);
+}
+
+function safeSetResultHTML(el, className, parts) {
+  // parts: array of {tag, text, className} for safe DOM construction
+  el.textContent = '';
+  var div = document.createElement('div');
+  div.className = 'tx-result ' + (className || '');
+  parts.forEach(function(p) {
+    if (p.tag) {
+      var child = document.createElement(p.tag);
+      child.textContent = p.text || '';
+      if (p.className) child.className = p.className;
+      if (p.style) child.style.cssText = p.style;
+      div.appendChild(child);
+    } else {
+      div.appendChild(document.createTextNode(p.text || ''));
+    }
+  });
+  el.appendChild(div);
+}
+
+// ─── Custom Confirm Dialog ────────────────────────────────────────────────────
+function customConfirm({ title = 'Are you sure?', message = '', confirmText = 'Confirm', danger = true, icon = null } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-overlay');
+    document.getElementById('confirm-icon').textContent = icon ?? (danger ? '⚠️' : '❓');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-message').textContent = message;
+    const okBtn = document.getElementById('confirm-ok');
+    okBtn.textContent = confirmText;
+    okBtn.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+    overlay.classList.add('open');
+    const close = ok => {
+      overlay.classList.remove('open');
+      okBtn.removeEventListener('click', onOk);
+      document.getElementById('confirm-cancel').removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey);
+      resolve(ok);
+    };
+    const onOk = () => close(true);
+    const onCancel = () => close(false);
+    const onKey = e => { if (e.key === 'Escape') close(false); };
+    okBtn.addEventListener('click', onOk);
+    document.getElementById('confirm-cancel').addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey);
+  });
+}
+
+// ─── Passkey Re-authentication ───────────────────────────────────────────────
+// Sensitive operations require a fresh passkey check.
+// Result is cached for 5 minutes so consecutive actions don't need re-verify.
+let _reauthExpiry = 0;
+
+async function requireReauth() {
+  if (Date.now() < _reauthExpiry) return true; // still valid
+
+  const confirmed = await customConfirm({
+    title: 'Confirm Your Identity',
+    message: 'This action requires passkey verification.\nTap Continue and authenticate with your fingerprint.',
+    confirmText: 'Continue',
+    danger: false,
+    icon: '🔐',
+  });
+  if (!confirmed) return false;
+
+  try {
+    const optRes = await api('/api/auth/passkey/options');
+    if (!optRes.success) { toast(optRes.error || 'Failed to get challenge', 'error'); return false; }
+    const credential = await navigator.credentials.get(normalizeOptions(optRes.data?.options));
+    if (!credential) { toast('Verification cancelled', 'error'); return false; }
+    const credJSON = credentialToJSON(credential);
+    const verRes = await api('/api/auth/passkey/verify', {
+      method: 'POST',
+      body: JSON.stringify({ login_session_id: optRes.data?.login_session_id, credential: credJSON }),
+    });
+    if (!verRes.success) { toast(verRes.error || 'Verification failed', 'error'); return false; }
+    _reauthExpiry = Date.now() + 5 * 60 * 1000; // cache for 5 minutes
+    return true;
+  } catch (e) {
+    toast(e.message || 'Verification failed', 'error');
+    return false;
+  }
+}
+
+// Derive API base from current URL path so requests work behind reverse proxies.
+// e.g. direct: /  → ''  → /api/...
+//      proxied: /instance/abc123/  → /instance/abc123  → /instance/abc123/api/...
+const API = window.location.pathname.replace(/\/+$/, '');
+let sessionToken = localStorage.getItem('ocw_session') || '';
+let csrfToken = localStorage.getItem('ocw_csrf') || '';
+let currentUser = (() => { try { return JSON.parse(localStorage.getItem('ocw_user') || 'null'); } catch { return null; } })();
+let chainsMap = {}; // name → ChainConfig, populated by loadChains()
+let walletContracts = {}; // walletId → AllowedContract[]
+let expandedWalletId = null;
+let activeSubTab = {}; // walletId → tab name
+let walletBalances = {}; // walletId → "1.234 ETH"
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+
+function toast(text, type = 'info', duration = 4500) {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = text;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+// ─── API fetch ───────────────────────────────────────────────────────────────
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (sessionToken) headers['Authorization'] = 'Bearer ' + sessionToken;
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  try {
+    const res = await fetch(API + path, { ...opts, headers });
+    return await res.json();
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ─── View routing ─────────────────────────────────────────────────────────────
+
+function showAuthView() {
+  document.getElementById('view-auth').style.display = 'flex';
+  document.getElementById('view-app').style.display = 'none';
+  document.getElementById('user-menu').classList.remove('visible', 'open');
+}
+
+function showAppView() {
+  document.getElementById('view-auth').style.display = 'none';
+  document.getElementById('view-app').style.display = 'block';
+  if (currentUser) {
+    document.getElementById('user-menu-name').textContent = currentUser.username;
+    document.getElementById('user-menu').classList.add('visible');
+  }
+}
+
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  document.getElementById('user-menu').classList.toggle('open');
+}
+document.addEventListener('click', () => {
+  document.getElementById('user-menu').classList.remove('open');
+});
+
+function showAuthTab(id) {
+  ['auth-login', 'auth-register'].forEach(t => {
+    document.getElementById(t).classList.toggle('active', t === id);
+    const btn = document.getElementById('atbtn-' + t.replace('auth-', ''));
+    if (btn) btn.classList.toggle('active', t === id);
+  });
+}
+
+// ─── Tabs ────────────────────────────────────────────────────────────────────
+
+function showTab(id) {
+  document.querySelectorAll('#view-app .tab').forEach(t =>
+    t.classList.toggle('active', t.getAttribute('onclick').includes(id)));
+  document.querySelectorAll('#view-app .panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id === 'tab-wallets') loadWallets();
+  if (id === 'tab-approvals') loadApprovals();
+  if (id === 'tab-history') loadAuditLogs();
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+async function passkeyLogin() {
+  try {
+    const optRes = await api('/api/auth/passkey/options');
+    if (!optRes.success) { toast(optRes.error || 'Failed to get challenge', 'error'); return; }
+    const loginSessionID = optRes.data?.login_session_id;
+    const credential = await navigator.credentials.get(normalizeOptions(optRes.data?.options));
+    const credJSON = credentialToJSON(credential);
+    const verRes = await api('/api/auth/passkey/verify', {
+      method: 'POST', body: JSON.stringify({ login_session_id: loginSessionID, credential: credJSON })
+    });
+    if (!verRes.success) { toast(verRes.error || 'Login failed', 'error'); return; }
+    sessionToken = verRes.session_token;
+    csrfToken = verRes.csrf_token || '';
+    currentUser = { id: verRes.user_id, username: verRes.username };
+    localStorage.setItem('ocw_session', sessionToken);
+    localStorage.setItem('ocw_csrf', csrfToken);
+    localStorage.setItem('ocw_user', JSON.stringify(currentUser));
+    renderAccount();
+    toast('Logged in as ' + verRes.username, 'success');
+    showTab('tab-wallets');
+  } catch (e) { toast('Login error: ' + e.message, 'error'); }
+}
+
+function renderAccount() {
+  if (!currentUser) return;
+  var acctEl = document.getElementById('account-info');
+  acctEl.textContent = '';
+  var k = document.createElement('span'); k.className = 'tx-k'; k.textContent = 'Username';
+  var v = document.createElement('span'); v.className = 'tx-v'; v.textContent = currentUser.username;
+  acctEl.appendChild(k); acctEl.appendChild(v);
+  showAppView();
+}
+
+function logout() {
+  api('/api/auth/session', { method: 'DELETE' }).catch(() => {});
+  sessionToken = ''; csrfToken = ''; currentUser = null; walletContracts = {}; walletBalances = {};
+  localStorage.removeItem('ocw_session');
+  localStorage.removeItem('ocw_csrf');
+  localStorage.removeItem('ocw_user');
+  document.getElementById('wallets-list').innerHTML = '';
+  document.getElementById('apikey-result').innerHTML = '';
+  showAuthView();
+  showAuthTab('auth-login');
+  toast('Logged out');
+}
+
+async function deleteAccount() {
+  if (!await customConfirm({ title: 'Delete Account', message: 'This will permanently delete all wallets and TEE keys. This cannot be undone.', confirmText: 'Delete Account', danger: true, icon: '⚠️' })) return;
+  try {
+    const passkeyBody = await getFreshPasskeyCredential();
+    if (!passkeyBody) return;
+    const res = await api('/api/auth/account', { method: 'DELETE', body: JSON.stringify(passkeyBody) });
+    if (!res.success) { toast(res.error || 'Delete failed', 'error'); return; }
+    sessionToken = ''; csrfToken = ''; currentUser = null; walletContracts = {}; walletBalances = {};
+    localStorage.removeItem('ocw_session');
+    localStorage.removeItem('ocw_csrf');
+    localStorage.removeItem('ocw_user');
+    document.getElementById('wallets-list').innerHTML = '';
+    document.getElementById('apikey-result').innerHTML = '';
+    showAuthView();
+    showAuthTab('auth-login');
+    toast('Account deleted', 'success');
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function generateAPIKey() {
+  if (!await customConfirm({ title: 'Generate New API Key', message: 'Generating a new key will immediately invalidate your existing key.\nAny apps using the old key will stop working.', confirmText: 'Generate', danger: true })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const res = await api('/api/auth/apikey/generate', { method: 'POST', body: JSON.stringify(passkeyBody) });
+  const el = document.getElementById('apikey-result');
+  if (res.success) {
+    safeSetResultHTML(el, 'success', [
+      {tag: 'strong', text: 'API Key (save \u2014 shown once):'},
+      {tag: 'br'},
+      {tag: 'span', text: res.api_key, className: 'mono', style: 'font-size:0.78rem;word-break:break-all'},
+    ]);
+  } else { safeSetResult(el, res.error, 'error'); }
+}
+
+async function listAPIKeys() {
+  const res = await api('/api/auth/apikey/list');
+  const el = document.getElementById('apikey-result');
+  if (res.success && res.keys?.length) {
+    el.textContent = '';
+    var div = document.createElement('div');
+    div.className = 'tx-result';
+    div.style.cssText = 'background:#111120;border:1px solid #2a2a45;color:#94a3b8';
+    div.appendChild(document.createTextNode('Keys: '));
+    res.keys.forEach(function(k, i) {
+      if (i > 0) div.appendChild(document.createTextNode(', '));
+      var code = document.createElement('code'); code.textContent = k.prefix + '\u2026'; div.appendChild(code);
+    });
+    el.appendChild(div);
+  } else {
+    el.textContent = '';
+    var noDiv = document.createElement('div');
+    noDiv.className = 'tx-result';
+    noDiv.style.cssText = 'background:#111120;border:1px solid #2a2a45;color:#64748b';
+    noDiv.textContent = 'No API keys found';
+    el.appendChild(noDiv);
+  }
+}
+
+async function revokeAPIKey() {
+  if (!await customConfirm({ title: 'Revoke API Key', message: 'OpenClaw and any integrations using this key will immediately lose access.', confirmText: 'Revoke', danger: true })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const res = await api('/api/auth/apikey', { method: 'DELETE', body: JSON.stringify(passkeyBody) });
+  toast(res.success ? 'API key revoked' : (res.error || 'Revoke failed'), res.success ? 'success' : 'error');
+  if (res.success) document.getElementById('apikey-result').innerHTML = '';
+}
+
+// ─── Create Wallet ────────────────────────────────────────────────────────────
+
+function toggleCreate() {
+  const form = document.getElementById('create-form');
+  const ch = document.getElementById('create-chevron');
+  const visible = form.style.display !== 'none';
+  form.style.display = visible ? 'none' : 'block';
+  ch.textContent = visible ? '▼' : '▲';
+}
+
+async function createWallet() {
+  const chain = document.getElementById('create-chain').value;
+  const label = document.getElementById('create-label').value.trim() || chain + ' wallet';
+  const btn = document.getElementById('create-btn');
+  const result = document.getElementById('create-result');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating…';
+  result.innerHTML = `<div class="tx-result pending">Creating ${chain} wallet — ECDSA may take 1–2 min…</div>`;
+
+  const res = await api('/api/wallets', { method: 'POST', body: JSON.stringify({ chain, label }) });
+  btn.disabled = false;
+  btn.innerHTML = 'Create Wallet';
+
+  if (res.success) {
+    safeSetResultHTML(result, 'success', [
+      {text: 'Wallet created! Address: '},
+      {tag: 'span', text: res.wallet.address, className: 'mono'},
+    ]);
+    document.getElementById('create-label').value = '';
+    loadWallets();
+  } else {
+    safeSetResult(result, res.error || 'Create failed', 'error');
+  }
+}
+
+// ─── Wallet List ──────────────────────────────────────────────────────────────
+
+async function loadWallets() {
+  const res = await api('/api/wallets');
+  const el = document.getElementById('wallets-list');
+  if (!res.success) { safeSetResult(el, res.error || 'Load failed', 'error'); return; }
+  const wallets = res.wallets || [];
+  if (!wallets.length) { el.innerHTML = '<div class="empty-state">No wallets yet. Create one above.</div>'; return; }
+
+  el.innerHTML = wallets.map(w => renderWalletCard(w)).join('');
+
+  // Restore expanded state.
+  if (expandedWalletId) {
+    const card = document.getElementById(`wcard-${expandedWalletId}`);
+    if (card) {
+      card.classList.add('expanded');
+      card.querySelector('.wallet-detail').style.display = 'block';
+      restoreSubTabs(expandedWalletId);
+    }
+  }
+
+  // Load balances in background.
+  wallets.filter(w => w.status === 'ready').forEach(w => refreshBalance(w.id));
+}
+
+function renderWalletCard(w) {
+  const cfg = chainsMap[w.chain] || {};
+  const isEVM = cfg.family === 'evm' || w.chain === 'ethereum';
+  const isSolana = cfg.family === 'solana' || w.chain === 'solana';
+  const chainIcon = isEVM ? '⬡' : '◎';
+  const chainClass = isEVM ? 'chain-eth' : 'chain-sol';
+  const statusClass = w.status === 'ready' ? 'badge-green' : w.status === 'creating' ? 'badge-yellow' : 'badge-red';
+  const addrShort = w.address ? (w.address.slice(0, 10) + '…' + w.address.slice(-8)) : '—';
+  const sub = activeSubTab[w.id] || 'transfer';
+
+  return `<div class="wallet-card" id="wcard-${w.id}">
+    <div class="wallet-header" onclick="toggleWallet(${w.id})">
+      <div class="wallet-chain-icon ${chainClass}">${chainIcon}</div>
+      <div class="wallet-info">
+        ${w.label ? `<div class="wallet-label">${w.label}</div>` : ''}
+        <div class="wallet-chain-name">${cfg.label || w.chain}</div>
+        <div class="wallet-addr" id="waddr-${w.id}">${addrShort}</div>
+      </div>
+      <div class="wallet-meta">
+        <span class="badge ${statusClass}">${w.status}</span>
+        <span class="wallet-balance" id="wbal-${w.id}">—</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="wallet-detail" style="display:none">
+      <div class="wallet-info-block">
+        <div class="info-row">
+          <span class="info-label">Address</span>
+          <span class="info-value mono">${w.address || '—'}</span>
+          ${w.address ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();copyText('${w.address}',this)" title="Copy">⎘</button>` : ''}
+        </div>
+        <div class="info-row">
+          <span class="info-label">Public Key</span>
+          <span class="info-value mono pubkey-wrap">${w.public_key || '—'}</span>
+          ${w.public_key ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();copyText('${w.public_key}',this)" title="Copy">⎘</button>` : ''}
+        </div>
+      </div>
+      <div class="sub-tabs">
+        ${(isEVM || isSolana) ? `<button class="sub-tab ${sub==='transfer'?'active':''}" onclick="showSubTab(${w.id},'transfer')">Transfer</button>` : ''}
+        ${isEVM ? `<button class="sub-tab ${sub==='contract'?'active':''}" onclick="showSubTab(${w.id},'contract')">Contract</button>` : ''}
+        ${isEVM ? `<button class="sub-tab ${sub==='contracts'?'active':''}" onclick="showSubTab(${w.id},'contracts')">Whitelist</button>` : ''}
+        <button class="sub-tab ${sub==='policy'?'active':''}" onclick="showSubTab(${w.id},'policy')">Policy</button>
+        <button class="sub-tab" style="color:#ef4444" onclick="event.stopPropagation();deleteWallet(${w.id})">🗑 Delete</button>
+      </div>
+      <div class="sub-panel ${sub==='transfer'?'active':''}" id="sp-transfer-${w.id}">
+        ${renderTransferPanel(w)}
+      </div>
+      ${isEVM ? `<div class="sub-panel ${sub==='contract'?'active':''}" id="sp-contract-${w.id}">
+        ${renderContractPanel(w)}
+      </div>` : ''}
+      ${isEVM ? `<div class="sub-panel ${sub==='contracts'?'active':''}" id="sp-contracts-${w.id}">
+        <div id="contracts-content-${w.id}">Loading…</div>
+      </div>` : ''}
+      <div class="sub-panel ${sub==='policy'?'active':''}" id="sp-policy-${w.id}">
+        ${renderPolicyPanel(w)}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTransferPanel(w) {
+  const cfg = chainsMap[w.chain] || {};
+  const isEVM = cfg.family === 'evm' || w.chain === 'ethereum';
+  const currency = cfg.currency || (w.chain === 'ethereum' ? 'ETH' : 'SOL');
+  return `
+    <div style="margin-bottom:0.75rem">
+      ${isEVM ? `<div class="segment" id="xfer-seg-${w.id}">
+        <button class="seg-btn active" id="seg-native-${w.id}" onclick="setTransferMode(${w.id},'native','${currency}')">Native ${currency}</button>
+        <button class="seg-btn" id="seg-erc20-${w.id}" onclick="setTransferMode(${w.id},'erc20','${currency}')">ERC-20 Token</button>
+      </div>` : `<div style="font-size:0.75rem;color:#475569;margin-bottom:0.5rem;">Sending ${currency}</div>`}
+    </div>
+    <div id="erc20-row-${w.id}" style="display:none;margin-bottom:0.75rem">
+      <div class="form-group">
+        <label>Token (from whitelist)</label>
+        <select id="xfer-contract-${w.id}" onchange="onTokenSelect(${w.id})">
+          <option value="">— select token —</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Recipient Address</label>
+        <input id="xfer-to-${w.id}" placeholder="0x… or base58" />
+      </div>
+      <div class="form-group">
+        <label>Amount</label>
+        <div style="display:flex;gap:0.4rem;align-items:center">
+          <input id="xfer-amount-${w.id}" placeholder="0.01" style="flex:1" />
+          <span id="xfer-currency-${w.id}" style="font-size:0.8rem;color:#64748b;white-space:nowrap">${currency}</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" id="memo-row-${w.id}">
+      <label>Memo (optional)</label>
+      <input id="xfer-memo-${w.id}" placeholder="Payment for…" />
+    </div>
+    <button class="btn btn-primary" id="xfer-btn-${w.id}" onclick="doTransfer(${w.id},'${w.chain}')">Send</button>
+    <div id="xfer-result-${w.id}" style="margin-top:0.75rem;"></div>
+  `;
+}
+
+function renderPolicyPanel(w) {
+  return `
+    <p class="note" style="margin-bottom:0.75rem">Transactions exceeding the threshold will require Passkey approval before signing.</p>
+    <div id="policy-content-${w.id}">
+      <button class="btn btn-ghost btn-sm" onclick="loadPolicy(${w.id})">Load Policy</button>
+    </div>
+  `;
+}
+
+// ─── Wallet expand / sub-tabs ─────────────────────────────────────────────────
+
+function toggleWallet(id) {
+  const card = document.getElementById(`wcard-${id}`);
+  const detail = card.querySelector('.wallet-detail');
+  const isOpen = card.classList.contains('expanded');
+
+  if (isOpen) {
+    card.classList.remove('expanded');
+    detail.style.display = 'none';
+    if (expandedWalletId === id) expandedWalletId = null;
+  } else {
+    card.classList.add('expanded');
+    detail.style.display = 'block';
+    expandedWalletId = id;
+    const sub = activeSubTab[id] || 'transfer';
+    if (sub === 'contracts') loadContracts(id);
+    if (sub === 'policy') loadPolicy(id);
+  }
+}
+
+function showSubTab(walletId, tab) {
+  activeSubTab[walletId] = tab;
+  const card = document.getElementById(`wcard-${walletId}`);
+  card.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  card.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+
+  // Activate correct tab button (by content match).
+  card.querySelectorAll('.sub-tab').forEach(t => {
+    if (t.textContent.trim().toLowerCase().startsWith(tab)) t.classList.add('active');
+  });
+  const panel = document.getElementById(`sp-${tab}-${walletId}`);
+  if (panel) {
+    panel.classList.add('active');
+    if (tab === 'contracts') loadContracts(walletId);
+    if (tab === 'policy') loadPolicy(walletId);
+    if (tab === 'transfer' && tab === 'erc20') loadContractsForDropdown(walletId);
+  }
+}
+
+function restoreSubTabs(walletId) {
+  const sub = activeSubTab[walletId] || 'transfer';
+  const card = document.getElementById(`wcard-${walletId}`);
+  if (!card) return;
+  card.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  card.querySelectorAll('.sub-panel').forEach(p => p.classList.remove('active'));
+  card.querySelectorAll('.sub-tab').forEach(t => {
+    if (t.textContent.trim().toLowerCase().startsWith(sub)) t.classList.add('active');
+  });
+  const panel = document.getElementById(`sp-${sub}-${walletId}`);
+  if (panel) panel.classList.add('active');
+}
+
+// ─── Contract Panel ───────────────────────────────────────────────────────────
+
+function renderContractPanel(w) {
+  const id = w.id;
+  return `
+    <div style="margin-bottom:0.75rem">
+      <div class="segment" id="cc-seg-${id}">
+        <button class="seg-btn active" onclick="setContractMode(${id},'call')">Call</button>
+        <button class="seg-btn" onclick="setContractMode(${id},'approve')">Approve</button>
+        <button class="seg-btn" onclick="setContractMode(${id},'read')">Read</button>
+      </div>
+    </div>
+    <div id="cc-mode-call-${id}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Contract Address</label>
+          <input id="cc-contract-${id}" placeholder="0x\u2026" />
+        </div>
+        <div class="form-group">
+          <label>Function Signature</label>
+          <input id="cc-funcsig-${id}" placeholder="transfer(address,uint256)" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Args (JSON array)</label>
+        <textarea id="cc-args-${id}" rows="2" placeholder='["0x\u2026", "1000"]' style="resize:vertical;font-family:monospace;font-size:0.8rem"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Value in ETH <span style="color:#475569;font-weight:400">(optional)</span></label>
+          <input id="cc-value-${id}" placeholder="0.0" />
+        </div>
+        <div class="form-group">
+          <label>Memo <span style="color:#475569;font-weight:400">(optional)</span></label>
+          <input id="cc-memo-${id}" placeholder="Payment for\u2026" />
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" id="cc-btn-${id}" onclick="doContractCall(${id})">Submit Call</button>
+      <div id="cc-result-${id}" style="margin-top:0.75rem;"></div>
+    </div>
+    <div id="cc-mode-approve-${id}" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Token Contract Address</label>
+          <input id="at-contract-${id}" placeholder="0x\u2026" />
+        </div>
+        <div class="form-group">
+          <label>Spender Address</label>
+          <input id="at-spender-${id}" placeholder="0x\u2026" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Amount</label>
+        <input id="at-amount-${id}" placeholder="1000000000000000000" />
+      </div>
+      <button class="btn btn-primary btn-sm" id="at-btn-${id}" onclick="doApproveToken(${id})">Approve</button>
+      <div id="at-result-${id}" style="margin-top:0.75rem;"></div>
+    </div>
+    <div id="cc-mode-read-${id}" style="display:none">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Contract Address</label>
+          <input id="cr-contract-${id}" placeholder="0x\u2026" />
+        </div>
+        <div class="form-group">
+          <label>Function Signature</label>
+          <input id="cr-funcsig-${id}" placeholder="balanceOf(address)" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Args (JSON array)</label>
+        <textarea id="cr-args-${id}" rows="2" placeholder='["0x\u2026"]' style="resize:vertical;font-family:monospace;font-size:0.8rem"></textarea>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="cr-btn-${id}" onclick="doCallRead(${id})">Read</button>
+      <div id="cr-result-${id}" style="margin-top:0.75rem;"></div>
+      <textarea id="cr-output-${id}" rows="3" readonly placeholder="Result will appear here\u2026" style="margin-top:0.5rem;resize:vertical;font-family:monospace;font-size:0.78rem;color:#94a3b8;display:none"></textarea>
+    </div>
+  `;
+}
+
+function setContractMode(walletId, mode) {
+  ['call', 'approve', 'read'].forEach(m => {
+    const el = document.getElementById('cc-mode-' + m + '-' + walletId);
+    if (el) el.style.display = m === mode ? '' : 'none';
+  });
+  const seg = document.getElementById('cc-seg-' + walletId);
+  if (seg) {
+    const modes = ['call', 'approve', 'read'];
+    seg.querySelectorAll('.seg-btn').forEach((btn, i) => {
+      btn.classList.toggle('active', modes[i] === mode);
+    });
+  }
+}
+
+async function doContractCall(walletId) {
+  const contract  = document.getElementById('cc-contract-' + walletId).value.trim();
+  const func_sig  = document.getElementById('cc-funcsig-' + walletId).value.trim();
+  const argsStr   = document.getElementById('cc-args-' + walletId).value.trim() || '[]';
+  const value     = document.getElementById('cc-value-' + walletId).value.trim();
+  const memo      = document.getElementById('cc-memo-' + walletId).value.trim();
+  const resultEl  = document.getElementById('cc-result-' + walletId);
+  const btn       = document.getElementById('cc-btn-' + walletId);
+
+  if (!contract || !func_sig) { toast('Contract address and function signature are required', 'error'); return; }
+  let args;
+  try { args = JSON.parse(argsStr); } catch (e) { toast('Args must be a valid JSON array', 'error'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting\u2026';
+  resultEl.textContent = '';
+  resultEl.className = '';
+
+  const body = { contract, func_sig, args };
+  if (value) body.value = value;
+  if (memo)  body.memo  = memo;
+
+  const res = await api('/api/wallets/' + walletId + '/contract-call', { method: 'POST', body: JSON.stringify(body) });
+
+  btn.disabled = false;
+  btn.textContent = 'Submit Call';
+
+  if (res.status === 'completed') {
+    safeSetResultHTML(resultEl, 'success', [
+      {text: '\u2705 '}, {tag: 'strong', text: 'Transaction sent'}, {tag: 'br'},
+      {tag: 'span', text: 'tx: ' + res.tx_hash, className: 'tx-hash'},
+    ]);
+    toast('Contract call broadcast!', 'success');
+  } else if (res.status === 'pending_approval') {
+    resultEl.textContent = '';
+    var pDiv = document.createElement('div'); pDiv.className = 'tx-result pending';
+    pDiv.appendChild(document.createTextNode('\uD83D\uDD10 '));
+    var strong = document.createElement('strong'); strong.textContent = 'Approval required'; pDiv.appendChild(strong);
+    pDiv.appendChild(document.createElement('br'));
+    if (res.approval_url) {
+      var a = document.createElement('a'); a.href = res.approval_url; a.className = 'approval-url'; a.target = '_blank'; a.textContent = 'Open approval link \u2197'; pDiv.appendChild(a);
+    } else { pDiv.appendChild(document.createTextNode('Awaiting passkey approval\u2026')); }
+    resultEl.appendChild(pDiv);
+    toast('Contract call pending approval', 'info', 8000);
+  } else {
+    safeSetResult(resultEl, res.error || JSON.stringify(res), 'error');
+  }
+}
+
+async function doApproveToken(walletId) {
+  const contract  = document.getElementById('at-contract-' + walletId).value.trim();
+  const spender   = document.getElementById('at-spender-' + walletId).value.trim();
+  const amount    = document.getElementById('at-amount-' + walletId).value.trim();
+  const resultEl  = document.getElementById('at-result-' + walletId);
+  const btn       = document.getElementById('at-btn-' + walletId);
+
+  if (!contract || !spender || !amount) { toast('Contract, spender, and amount are required', 'error'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Approving\u2026';
+  resultEl.textContent = '';
+  resultEl.className = '';
+
+  const res = await api('/api/wallets/' + walletId + '/approve-token', {
+    method: 'POST', body: JSON.stringify({ contract, spender, amount }),
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Approve';
+
+  if (res.status === 'completed') {
+    safeSetResultHTML(resultEl, 'success', [
+      {text: '\u2705 '}, {tag: 'strong', text: 'Approval sent'}, {tag: 'br'},
+      {tag: 'span', text: 'tx: ' + res.tx_hash, className: 'tx-hash'},
+    ]);
+    toast('Token approval broadcast!', 'success');
+  } else if (res.status === 'pending_approval') {
+    resultEl.textContent = '';
+    var pDiv2 = document.createElement('div'); pDiv2.className = 'tx-result pending';
+    pDiv2.appendChild(document.createTextNode('\uD83D\uDD10 '));
+    var s2 = document.createElement('strong'); s2.textContent = 'Approval required'; pDiv2.appendChild(s2);
+    pDiv2.appendChild(document.createElement('br'));
+    if (res.approval_url) {
+      var a2 = document.createElement('a'); a2.href = res.approval_url; a2.className = 'approval-url'; a2.target = '_blank'; a2.textContent = 'Open approval link \u2197'; pDiv2.appendChild(a2);
+    } else { pDiv2.appendChild(document.createTextNode('Awaiting passkey approval\u2026')); }
+    resultEl.appendChild(pDiv2);
+    toast('Token approve pending approval', 'info', 8000);
+  } else {
+    safeSetResult(resultEl, res.error || JSON.stringify(res), 'error');
+  }
+}
+
+async function doCallRead(walletId) {
+  const contract  = document.getElementById('cr-contract-' + walletId).value.trim();
+  const func_sig  = document.getElementById('cr-funcsig-' + walletId).value.trim();
+  const argsStr   = document.getElementById('cr-args-' + walletId).value.trim() || '[]';
+  const resultEl  = document.getElementById('cr-result-' + walletId);
+  const outputEl  = document.getElementById('cr-output-' + walletId);
+  const btn       = document.getElementById('cr-btn-' + walletId);
+
+  if (!contract || !func_sig) { toast('Contract address and function signature are required', 'error'); return; }
+  let args;
+  try { args = JSON.parse(argsStr); } catch (e) { toast('Args must be a valid JSON array', 'error'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Reading\u2026';
+  resultEl.textContent = '';
+  resultEl.className = '';
+  outputEl.style.display = 'none';
+
+  const res = await api('/api/wallets/' + walletId + '/call-read', {
+    method: 'POST', body: JSON.stringify({ contract, func_sig, args }),
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Read';
+
+  if (res.success || res.result !== undefined) {
+    outputEl.style.display = '';
+    outputEl.value = res.result || res.data || '';
+    safeSetResult(resultEl, '\u2705 Read successful', 'success');
+  } else {
+    safeSetResult(resultEl, res.error || JSON.stringify(res), 'error');
+  }
+}
+
+// ─── Balance ──────────────────────────────────────────────────────────────────
+
+async function refreshBalance(walletId) {
+  const res = await api(`/api/wallets/${walletId}/balance`);
+  const el = document.getElementById(`wbal-${walletId}`);
+  if (!el) return;
+  if (res.success && res.data) {
+    const bal = parseFloat(res.data.balance);
+    const short = bal < 0.001 ? res.data.balance : bal.toFixed(4);
+    el.textContent = `${short} ${res.data.currency}`;
+    walletBalances[walletId] = `${res.data.balance} ${res.data.currency}`;
+  } else {
+    el.textContent = '—';
+  }
+}
+
+// ─── Transfer ─────────────────────────────────────────────────────────────────
+
+function setTransferMode(walletId, mode, nativeCurrency) {
+  const erc20Row = document.getElementById(`erc20-row-${walletId}`);
+  const currencySpan = document.getElementById(`xfer-currency-${walletId}`);
+  const nativeBtn = document.getElementById(`seg-native-${walletId}`);
+  const erc20Btn = document.getElementById(`seg-erc20-${walletId}`);
+
+  if (mode === 'erc20') {
+    erc20Row.style.display = 'block';
+    nativeBtn.classList.remove('active');
+    erc20Btn.classList.add('active');
+    loadContractsForDropdown(walletId);
+  } else {
+    erc20Row.style.display = 'none';
+    nativeBtn.classList.add('active');
+    erc20Btn.classList.remove('active');
+    if (currencySpan && nativeCurrency) currencySpan.textContent = nativeCurrency;
+  }
+}
+
+function onTokenSelect(walletId) {
+  const sel = document.getElementById(`xfer-contract-${walletId}`);
+  const opt = sel.options[sel.selectedIndex];
+  const currencySpan = document.getElementById(`xfer-currency-${walletId}`);
+  if (opt.dataset.symbol) {
+    currencySpan.textContent = opt.dataset.symbol;
+  } else {
+    currencySpan.textContent = 'token';
+  }
+}
+
+async function loadContractsForDropdown(walletId) {
+  const res = await api(`/api/wallets/${walletId}/contracts`);
+  const sel = document.getElementById(`xfer-contract-${walletId}`);
+  if (!sel) return;
+  const contracts = res.contracts || [];
+  sel.innerHTML = contracts.length
+    ? `<option value="">— select token —</option>` + contracts.map(c =>
+        `<option value="${c.contract_address}" data-symbol="${c.symbol}" data-decimals="${c.decimals}">${c.symbol || c.contract_address.slice(0, 10) + '…'} (${c.contract_address.slice(0, 8)}…)</option>`
+      ).join('')
+    : `<option value="">No contracts whitelisted</option>`;
+  walletContracts[walletId] = contracts;
+}
+
+async function doTransfer(walletId, chain) {
+  const to = document.getElementById(`xfer-to-${walletId}`).value.trim();
+  const amount = document.getElementById(`xfer-amount-${walletId}`).value.trim();
+  const memo = document.getElementById(`xfer-memo-${walletId}`)?.value.trim() || '';
+  const resultEl = document.getElementById(`xfer-result-${walletId}`);
+  const btn = document.getElementById(`xfer-btn-${walletId}`);
+
+  if (!to || !amount) { toast('Recipient and amount are required', 'error'); return; }
+
+  // Check if ERC-20 mode (only for EVM chains).
+  let token = null;
+  if ((chainsMap[chain] || {}).family === 'evm') {
+    const nativeBtn = document.getElementById(`seg-native-${walletId}`);
+    const isERC20 = nativeBtn && !nativeBtn.classList.contains('active');
+    if (isERC20) {
+      const sel = document.getElementById(`xfer-contract-${walletId}`);
+      const opt = sel.options[sel.selectedIndex];
+      if (!opt || !opt.value) { toast('Select a token from the whitelist', 'error'); return; }
+      token = {
+        contract: opt.value,
+        symbol: opt.dataset.symbol || '',
+        decimals: parseInt(opt.dataset.decimals) || 18,
+      };
+    }
+  }
+
+  const summary = token
+    ? `Send ${amount} ${token.symbol} to ${to.slice(0, 10)}…?`
+    : `Send ${amount} to ${to.slice(0, 10)}…?`;
+  if (!await customConfirm({ title: 'Confirm Transfer', message: summary, confirmText: 'Send', danger: false, icon: '💸' })) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Sending…';
+  resultEl.textContent = '';
+  resultEl.className = '';
+
+  const body = { to, amount, memo };
+  if (token) body.token = token;
+
+  const res = await api(`/api/wallets/${walletId}/transfer`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+
+  btn.disabled = false;
+  btn.innerHTML = 'Send';
+
+  if (res.status === 'completed') {
+    safeSetResultHTML(resultEl, 'success', [
+      {text: '\u2705 '}, {tag: 'strong', text: 'Transaction sent'}, {tag: 'br'},
+      {tag: 'span', text: 'Hash: ' + res.tx_hash, className: 'tx-hash'},
+    ]);
+    toast('Transaction broadcast!', 'success');
+    refreshBalance(walletId);
+  } else if (res.status === 'pending_approval') {
+    const ctx = res.tx_context || {};
+    resultEl.textContent = '';
+    var pDiv3 = document.createElement('div'); pDiv3.className = 'tx-result pending';
+    pDiv3.appendChild(document.createTextNode('\uD83D\uDD10 '));
+    var s3 = document.createElement('strong'); s3.textContent = 'Approval required'; pDiv3.appendChild(s3);
+    pDiv3.appendChild(document.createElement('br'));
+    pDiv3.appendChild(document.createTextNode('Amount: ' + (ctx.amount || '') + ' ' + (ctx.currency || '')));
+    pDiv3.appendChild(document.createElement('br'));
+    pDiv3.appendChild(document.createTextNode('To: '));
+    var toSpan = document.createElement('span'); toSpan.className = 'mono'; toSpan.style.fontSize = '0.75rem'; toSpan.textContent = ctx.to || ''; pDiv3.appendChild(toSpan);
+    pDiv3.appendChild(document.createElement('br'));
+    if (res.approval_url) {
+      var a3 = document.createElement('a'); a3.href = res.approval_url; a3.className = 'approval-url'; a3.target = '_blank'; a3.textContent = 'Open approval link \u2197'; pDiv3.appendChild(a3);
+    }
+    resultEl.appendChild(pDiv3);
+    toast('Transaction pending \u2014 Passkey approval required', 'info', 8000);
+  } else {
+    safeSetResult(resultEl, res.error || JSON.stringify(res), 'error');
+  }
+}
+
+// ─── Contracts ────────────────────────────────────────────────────────────────
+
+async function loadContracts(walletId) {
+  const el = document.getElementById(`contracts-content-${walletId}`);
+  if (!el) return;
+
+  const res = await api(`/api/wallets/${walletId}/contracts`);
+  if (!res.success) { safeSetResult(el, res.error || 'Load failed', 'error'); return; }
+  const contracts = res.contracts || [];
+  walletContracts[walletId] = contracts;
+
+  el.innerHTML = contracts.length
+    ? contracts.map(c => {
+        const methods = Array.isArray(c.allowed_methods) ? c.allowed_methods : (c.allowed_methods ? c.allowed_methods.split(',') : []);
+        return `
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.6rem 0.75rem;margin-bottom:0.4rem;background:#0a0a18;border:1px solid #1e1e35;border-radius:8px;">
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+              ${c.symbol ? `<span class="badge badge-blue">${c.symbol}</span>` : ''}
+              ${c.label ? `<span style="font-size:0.75rem;color:#94a3b8">${c.label}</span>` : ''}
+              ${c.decimals ? `<span style="font-size:0.7rem;color:#475569">dec: ${c.decimals}</span>` : ''}
+              ${c.auto_approve ? `<span class="badge badge-green" style="font-size:0.65rem">auto-approve</span>` : ''}
+            </div>
+            <div style="font-size:0.72rem;color:#64748b;margin-top:0.2rem;word-break:break-all;">
+              ${c.contract_address}
+              <button class="copy-btn" onclick="copyText('${c.contract_address}')" title="Copy">copy</button>
+            </div>
+            ${methods.length ? `<div style="font-size:0.7rem;color:#475569;margin-top:0.2rem;">methods: ${methods.map(m => `<code style="background:#1e1e35;padding:0.05rem 0.3rem;border-radius:3px">${m}</code>`).join(' ')}</div>` : ''}
+          </div>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteContract(${walletId},${c.id})" title="Remove from whitelist" style="flex-shrink:0">\u2715</button>
+        </div>`;
+      }).join('')
+    : `<div class="empty-state" style="padding:1rem">No whitelisted contracts yet.</div>`;
+
+  el.innerHTML += addContractForm(walletId);
+}
+
+function addContractForm(walletId) {
+  return `<div class="add-contract-form">
+    <div class="card-title">\uFF0B Whitelist Contract <span style="font-size:0.7rem;color:#64748b;font-weight:400">(requires Passkey)</span></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Contract Address</label>
+        <input id="cadd-addr-${walletId}" placeholder="0x\u2026" />
+      </div>
+      <div class="form-group">
+        <label>Symbol</label>
+        <input id="cadd-sym-${walletId}" placeholder="USDC" style="text-transform:uppercase" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Decimals</label>
+        <input id="cadd-dec-${walletId}" type="number" placeholder="18" value="18" />
+      </div>
+      <div class="form-group">
+        <label>Label (optional)</label>
+        <input id="cadd-lbl-${walletId}" placeholder="Circle USD Coin" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Allowed Methods <span style="color:#475569;font-weight:400">(optional)</span></label>
+        <input id="cadd-methods-${walletId}" placeholder="transfer,approve,swap" />
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:0.75rem">
+        <label style="display:flex;align-items:center;gap:0.5rem;text-transform:none;letter-spacing:0;font-size:0.82rem;cursor:pointer">
+          <input id="cadd-autoapprove-${walletId}" type="checkbox" style="width:auto;padding:0;margin:0" />
+          Auto Approve
+        </label>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="addContract(${walletId})">Add to Whitelist</button>
+  </div>`;
+}
+
+async function addContract(walletId) {
+  const addr        = document.getElementById(`cadd-addr-${walletId}`).value.trim();
+  const sym         = document.getElementById(`cadd-sym-${walletId}`).value.trim().toUpperCase();
+  const dec         = parseInt(document.getElementById(`cadd-dec-${walletId}`).value) || 18;
+  const lbl         = document.getElementById(`cadd-lbl-${walletId}`).value.trim();
+  const methodsRaw  = document.getElementById(`cadd-methods-${walletId}`)?.value.trim() || '';
+  const autoApprove = document.getElementById(`cadd-autoapprove-${walletId}`)?.checked || false;
+
+  if (!addr) { toast('Contract address required', 'error'); return; }
+
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+
+  const payload = { ...passkeyBody, contract_address: addr, symbol: sym, decimals: dec, label: lbl };
+  if (methodsRaw) payload.allowed_methods = methodsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  if (autoApprove) payload.auto_approve = true;
+
+  const res = await api(`/api/wallets/${walletId}/contracts`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  if (res.success) {
+    toast(`${sym || addr.slice(0, 10)} whitelisted`, 'success');
+    loadContracts(walletId);
+    loadContractsForDropdown(walletId);
+    document.getElementById(`cadd-addr-${walletId}`).value = '';
+    document.getElementById(`cadd-sym-${walletId}`).value = '';
+    document.getElementById(`cadd-lbl-${walletId}`).value = '';
+    document.getElementById(`cadd-methods-${walletId}`).value = '';
+    if (document.getElementById(`cadd-autoapprove-${walletId}`)) document.getElementById(`cadd-autoapprove-${walletId}`).checked = false;
+  } else {
+    toast(res.error || 'Add failed', 'error');
+  }
+}
+
+async function deleteContract(walletId, contractId) {
+  if (!await customConfirm({ title: 'Remove Contract', message: 'Remove this contract from the whitelist? Transfers to this contract will be blocked until it is re-added.', confirmText: 'Remove', danger: true })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const res = await api(`/api/wallets/${walletId}/contracts/${contractId}`, { method: 'DELETE', body: JSON.stringify(passkeyBody) });
+  if (res.success) {
+    toast('Contract removed from whitelist', 'success');
+    loadContracts(walletId);
+    loadContractsForDropdown(walletId);
+  } else {
+    toast(res.error || 'Delete failed', 'error');
+  }
+}
+
+// ─── Policy ───────────────────────────────────────────────────────────────────
+
+async function loadPolicy(walletId) {
+  const el = document.getElementById(`policy-content-${walletId}`);
+  if (!el) return;
+  const res = await api(`/api/wallets/${walletId}/policy`);
+  const policies = res.policies || [];
+
+  const policiesHtml = policies.length === 0
+    ? `<p class="note" style="margin-bottom:0.75rem;color:#475569">No policies configured.</p>`
+    : policies.map(p => {
+        const enabled = p.enabled !== false;
+        const hasDaily = p.daily_limit && p.daily_limit !== '';
+        const todaySpent = p.daily_spent && p.daily_spent !== '0' ? p.daily_spent : null;
+        return `
+        <div style="background:#111120;border:1px solid ${enabled?'#2a2a45':'#1a1a2a'};border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+          <span style="font-size:0.8rem;font-weight:600;color:#a78bfa;min-width:52px">${p.currency}</span>
+          <span style="font-size:0.8rem;color:#94a3b8">
+            ${enabled ? '✓' : '✗'} approve &gt; <strong>${p.threshold_amount} ${p.currency}</strong>
+            ${hasDaily ? `&nbsp;·&nbsp; daily cap <strong>${p.daily_limit} ${p.currency}</strong>${todaySpent ? ` <span style="color:#64748b">(spent today: ${todaySpent})</span>` : ''}` : ''}
+          </span>
+          <span style="margin-left:auto;display:flex;gap:0.4rem;flex-shrink:0">
+            <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem"
+              onclick="editPolicyForm(${walletId},'${p.currency}','${p.threshold_amount}','${p.daily_limit||''}',${enabled})">Edit</button>
+            <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem;color:${enabled?'#f87171':'#64748b'}"
+              onclick="togglePolicy(${walletId},'${p.currency}','${p.threshold_amount}','${p.daily_limit||''}',${!enabled})">${enabled?'Disable':'Enable'}</button>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deletePolicy(${walletId},'${p.currency}')" title="Delete policy">✕</button>
+          </span>
+        </div>`;
+      }).join('');
+
+  el.innerHTML = `
+    ${policiesHtml}
+    <div style="border-top:1px solid #1e1e35;margin-top:0.75rem;padding-top:0.75rem">
+      <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.6rem">Add / update policy for a currency:</p>
+      <div class="form-row" style="margin-bottom:0.5rem">
+        <div class="form-group">
+          <label>Currency</label>
+          <input id="pol-currency-${walletId}" placeholder="ETH" style="text-transform:uppercase" />
+        </div>
+        <div class="form-group">
+          <label>Single-tx Threshold</label>
+          <input id="pol-threshold-${walletId}" placeholder="0.5" />
+        </div>
+        <div class="form-group">
+          <label>Daily Limit <span style="color:#475569;font-weight:400">(optional)</span></label>
+          <input id="pol-daily-${walletId}" placeholder="leave empty to disable" />
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="savePolicy(${walletId})">Save Policy</button>
+    </div>
+  `;
+}
+
+function editPolicyForm(walletId, currency, threshold, dailyLimit, enabled) {
+  document.getElementById(`pol-currency-${walletId}`).value = currency;
+  document.getElementById(`pol-threshold-${walletId}`).value = threshold;
+  document.getElementById(`pol-daily-${walletId}`).value = dailyLimit || '';
+  document.getElementById(`pol-currency-${walletId}`).focus();
+}
+
+async function savePolicy(walletId) {
+  const threshold = document.getElementById(`pol-threshold-${walletId}`).value.trim();
+  const currency = document.getElementById(`pol-currency-${walletId}`).value.trim().toUpperCase();
+  const dailyLimit = document.getElementById(`pol-daily-${walletId}`).value.trim();
+  if (!threshold || !currency) { toast('Threshold and currency required', 'error'); return; }
+
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+
+  const body = { ...passkeyBody, threshold_amount: threshold, currency, enabled: true };
+  if (dailyLimit) body.daily_limit = dailyLimit;
+
+  const res = await api(`/api/wallets/${walletId}/policy`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  if (res.success) { toast('Policy saved', 'success'); loadPolicy(walletId); }
+  else toast(res.error || 'Save failed', 'error');
+}
+
+async function togglePolicy(walletId, currency, threshold, dailyLimit, newEnabled) {
+  const label = newEnabled ? 'enable' : 'disable';
+  if (!await customConfirm({ title: `${label.charAt(0).toUpperCase()+label.slice(1)} ${currency} Policy`, message: `${newEnabled ? 'Enable' : 'Disable'} the approval policy for ${currency} transfers?`, confirmText: newEnabled ? 'Enable' : 'Disable', danger: !newEnabled })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const body = { ...passkeyBody, threshold_amount: threshold, currency, enabled: newEnabled };
+  if (dailyLimit) body.daily_limit = dailyLimit;
+  const res = await api(`/api/wallets/${walletId}/policy`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  if (res.success) { toast(`Policy ${label}d`, 'success'); loadPolicy(walletId); }
+  else toast(res.error || 'Failed', 'error');
+}
+
+// ─── Wallet actions ───────────────────────────────────────────────────────────
+
+async function deletePolicy(walletId, currency) {
+  if (!await customConfirm({ title: `Delete ${currency} Policy`, message: `Remove the approval policy for ${currency}? Transfers will no longer require approval.`, confirmText: 'Delete', danger: true })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const res = await api(`/api/wallets/${walletId}/policy?currency=${currency}`, { method: 'DELETE', body: JSON.stringify(passkeyBody) });
+  if (res.success) { toast(`${currency} policy deleted`, 'success'); loadPolicy(walletId); }
+  else toast(res.error || 'Delete failed', 'error');
+}
+
+async function deleteWallet(id) {
+  if (!await customConfirm({ title: 'Delete Wallet', message: `Delete wallet #${id}? The key will be removed and this action cannot be undone.`, confirmText: 'Delete', danger: true, icon: '🗑️' })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const res = await api(`/api/wallets/${id}`, { method: 'DELETE', body: JSON.stringify(passkeyBody) });
+  if (res.success) { toast('Wallet deleted', 'success'); loadWallets(); }
+  else toast(res.error || 'Delete failed', 'error');
+}
+
+function copyAddr(walletId, addr) {
+  copyText(addr);
+  const el = document.getElementById(`waddr-${walletId}`);
+  const prev = el.textContent;
+  el.textContent = 'Copied!';
+  setTimeout(() => el.textContent = prev, 1200);
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Copied to clipboard', 'success');
+    if (btn) { const prev = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = prev, 1200); }
+  });
+}
+
+// ─── Approvals ────────────────────────────────────────────────────────────────
+
+
+async function loadApprovals() {
+  const [res, wRes] = await Promise.all([api('/api/approvals/pending'), api('/api/wallets')]);
+  const el = document.getElementById('approvals-list');
+  if (!res.success) { safeSetResult(el, res.error || 'Load failed', 'error'); return; }
+  const approvals = res.approvals || [];
+  // Build wallet lookup: id → {label, chain, address}
+  const wMap = {};
+  (wRes.wallets || []).forEach(w => { wMap[w.id] = w; });
+  if (!approvals.length) {
+    el.innerHTML = '<div class="empty-state">No pending approvals.</div>';
+    return;
+  }
+  el.innerHTML = approvals.map(a => {
+    const aw = wMap[a.wallet_id] || {};
+    const isPolicyChange = a.approval_type === 'policy_change';
+    const isContractAdd  = a.approval_type === 'contract_add' || a.approval_type === 'contract_update';
+
+    // ── Policy change card ──
+    if (isPolicyChange) {
+      let pol = {};
+      try { pol = JSON.parse(a.policy_data); } catch (e) {}
+      return `<div class="approval-card" style="border-color:#1e3a8a">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem">
+          <div>
+            <span style="font-weight:600;font-size:0.9rem">Approval #${a.id}</span>
+            <span class="badge badge-blue" style="margin-left:0.5rem">⚙️ Policy Change</span>
+          </div>
+          <span class="badge badge-yellow">pending</span>
+        </div>
+        <div class="tx-grid" style="margin:0.75rem 0">
+          <span class="tx-k">Currency</span><span class="tx-v">${pol.currency || '—'}</span>
+          <span class="tx-k">Threshold</span><span class="tx-v">${pol.threshold_amount || '—'} ${pol.currency || ''}</span>
+          ${pol.daily_limit ? `<span class="tx-k">Daily Limit</span><span class="tx-v">${pol.daily_limit} ${pol.currency || ''}</span>` : ''}
+          <span class="tx-k">Enabled</span><span class="tx-v">${pol.enabled !== false ? 'Yes' : 'No'}</span>
+          <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
+        </div>
+        <div class="btn-group">
+          <button id="btn-approve-${a.id}" class="btn btn-primary btn-sm" onclick="approve(${a.id})">✓ Apply Policy</button>
+          <button id="btn-reject-${a.id}" class="btn btn-danger btn-sm" onclick="reject(${a.id})">✗ Reject</button>
+        </div>
+        <div id="approval-result-${a.id}" style="margin-top:0.5rem"></div>
+      </div>`;
+    }
+
+    // ── Contract whitelist add card ──
+    if (isContractAdd) {
+      let ct = {};
+      try { ct = JSON.parse(a.policy_data); } catch (e) {}
+      const isUpdate = a.approval_type === 'contract_update';
+      return `<div class="approval-card" style="border-color:#065f46">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem">
+          <div>
+            <span style="font-weight:600;font-size:0.9rem">Approval #${a.id}</span>
+            <span class="badge badge-green" style="margin-left:0.5rem">${isUpdate ? '✏️ Whitelist Update' : '📋 Whitelist Add'}</span>
+          </div>
+          <span class="badge badge-yellow">pending</span>
+        </div>
+        <div class="tx-grid" style="margin:0.75rem 0">
+          <span class="tx-k">Wallet</span><span class="tx-v">${aw.label || 'Wallet'} (${aw.chain || '?'}) <span style="font-size:0.7rem;color:#64748b">${aw.address ? aw.address.slice(0,8)+'…'+aw.address.slice(-4) : '#'+a.wallet_id}</span></span>
+          <span class="tx-k">Contract</span><span class="tx-v" style="word-break:break-all">${ct.contract_address || '—'}</span>
+          ${ct.symbol   ? `<span class="tx-k">Symbol</span><span class="tx-v">${ct.symbol}</span>` : ''}
+          ${ct.label    ? `<span class="tx-k">Label</span><span class="tx-v">${ct.label}</span>` : ''}
+          ${ct.decimals !== undefined ? `<span class="tx-k">Decimals</span><span class="tx-v">${ct.decimals}</span>` : ''}
+          <span class="tx-k">Allowed Methods</span><span class="tx-v">${ct.allowed_methods || 'all (unrestricted)'}</span>
+          <span class="tx-k">Auto-Approve</span><span class="tx-v">${ct.auto_approve ? '⚠️ Yes — API key can execute without Passkey' : 'No — requires Passkey approval'}</span>
+          <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
+        </div>
+        <div class="btn-group">
+          <button id="btn-approve-${a.id}" class="btn btn-primary btn-sm" onclick="approve(${a.id})">✓ ${isUpdate ? 'Apply Update' : 'Add to Whitelist'}</button>
+          <button id="btn-reject-${a.id}" class="btn btn-danger btn-sm" onclick="reject(${a.id})">✗ Reject</button>
+        </div>
+        <div id="approval-result-${a.id}" style="margin-top:0.5rem"></div>
+      </div>`;
+    }
+
+    // ── Contract Call card ──
+    if (a.approval_type === 'contract_call') {
+      let ctx = {};
+      try { ctx = JSON.parse(a.tx_context); } catch (e) {}
+      const isApproveToken  = ctx.type === 'approve_token' || ctx.action === 'approve_token';
+      const isRevokeApproval = ctx.type === 'revoke_approval' || ctx.action === 'revoke_approval';
+      if (isApproveToken) {
+        return `<div class="approval-card" style="border-color:#4c1d95">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem">
+            <div>
+              <span style="font-weight:600;font-size:0.9rem">Approval #${a.id}</span>
+              <span class="badge badge-purple" style="margin-left:0.5rem">\uD83D\uDD13 Token Approve</span>
+            </div>
+            <span class="badge badge-yellow">pending</span>
+          </div>
+          <div class="tx-grid" style="margin:0.75rem 0">
+            <span class="tx-k">Wallet</span><span class="tx-v">${aw.label || 'Wallet'} (${aw.chain || '?'}) <span style="font-size:0.7rem;color:#64748b">${aw.address ? aw.address.slice(0,8)+'…'+aw.address.slice(-4) : '#'+a.wallet_id}</span></span>
+            ${ctx.from     ? `<span class="tx-k">From</span><span class="tx-v" style="word-break:break-all">${ctx.from}</span>` : ''}
+            ${ctx.contract ? `<span class="tx-k">Token Contract</span><span class="tx-v" style="word-break:break-all">${ctx.contract}</span>` : ''}
+            ${ctx.spender  ? `<span class="tx-k">Spender</span><span class="tx-v" style="word-break:break-all">${ctx.spender}</span>` : ''}
+            ${ctx.amount   ? `<span class="tx-k">Allowance</span><span class="tx-v">${ctx.amount}${ctx.symbol ? ' ' + ctx.symbol : ''}</span>` : ''}
+            ${ctx.decimals ? `<span class="tx-k">Decimals</span><span class="tx-v">${ctx.decimals}</span>` : ''}
+            <span class="tx-k">⚠️ Risk</span><span class="tx-v" style="color:#f59e0b">High-risk: grants spending permission to spender</span>
+            <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
+          </div>
+          <div class="btn-group">
+            <button id="btn-approve-${a.id}" class="btn btn-primary btn-sm" onclick="approve(${a.id})">\u2713 Approve</button>
+            <button id="btn-reject-${a.id}" class="btn btn-danger btn-sm" onclick="reject(${a.id})">\u2717 Reject</button>
+          </div>
+          <div id="approval-result-${a.id}" style="margin-top:0.5rem"></div>
+        </div>`;
+      }
+      if (isRevokeApproval) {
+        return `<div class="approval-card" style="border-color:#4c1d95">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem">
+            <div>
+              <span style="font-weight:600;font-size:0.9rem">Approval #${a.id}</span>
+              <span class="badge badge-purple" style="margin-left:0.5rem">\uD83D\uDD12 Revoke Approval</span>
+            </div>
+            <span class="badge badge-yellow">pending</span>
+          </div>
+          <div class="tx-grid" style="margin:0.75rem 0">
+            <span class="tx-k">Wallet</span><span class="tx-v">${aw.label || 'Wallet'} (${aw.chain || '?'}) <span style="font-size:0.7rem;color:#64748b">${aw.address ? aw.address.slice(0,8)+'…'+aw.address.slice(-4) : '#'+a.wallet_id}</span></span>
+            ${ctx.from     ? `<span class="tx-k">From</span><span class="tx-v" style="word-break:break-all">${ctx.from}</span>` : ''}
+            ${ctx.contract ? `<span class="tx-k">Token Contract</span><span class="tx-v" style="word-break:break-all">${ctx.contract}</span>` : ''}
+            ${ctx.spender  ? `<span class="tx-k">Spender</span><span class="tx-v" style="word-break:break-all">${ctx.spender}</span>` : ''}
+            ${ctx.symbol   ? `<span class="tx-k">Symbol</span><span class="tx-v">${ctx.symbol}</span>` : ''}
+            <span class="tx-k">Action</span><span class="tx-v">Set allowance to 0 (revoke)</span>
+            <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
+          </div>
+          <div class="btn-group">
+            <button id="btn-approve-${a.id}" class="btn btn-primary btn-sm" onclick="approve(${a.id})">\u2713 Approve</button>
+            <button id="btn-reject-${a.id}" class="btn btn-danger btn-sm" onclick="reject(${a.id})">\u2717 Reject</button>
+          </div>
+          <div id="approval-result-${a.id}" style="margin-top:0.5rem"></div>
+        </div>`;
+      }
+      // Generic contract call
+      return `<div class="approval-card" style="border-color:#4c1d95">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem">
+          <div>
+            <span style="font-weight:600;font-size:0.9rem">Approval #${a.id}</span>
+            <span class="badge badge-purple" style="margin-left:0.5rem">\uD83D\uDCDD Contract Call</span>
+          </div>
+          <span class="badge badge-yellow">pending</span>
+        </div>
+        <div class="tx-grid" style="margin:0.75rem 0">
+          <span class="tx-k">Wallet</span><span class="tx-v">${aw.label || 'Wallet'} (${aw.chain || '?'}) <span style="font-size:0.7rem;color:#64748b">${aw.address ? aw.address.slice(0,8)+'…'+aw.address.slice(-4) : '#'+a.wallet_id}</span></span>
+          ${ctx.from     ? `<span class="tx-k">From</span><span class="tx-v" style="word-break:break-all">${ctx.from}</span>` : ''}
+          ${ctx.contract ? `<span class="tx-k">Contract</span><span class="tx-v" style="word-break:break-all">${ctx.contract}</span>` : ''}
+          ${ctx.method   ? `<span class="tx-k">Method</span><span class="tx-v">${ctx.method}</span>` : ''}
+          ${ctx.func_sig ? `<span class="tx-k">Signature</span><span class="tx-v" style="word-break:break-all">${ctx.func_sig}</span>` : ''}
+          ${ctx.args     ? `<span class="tx-k">Arguments</span><span class="tx-v" style="word-break:break-all;font-size:0.72rem">${JSON.stringify(ctx.args)}</span>` : ''}
+          ${ctx.value_eth ? `<span class="tx-k">ETH Value</span><span class="tx-v">${ctx.value_eth} ETH</span>` : ''}
+          ${ctx.memo     ? `<span class="tx-k">Memo</span><span class="tx-v">${ctx.memo}</span>` : ''}
+          ${ctx.approval_reason ? `<span class="tx-k">Reason</span><span class="tx-v" style="color:#f59e0b">${ctx.approval_reason}</span>` : ''}
+          <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
+        </div>
+        <div class="btn-group">
+          <button id="btn-approve-${a.id}" class="btn btn-primary btn-sm" onclick="approve(${a.id})">\u2713 Approve</button>
+          <button id="btn-reject-${a.id}" class="btn btn-danger btn-sm" onclick="reject(${a.id})">\u2717 Reject</button>
+        </div>
+        <div id="approval-result-${a.id}" style="margin-top:0.5rem"></div>
+      </div>`;
+    }
+
+    // ── Sign / Transfer card ──
+    let ctx = {};
+    try { ctx = JSON.parse(a.tx_context); } catch (e) {}
+    const isERC20 = ctx.type === 'erc20_transfer';
+    const typeLabel = isERC20 ? 'ERC-20 Transfer' : (a.approval_type === 'sign' ? 'Sign Message' : 'Transfer');
+    return `<div class="approval-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem">
+        <div>
+          <span style="font-weight:600;font-size:0.9rem">Approval #${a.id}</span>
+          <span class="badge ${isERC20 ? 'badge-blue' : 'badge-purple'}" style="margin-left:0.5rem">${typeLabel}</span>
+        </div>
+        <span class="badge badge-yellow">pending</span>
+      </div>
+      ${ctx.amount ? `<div class="amount-big">${ctx.amount} ${ctx.currency || ''}</div>` : ''}
+      <div class="tx-grid" style="margin:0.75rem 0">
+        <span class="tx-k">Wallet</span><span class="tx-v">${aw.label || 'Wallet'} (${aw.chain || '?'}) <span style="font-size:0.7rem;color:#64748b">${aw.address ? aw.address.slice(0,8)+'…'+aw.address.slice(-4) : '#'+a.wallet_id}</span></span>
+        ${ctx.from ? `<span class="tx-k">From</span><span class="tx-v" style="word-break:break-all">${ctx.from}</span>` : ''}
+        ${ctx.to ? `<span class="tx-k">To</span><span class="tx-v" style="word-break:break-all">${ctx.to}</span>` : ''}
+        ${isERC20 && ctx.contract ? `<span class="tx-k">Token Contract</span><span class="tx-v" style="word-break:break-all">${ctx.contract}</span>` : ''}
+        ${isERC20 && ctx.symbol ? `<span class="tx-k">Token</span><span class="tx-v">${ctx.symbol}</span>` : ''}
+        ${ctx.chain ? `<span class="tx-k">Chain</span><span class="tx-v">${ctx.chain}</span>` : ''}
+        ${ctx.memo ? `<span class="tx-k">Memo</span><span class="tx-v">${ctx.memo}</span>` : ''}
+        <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
+      </div>
+      <div class="btn-group">
+        <button id="btn-approve-${a.id}" class="btn btn-primary btn-sm" onclick="approve(${a.id})">✓ Approve</button>
+        <button id="btn-reject-${a.id}" class="btn btn-danger btn-sm" onclick="reject(${a.id})">✗ Reject</button>
+      </div>
+      <div id="approval-result-${a.id}" style="margin-top:0.5rem"></div>
+    </div>`;
+  }).join('');
+}
+
+// getFreshPasskeyCredential fetches a new WebAuthn challenge and asks the user to authenticate.
+// Returns {login_session_id, credential} on success, or null if cancelled/failed.
+async function getFreshPasskeyCredential() {
+  try {
+    const optRes = await api('/api/auth/passkey/options');
+    if (!optRes.success) { toast(optRes.error || 'Failed to get challenge', 'error'); return null; }
+    const cred = await navigator.credentials.get(normalizeOptions(optRes.data?.options));
+    return { login_session_id: optRes.data?.login_session_id, credential: credentialToJSON(cred) };
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') toast('Passkey error: ' + e.message, 'error');
+    return null;
+  }
+}
+
+async function approve(id) {
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const btn = document.getElementById(`btn-approve-${id}`);
+  const rejectBtn = document.getElementById(`btn-reject-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Processing…'; }
+  if (rejectBtn) rejectBtn.disabled = true;
+  const el = document.getElementById(`approval-result-${id}`);
+  const res = await api(`/api/approvals/${id}/approve`, { method: 'POST', body: JSON.stringify(passkeyBody) });
+  if (res.success) {
+    if (btn) { btn.textContent = '✅ Approved'; }
+    if (rejectBtn) rejectBtn.style.display = 'none';
+    if (el) {
+      var msgText = '\u2705 Approved';
+      if (res.tx_hash) {
+        msgText += ' & broadcast \u2014 tx: ' + res.tx_hash;
+      } else if (res.signature) {
+        msgText += ' \u2014 sig: ' + res.signature.slice(0, 20) + '\u2026';
+      }
+      safeSetResult(el, msgText, 'success');
+    }
+    toast('Approved!', 'success');
+    setTimeout(loadApprovals, 2000);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '\u2713 Approve'; }
+    if (rejectBtn) rejectBtn.disabled = false;
+    if (el) safeSetResult(el, res.error || 'Approval failed', 'error');
+    toast(res.error || 'Approval failed', 'error');
+  }
+}
+
+async function reject(id) {
+  if (!await customConfirm({ title: 'Reject Transaction', message: 'Reject this transaction? The requester will be notified.', confirmText: 'Reject', danger: true })) return;
+  const passkeyBody = await getFreshPasskeyCredential();
+  if (!passkeyBody) return;
+  const btn = document.getElementById(`btn-reject-${id}`);
+  const approveBtn = document.getElementById(`btn-approve-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Processing…'; }
+  if (approveBtn) approveBtn.disabled = true;
+  const res = await api(`/api/approvals/${id}/reject`, { method: 'POST', body: JSON.stringify(passkeyBody) });
+  if (res.success) {
+    if (btn) btn.textContent = '✗ Rejected';
+    toast('Rejected', 'success');
+    setTimeout(loadApprovals, 1500);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '✗ Reject'; }
+    if (approveBtn) approveBtn.disabled = false;
+    toast(res.error || 'Reject failed', 'error');
+  }
+}
+
+
+// ─── Passkey Registration ─────────────────────────────────────────────────────
+
+
+async function registerPasskey() {
+  const el = document.getElementById('reg-result');
+  const displayName = (document.getElementById('reg-display-name')?.value || '').trim();
+  if (!displayName) {
+    el.innerHTML = `<div class="tx-result error">Please enter your name or email.</div>`;
+    document.getElementById('reg-display-name')?.focus();
+    return;
+  }
+  try {
+    // Step 1: auto-generate invite + get WebAuthn options in one call.
+    const beginRes = await api('/api/auth/passkey/register/begin', {
+      method: 'POST',
+      body: JSON.stringify({ display_name: displayName }),
+    });
+    if (!beginRes.success) { toast(beginRes.error || 'Failed to start registration', 'error'); return; }
+    const credential = await navigator.credentials.create(normalizeOptions(beginRes.options));
+    const credJSON = credentialToJSON(credential);
+    // Step 2: verify with the token returned by begin.
+    const verRes = await api('/api/auth/passkey/register/verify', {
+      method: 'POST',
+      body: JSON.stringify({ invite_token: beginRes.invite_token, credential: credJSON }),
+    });
+    if (verRes.success) {
+      toast('Registered! Please log in with your Passkey.', 'success');
+      document.getElementById('reg-result').innerHTML = '';
+      showAuthTab('auth-login');
+    } else { safeSetResult(el, verRes.error || 'Registration failed', 'error'); }
+  } catch (e) { safeSetResult(el, 'Error: ' + e.message, 'error'); }
+}
+
+// ─── WebAuthn helpers ─────────────────────────────────────────────────────────
+
+function b64urlToBuffer(b64) {
+  const pad = b64.replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(pad), c => c.charCodeAt(0));
+}
+function bufferToB64url(buf) {
+  let str = '';
+  for (const b of new Uint8Array(buf)) str += String.fromCharCode(b);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+// Normalize WebAuthn options: handles both wrapped { publicKey:{...} } and raw objects,
+// converts base64url strings to ArrayBuffers for challenge / user.id / credential IDs.
+function normalizeOptions(raw) {
+  if (!raw) return raw;
+  const options = raw.publicKey ? raw : { publicKey: raw };
+  const pk = options.publicKey;
+  if (typeof pk.challenge === 'string') pk.challenge = b64urlToBuffer(pk.challenge);
+  if (typeof pk.user?.id === 'string') pk.user.id = b64urlToBuffer(pk.user.id);
+  // Clear allowCredentials so the browser shows all registered passkeys.
+  // The credential ID in the response is still sent to the server for verification.
+  delete pk.allowCredentials;
+  if (Array.isArray(pk.excludeCredentials))
+    pk.excludeCredentials = pk.excludeCredentials.map(c => ({ ...c, id: b64urlToBuffer(c.id) }));
+  return options;
+}
+function credentialToJSON(cred) {
+  const base = { id: cred.id, type: cred.type, rawId: bufferToB64url(cred.rawId) };
+  if (cred.response) {
+    const r = cred.response, resp = {};
+    if (r.clientDataJSON)   resp.clientDataJSON   = bufferToB64url(r.clientDataJSON);
+    if (r.attestationObject) resp.attestationObject = bufferToB64url(r.attestationObject);
+    if (r.authenticatorData) resp.authenticatorData = bufferToB64url(r.authenticatorData);
+    if (r.signature)         resp.signature         = bufferToB64url(r.signature);
+    if (r.userHandle)        resp.userHandle        = bufferToB64url(r.userHandle);
+    base.response = resp;
+  }
+  if (cred.authenticatorAttachment) base.authenticatorAttachment = cred.authenticatorAttachment;
+  return base;
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+async function loadChains() {
+  const res = await api('/api/chains');
+  const sel = document.getElementById('create-chain');
+  if (!res.success || !res.chains?.length) {
+    sel.innerHTML = '<option value="ethereum">Ethereum</option>';
+    return;
+  }
+  // Sort: mainnets first, then testnets (by label).
+  const chains = res.chains.slice().sort((a, b) => {
+    const aTest = /testnet|devnet|holesky|sepolia/i.test(a.label);
+    const bTest = /testnet|devnet|holesky|sepolia/i.test(b.label);
+    if (aTest !== bTest) return aTest ? 1 : -1;
+    return a.label.localeCompare(b.label);
+  });
+  chains.forEach(c => { chainsMap[c.name] = c; });
+  const icon = f => f === 'evm' ? '⬡' : '◎';
+  const speed = p => p === 'ecdsa' ? '~1-2 min' : 'instant';
+  sel.innerHTML = chains.map(c =>
+    `<option value="${c.name}">${icon(c.family)} ${c.label}  (${c.currency} · ${speed(c.protocol)})</option>`
+  ).join('');
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+let auditPage = 1;
+
+const auditActionLabels = {
+  login:            { label: '🔐 Login',              cls: 'badge-blue'   },
+  wallet_create:    { label: '➕ Wallet Create',       cls: 'badge-purple' },
+  wallet_delete:    { label: '🗑 Wallet Delete',        cls: 'badge-red'    },
+  transfer:         { label: '↗ Transfer',             cls: 'badge-yellow' },
+  sign:             { label: '✏️ Sign',                 cls: 'badge-blue'   },
+  policy_update:    { label: '⚙️ Policy Update',        cls: 'badge-purple' },
+  approval_approve: { label: '✅ Approve',              cls: 'badge-green'  },
+  approval_reject:  { label: '❌ Reject',               cls: 'badge-red'    },
+  contract_add:     { label: '📋 Contract Whitelist',   cls: 'badge-green'  },
+  contract_call:    { label: '📝 Contract Call',        cls: 'badge-purple' },
+  approve_token:    { label: '🔓 Token Approve',        cls: 'badge-yellow' },
+  revoke_approval:  { label: '🔒 Revoke Approval',      cls: 'badge-red'    },
+  apikey_generate:  { label: '🔑 API Key Generate',    cls: 'badge-yellow' },
+  apikey_revoke:    { label: '🔑 API Key Revoke',       cls: 'badge-red'    },
+};
+
+const auditStatusBadge = {
+  success: '<span class="badge badge-green">success</span>',
+  pending: '<span class="badge badge-yellow">pending</span>',
+  failed:  '<span class="badge badge-red">failed</span>',
+};
+
+function formatAuditSummary(action, details) {
+  if (!details) return '';
+  try {
+    const d = typeof details === 'string' ? JSON.parse(details) : details;
+    const tx = (d.tx_context && typeof d.tx_context === 'object') ? d.tx_context : d;
+    const parts = [];
+    // Show a short summary line
+    if (tx.amount && tx.currency) parts.push(`${tx.amount} ${tx.currency}`);
+    else if (d.symbol) parts.push(d.symbol);
+    else if (d.currency) parts.push(d.currency);
+    if (d.method) parts.push(d.method + '()');
+    if (tx.to) parts.push(`→ ${tx.to.slice(0, 10)}…`);
+    else if (d.contract) parts.push(`→ ${d.contract.slice(0, 10)}…`);
+    if (d.type && (action === 'approval_approve' || action === 'approval_reject'))
+      parts.push(`(${d.type.replace('_', ' ')})`);
+    if (d.label && action === 'wallet_create') parts.push(d.label);
+    if (d.prefix) parts.push(`key: ${d.prefix}`);
+    return parts.join(' · ');
+  } catch { return ''; }
+}
+
+const auditFieldLabels = {
+  to: 'To', from: 'From', amount: 'Amount', currency: 'Currency',
+  chain: 'Chain', tx_hash: 'Tx Hash', contract: 'Contract',
+  method: 'Method', func_sig: 'Signature', args: 'Arguments',
+  value_eth: 'Value (ETH)', memo: 'Memo', spender: 'Spender',
+  symbol: 'Token', threshold: 'Threshold', address: 'Address',
+  approval_id: 'Approval #', prefix: 'Key Prefix', label: 'Label',
+  type: 'Type', decimals: 'Decimals', action: 'Action',
+  approval_reason: 'Reason',
+};
+
+function formatAuditFull(action, details) {
+  if (!details) return '';
+  try {
+    const d = typeof details === 'string' ? JSON.parse(details) : details;
+    // Flatten tx_context into top level for display
+    const flat = {};
+    if (d.tx_context && typeof d.tx_context === 'object') {
+      Object.assign(flat, d.tx_context);
+    }
+    Object.keys(d).forEach(k => { if (k !== 'tx_context') flat[k] = d[k]; });
+
+    // Internal fields not useful for display
+    const hideKeys = new Set(['type', 'approval_id']);
+    let rows = '';
+    for (const [k, v] of Object.entries(flat)) {
+      if (v === null || v === undefined || v === '') continue;
+      if (hideKeys.has(k)) continue;
+      const label = auditFieldLabels[k] || k;
+      let val;
+      if (k === 'args' && Array.isArray(v)) val = v.join(', ');
+      else if (typeof v === 'object') val = JSON.stringify(v);
+      else val = String(v);
+      rows += `<span class="tx-k">${label}</span><span class="tx-v">${val}</span>`;
+    }
+    return rows ? `<div class="tx-grid" style="margin:0.5rem 0 0;">${rows}</div>` : '';
+  } catch { return ''; }
+}
+
+function toggleAuditCard(cardId) {
+  const card = document.getElementById(cardId);
+  const detail = card.querySelector('.wallet-detail');
+  const isOpen = card.classList.contains('expanded');
+  if (isOpen) {
+    card.classList.remove('expanded');
+    detail.style.display = 'none';
+  } else {
+    card.classList.add('expanded');
+    detail.style.display = 'block';
+  }
+}
+
+let auditActionFilter = '';
+
+function toggleAuditFilter(e) {
+  e.stopPropagation();
+  const btn = document.getElementById('audit-filter-btn');
+  const dd  = document.getElementById('audit-filter-dropdown');
+  const open = dd.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+function setAuditFilter(value, label, el) {
+  auditActionFilter = value;
+  document.getElementById('audit-filter-label').textContent = label;
+  document.getElementById('audit-filter-dropdown').classList.remove('open');
+  document.getElementById('audit-filter-btn').classList.remove('open');
+  document.querySelectorAll('#audit-filter-dropdown .filter-option').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+  loadAuditLogs(1);
+}
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('audit-filter-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('audit-filter-dropdown')?.classList.remove('open');
+    document.getElementById('audit-filter-btn')?.classList.remove('open');
+  }
+});
+
+async function loadAuditLogs(page) {
+  if (page) auditPage = page;
+  const action = auditActionFilter;
+  const params = new URLSearchParams({ page: auditPage, limit: 20 });
+  if (action) params.set('action', action);
+
+  const res = await api(`/api/audit/logs?${params}`);
+  const el = document.getElementById('audit-list');
+  const pgEl = document.getElementById('audit-pagination');
+  if (!res.success) {
+    el.textContent = '';
+    var errP = document.createElement('p'); errP.style.color = '#f87171'; errP.textContent = res.error || 'Failed to load'; el.appendChild(errP);
+    return;
+  }
+
+  const logs = res.logs || [];
+  const total = res.total || 0;
+  const totalPages = Math.ceil(total / 20) || 1;
+
+  if (logs.length === 0) {
+    el.innerHTML = '<p style="color:#475569;font-size:0.85rem;padding:1rem 0;">No operations recorded yet.</p>';
+    pgEl.innerHTML = '';
+    return;
+  }
+
+  // Note: audit log data comes from our own backend (trusted source), not user input.
+  el.innerHTML = logs.map((log, idx) => {
+    const info = auditActionLabels[log.action] || { label: log.action, cls: 'badge-blue' };
+    const statusBadge = auditStatusBadge[log.status] || `<span class="badge badge-blue">${log.status}</span>`;
+    const summary = formatAuditSummary(log.action, log.details);
+    const full = formatAuditFull(log.action, log.details);
+    const d = new Date(log.created_at);
+    const ts = d.toLocaleDateString([], {month:'short', day:'numeric'})
+             + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const authBadge = log.auth_mode === 'passkey'
+      ? '<span class="badge badge-purple" style="font-size:0.62rem">passkey</span>'
+      : log.auth_mode === 'apikey'
+        ? '<span class="badge badge-blue" style="font-size:0.62rem">apikey</span>'
+        : '';
+    const cardId = `audit-card-${auditPage}-${idx}`;
+    const hasDetail = !!full;
+    return `<div class="wallet-card" id="${cardId}" style="margin-bottom:0.4rem;">
+      <div class="wallet-header" style="padding:0.65rem 0.85rem;" ${hasDetail ? `onclick="toggleAuditCard('${cardId}')"` : ''}>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.25rem;">
+            <span class="badge ${info.cls}">${info.label}</span>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+              ${hasDetail ? '<span class="chevron">▼</span>' : ''}
+              <span style="font-size:0.7rem;color:#475569;white-space:nowrap;">${ts}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;${summary ? 'margin-bottom:0.3rem' : ''}">
+            ${statusBadge}${authBadge}
+          </div>
+          ${summary ? `<div style="font-size:0.75rem;color:#94a3b8;word-break:break-all;line-height:1.5">${summary}</div>` : ''}
+        </div>
+      </div>
+      ${hasDetail ? `<div class="wallet-detail" style="display:none;padding:0.5rem 0.85rem 0.75rem;font-size:0.78rem;">${full}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Pagination
+  pgEl.innerHTML = '';
+  if (totalPages > 1) {
+    if (auditPage > 1) {
+      const prev = document.createElement('button');
+      prev.className = 'btn btn-ghost btn-sm';
+      prev.textContent = '← Prev';
+      prev.onclick = () => loadAuditLogs(auditPage - 1);
+      pgEl.appendChild(prev);
+    }
+    const info = document.createElement('span');
+    info.style.cssText = 'font-size:0.8rem;color:#475569;padding:0 0.5rem;line-height:2;';
+    info.textContent = `${auditPage} / ${totalPages}  (${total} total)`;
+    pgEl.appendChild(info);
+    if (auditPage < totalPages) {
+      const next = document.createElement('button');
+      next.className = 'btn btn-ghost btn-sm';
+      next.textContent = 'Next →';
+      next.onclick = () => loadAuditLogs(auditPage + 1);
+      pgEl.appendChild(next);
+    }
+  }
+}
+
+function init() {
+  loadChains();
+  const approvalMatch = window.location.hash.match(/^#\/approve\/(\d+)$/);
+
+  if (sessionToken) {
+    api('/api/wallets').then(res => {
+      if (res.success) {
+        renderAccount();
+        if (approvalMatch) {
+          showTab('tab-approvals');
+        } else {
+          showTab('tab-wallets');
+        }
+      } else {
+        sessionToken = '';
+        csrfToken = '';
+        currentUser = null;
+        localStorage.removeItem('ocw_session');
+        localStorage.removeItem('ocw_csrf');
+        localStorage.removeItem('ocw_user');
+        showAuthView();
+        if (approvalMatch) showAuthTab('auth-login');
+      }
+    });
+  } else {
+    showAuthView();
+    if (approvalMatch) showAuthTab('auth-login');
+  }
+}
+
+
+init();
+</script>
+</body>
+</html>
