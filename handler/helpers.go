@@ -42,7 +42,7 @@ func utcStartOfDay() time.Time {
 // createPendingApproval inserts a pending ApprovalRequest into the DB.
 // On success it returns the created record and true.
 // On failure it writes a 500 error response and returns nil, false — the caller must return immediately.
-func createPendingApproval(db *gorm.DB, c *gin.Context, walletID uint, approvalType string, policyData interface{}, expiry ...time.Duration) (*model.ApprovalRequest, bool) {
+func createPendingApproval(db *gorm.DB, c *gin.Context, walletID string, approvalType string, policyData interface{}, expiry ...time.Duration) (*model.ApprovalRequest, bool) {
 	policyJSON, _ := json.Marshal(policyData)
 	userID := mustUserID(c)
 	if c.IsAborted() {

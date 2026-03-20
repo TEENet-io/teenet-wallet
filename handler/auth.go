@@ -374,7 +374,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	}
 
 	// Collect wallet IDs for cascade deletion.
-	walletIDs := make([]uint, 0, len(wallets))
+	walletIDs := make([]string, 0, len(wallets))
 	for _, w := range wallets {
 		walletIDs = append(walletIDs, w.ID)
 	}

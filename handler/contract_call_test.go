@@ -54,6 +54,38 @@ func mockETHRPCServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// mockSOLRPCServer returns a test HTTP server that responds to Solana JSON-RPC calls
+// with plausible but fake values. This lets Solana contract-call tests exercise the
+// handler flow (including BuildSOLProgramCallTx) without hitting a live node.
+func mockSOLRPCServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		method, _ := req["method"].(string)
+		var result interface{}
+		switch method {
+		case "getLatestBlockhash":
+			result = map[string]interface{}{
+				"context": map[string]interface{}{"slot": 1234},
+				"value": map[string]interface{}{
+					"blockhash":            "11111111111111111111111111111111",
+					"lastValidBlockHeight": 9999,
+				},
+			}
+		default:
+			result = nil
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": result})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 // contractCallRouter wires a minimal gin router for ContractCall tests.
 // rpcURL overrides the "ethereum" chain's RPC endpoint for the duration of the test.
 func contractCallRouter(db *gorm.DB, userID uint, authMode string, rpcURL string) *gin.Engine {
@@ -110,7 +142,7 @@ func TestContractCall_NotWhitelisted(t *testing.T) {
 		"func_sig": "transfer(address,uint256)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -133,7 +165,7 @@ func TestContractCall_MethodNotAllowed(t *testing.T) {
 		"func_sig": "approve(address,uint256)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -164,7 +196,7 @@ func TestContractCall_HighRiskForceApproval_APIKey(t *testing.T) {
 		"func_sig": "approve(address,uint256)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000000"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -224,7 +256,7 @@ func TestContractCall_ApprovalStoresETHTxParams(t *testing.T) {
 		"func_sig": "transfer(address,uint256)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "500"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -279,7 +311,7 @@ func TestContractCall_AutoApproveFalse_APIKey(t *testing.T) {
 		"func_sig": "transfer(address,uint256)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -294,9 +326,9 @@ func TestContractCall_AutoApproveFalse_APIKey(t *testing.T) {
 	}
 }
 
-// ─── TestContractCall_SolanaNotSupported ──────────────────────────────────────
+// ─── TestContractCall_SolanaInvalidProgramID ──────────────────────────────────
 
-func TestContractCall_SolanaNotSupported(t *testing.T) {
+func TestContractCall_SolanaInvalidProgramID(t *testing.T) {
 	db := testDB(t)
 	n := dbCounter // use current counter for a unique key name
 	_ = n
@@ -311,18 +343,227 @@ func TestContractCall_SolanaNotSupported(t *testing.T) {
 	db.Create(&wallet)
 
 	r := contractCallRouter(db, user.ID, "passkey", "")
+	// Send an EVM address as program ID — should fail base58 validation.
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-		"func_sig": "transfer(address,uint256)",
-		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
+		"accounts": []map[string]interface{}{
+			{"pubkey": "11111111111111111111111111111111", "is_signer": true, "is_writable": true},
+		},
+		"data": "01",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for Solana chain, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 400 for invalid Solana program ID, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestContractCall_SolanaNotWhitelisted ────────────────────────────────────
+
+func TestContractCall_SolanaNotWhitelisted(t *testing.T) {
+	db := testDB(t)
+	n := dbCounter
+	_ = n
+	user := model.User{Username: "soluser-cc-nw"}
+	db.Create(&user)
+	wallet := model.Wallet{
+		UserID:  user.ID,
+		Chain:   "solana",
+		KeyName: fmt.Sprintf("k-sol-cc-nw-%d", n),
+		Status:  "ready",
+	}
+	db.Create(&wallet)
+
+	r := contractCallRouter(db, user.ID, "passkey", "")
+	// Valid base58 program ID, but not whitelisted.
+	body := jsonBody(map[string]interface{}{
+		"contract": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+		"accounts": []map[string]interface{}{
+			{"pubkey": "11111111111111111111111111111111", "is_signer": true, "is_writable": true},
+		},
+		"data": "03",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-whitelisted program, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestContractCall_SolanaDiscriminatorNotAllowed ────────────────────────────
+
+func TestContractCall_SolanaDiscriminatorNotAllowed(t *testing.T) {
+	db := testDB(t)
+	n := dbCounter
+	_ = n
+	user := model.User{Username: "soluser-cc-disc"}
+	db.Create(&user)
+	wallet := model.Wallet{
+		UserID:  user.ID,
+		Chain:   "solana",
+		KeyName: fmt.Sprintf("k-sol-cc-disc-%d", n),
+		Status:  "ready",
+	}
+	db.Create(&wallet)
+
+	programID := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	contract := model.AllowedContract{
+		WalletID:        wallet.ID,
+		ContractAddress: programID,
+		AllowedMethods:  "03", // only allow Transfer (discriminator 03)
+		AutoApprove:     true,
+	}
+	db.Create(&contract)
+
+	r := contractCallRouter(db, user.ID, "passkey", "")
+	// Discriminator 04 (Approve) is not in the allowed list.
+	body := jsonBody(map[string]interface{}{
+		"contract": programID,
+		"accounts": []map[string]interface{}{
+			{"pubkey": "11111111111111111111111111111111", "is_signer": true, "is_writable": true},
+		},
+		"data": "0400000000",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for disallowed discriminator, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestContractCall_SolanaNoAccounts ─────────────────────────────────────────
+
+func TestContractCall_SolanaNoAccounts(t *testing.T) {
+	db := testDB(t)
+	n := dbCounter
+	_ = n
+	user := model.User{Username: "soluser-cc-noacc"}
+	db.Create(&user)
+	wallet := model.Wallet{
+		UserID:  user.ID,
+		Chain:   "solana",
+		KeyName: fmt.Sprintf("k-sol-cc-noacc-%d", n),
+		Status:  "ready",
+	}
+	db.Create(&wallet)
+
+	programID := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	contract := model.AllowedContract{
+		WalletID:        wallet.ID,
+		ContractAddress: programID,
+		AutoApprove:     true,
+	}
+	db.Create(&contract)
+
+	r := contractCallRouter(db, user.ID, "passkey", "")
+	body := jsonBody(map[string]interface{}{
+		"contract": programID,
+		"accounts": []map[string]interface{}{},
+		"data":     "03",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for no accounts, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestContractCall_SolanaHighRisk_APIKey ────────────────────────────────────
+
+func TestContractCall_SolanaHighRisk_APIKey(t *testing.T) {
+	db := testDB(t)
+	n := dbCounter
+	_ = n
+	user := model.User{Username: "soluser-cc-hr"}
+	db.Create(&user)
+	wallet := model.Wallet{
+		UserID:  user.ID,
+		Chain:   "solana",
+		KeyName: fmt.Sprintf("k-sol-cc-hr-%d", n),
+		Address: "11111111111111111111111111111111", // valid 32-byte base58 address
+		Status:  "ready",
+	}
+	db.Create(&wallet)
+
+	programID := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	contract := model.AllowedContract{
+		WalletID:        wallet.ID,
+		ContractAddress: programID,
+		AutoApprove:     true, // auto-approve is on, but discriminator 04 is high-risk
+	}
+	db.Create(&contract)
+
+	// Patch solana chain RPC to our mock so BuildSOLProgramCallTx can complete.
+	rpc := mockSOLRPCServer(t)
+	if cfg, ok := model.Chains["solana"]; ok {
+		cfg.RPCURL = rpc.URL
+		model.Chains["solana"] = cfg
+	}
+
+	r := contractCallRouter(db, user.ID, "apikey", "")
+	// Discriminator 04 = Approve — high risk.
+	body := jsonBody(map[string]interface{}{
+		"contract": programID,
+		"accounts": []map[string]interface{}{
+			{"pubkey": "11111111111111111111111111111111", "is_signer": true, "is_writable": true},
+		},
+		"data": "0400000000000000",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 pending approval for high-risk Solana discriminator via API Key, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["status"] != "pending_approval" {
+		t.Errorf("expected status=pending_approval, got %v", resp["status"])
+	}
+	if resp["approval_id"] == nil {
+		t.Error("expected approval_id in response")
+	}
+
+	// Verify an ApprovalRequest was created in the DB.
+	var count int64
+	db.Model(&model.ApprovalRequest{}).Where("wallet_id = ? AND approval_type = ?", wallet.ID, "contract_call").Count(&count)
+	if count != 1 {
+		t.Errorf("expected 1 approval request in DB, got %d", count)
+	}
+}
+
+// ─── TestContractCall_EVMRequiresFuncSig ──────────────────────────────────────
+
+func TestContractCall_EVMRequiresFuncSig(t *testing.T) {
+	db := testDB(t)
+	user, wallet, _ := seedWalletWithContract(t, db, "", true)
+
+	r := contractCallRouter(db, user.ID, "passkey", "")
+	// Missing func_sig — should fail for EVM.
+	body := jsonBody(map[string]interface{}{
+		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing func_sig on EVM, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -346,7 +587,7 @@ func TestContractCall_WalletNotReady(t *testing.T) {
 		"func_sig": "transfer(address,uint256)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -369,7 +610,7 @@ func TestApproveToken_NotWhitelisted(t *testing.T) {
 		"spender":  "0x1234567890123456789012345678901234567890",
 		"amount":   "100",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/approve-token", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/approve-token", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -394,7 +635,7 @@ func TestApproveToken_APIKey_PendingApproval(t *testing.T) {
 		"spender":  "0x1234567890123456789012345678901234567890",
 		"amount":   "100",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/approve-token", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/approve-token", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -431,7 +672,7 @@ func TestApproveToken_MissingFields(t *testing.T) {
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"amount":   "100",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/approve-token", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/approve-token", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -454,7 +695,7 @@ func TestRevokeApproval_APIKey_PendingApproval(t *testing.T) {
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"spender":  "0x1234567890123456789012345678901234567890",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/revoke-approval", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/revoke-approval", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -490,7 +731,7 @@ func TestRevokeApproval_MissingFields(t *testing.T) {
 	body := jsonBody(map[string]interface{}{
 		"spender": "0x1234567890123456789012345678901234567890",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/revoke-approval", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/revoke-approval", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -513,7 +754,7 @@ func TestContractCall_InvalidFuncSig(t *testing.T) {
 		"func_sig": "notavalidsignature", // missing parentheses
 		"args":     []interface{}{},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contract-call", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

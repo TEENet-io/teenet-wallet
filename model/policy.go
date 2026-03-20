@@ -12,7 +12,7 @@ import (
 // One policy per (wallet, currency) pair — each currency gets its own threshold and daily limit.
 type ApprovalPolicy struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`
-	WalletID        uint      `json:"wallet_id" gorm:"not null;uniqueIndex:idx_wallet_currency"`
+	WalletID        string    `json:"wallet_id" gorm:"size:36;not null;uniqueIndex:idx_wallet_currency"`
 	ThresholdAmount string    `json:"threshold_amount" gorm:"not null"` // single-tx threshold, e.g. "0.1"
 	Currency        string    `json:"currency" gorm:"not null;uniqueIndex:idx_wallet_currency"` // "ETH", "USDC", "SOL", …
 	Enabled         bool      `json:"enabled" gorm:"default:true"`
@@ -26,7 +26,7 @@ type ApprovalPolicy struct {
 // or when an API key requests a policy change that requires passkey confirmation.
 type ApprovalRequest struct {
 	ID           uint      `json:"id" gorm:"primaryKey;autoIncrement:false"`
-	WalletID     uint      `json:"wallet_id" gorm:"not null;index"`
+	WalletID     string    `json:"wallet_id" gorm:"size:36;not null;index"`
 	UserID       uint      `json:"user_id" gorm:"not null"`
 	ApprovalType string    `json:"approval_type" gorm:"default:'sign'"` // "sign", "transfer", "contract_call", "contract_add", "policy_change"
 	Message      string    `json:"message" gorm:"type:text"`            // hex signing hash (ETH) or message bytes (SOL); empty for policy_change

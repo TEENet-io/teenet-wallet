@@ -113,7 +113,7 @@ func TestAddContract_Success(t *testing.T) {
 		"decimals":         6,
 		"label":            "Circle USD Coin",
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -151,7 +151,7 @@ func TestAddContract_NormalizesAddressToLowercase(t *testing.T) {
 		"contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // mixed case USDC
 		"symbol":           "USDC",
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -176,12 +176,12 @@ func TestAddContract_Duplicate(t *testing.T) {
 		"symbol":           "USDC",
 	}
 	// First add.
-	req1 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req1 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req1.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(httptest.NewRecorder(), req1)
 
 	// Second add (duplicate).
-	req2 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req2 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
@@ -200,7 +200,7 @@ func TestAddContract_InvalidAddress_TooShort(t *testing.T) {
 		"contract_address": "0x1234",
 		"symbol":           "BAD",
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -220,7 +220,7 @@ func TestAddContract_InvalidAddress_NoPrefix(t *testing.T) {
 		"contract_address": "1234567890123456789012345678901234567890",
 		"symbol":           "BAD",
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -241,7 +241,7 @@ func TestAddContract_WrongWallet(t *testing.T) {
 		"contract_address": "0x1234567890123456789012345678901234567890",
 		"symbol":           "USDC",
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", otherWallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", otherWallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -258,7 +258,7 @@ func TestListContracts_Empty(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 	r := contractRouter(db, user.ID)
 
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -287,7 +287,7 @@ func TestListContracts_WithEntries(t *testing.T) {
 	}
 
 	r := contractRouter(db, user.ID)
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -315,7 +315,7 @@ func TestListContracts_DoesNotLeakOtherWallet(t *testing.T) {
 	})
 
 	r := contractRouter(db, user.ID)
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -342,7 +342,7 @@ func TestDeleteContract_Success(t *testing.T) {
 
 	r := contractRouter(db, user.ID)
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/wallets/%d/contracts/%d", wallet.ID, contract.ID), nil)
+		fmt.Sprintf("/wallets/%s/contracts/%d", wallet.ID, contract.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -364,7 +364,7 @@ func TestDeleteContract_NotFound(t *testing.T) {
 	r := contractRouter(db, user.ID)
 
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/wallets/%d/contracts/99999", wallet.ID), nil)
+		fmt.Sprintf("/wallets/%s/contracts/99999", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -388,7 +388,7 @@ func TestDeleteContract_WrongWallet(t *testing.T) {
 	// Authenticated as user (not otherWallet's owner), trying to delete otherWallet's contract.
 	r := contractRouter(db, user.ID)
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/wallets/%d/contracts/%d", otherWallet.ID, contract.ID), nil)
+		fmt.Sprintf("/wallets/%s/contracts/%d", otherWallet.ID, contract.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -409,7 +409,7 @@ func TestDeleteContract_InvalidID(t *testing.T) {
 	r := contractRouter(db, user.ID)
 
 	req := httptest.NewRequest(http.MethodDelete,
-		fmt.Sprintf("/wallets/%d/contracts/notanumber", wallet.ID), nil)
+		fmt.Sprintf("/wallets/%s/contracts/notanumber", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -431,7 +431,7 @@ func TestAddContract_WithMethodsAndAutoApprove(t *testing.T) {
 		"allowed_methods":  "Transfer,Approve",
 		"auto_approve":     true,
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -475,7 +475,7 @@ func TestAddContract_DefaultAutoApproveFalse(t *testing.T) {
 		"symbol":           "DAI",
 		"decimals":         18,
 	}
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/contracts", wallet.ID), jsonBody(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet.ID), jsonBody(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

@@ -55,7 +55,7 @@ func TestCallRead_Success(t *testing.T) {
 		"func_sig": "balanceOf(address)",
 		"args":     []interface{}{wallet.Address},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/call-read", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/call-read", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -89,7 +89,7 @@ func TestCallRead_SolanaNotSupported(t *testing.T) {
 		"func_sig": "balanceOf(address)",
 		"args":     []interface{}{"0x1234567890123456789012345678901234567890"},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/call-read", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/call-read", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -113,7 +113,7 @@ func TestCallRead_InvalidFuncSig(t *testing.T) {
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "not valid",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/call-read", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/call-read", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)

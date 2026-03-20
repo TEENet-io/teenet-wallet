@@ -1,11 +1,13 @@
 package chain
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
 
+	"filippo.io/edwards25519"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -90,6 +92,69 @@ func base58Decode(s string) ([]byte, error) {
 	result := make([]byte, leadingOnes+len(decoded))
 	copy(result[leadingOnes:], decoded)
 	return result, nil
+}
+
+// Base58Decode is an exported wrapper around base58Decode.
+func Base58Decode(s string) ([]byte, error) {
+	return base58Decode(s)
+}
+
+// FindProgramAddress derives a Solana Program Derived Address (PDA).
+// It iterates bump from 255 down to 0, hashing (seeds || bump || programID || "ProgramDerivedAddress"),
+// and returns the first candidate that is NOT on the Ed25519 curve.
+func FindProgramAddress(seeds [][]byte, programID []byte) ([]byte, byte, error) {
+	for bump := byte(255); ; bump-- {
+		h := sha256.New()
+		for _, s := range seeds {
+			h.Write(s)
+		}
+		h.Write([]byte{bump})
+		h.Write(programID)
+		h.Write([]byte("ProgramDerivedAddress"))
+		candidate := h.Sum(nil)
+
+		if !isOnCurve(candidate) {
+			return candidate, bump, nil
+		}
+
+		if bump == 0 {
+			break
+		}
+	}
+	return nil, 0, fmt.Errorf("could not find valid PDA (all 256 bumps are on curve)")
+}
+
+// isOnCurve checks if the 32-byte candidate is a valid Ed25519 point.
+func isOnCurve(candidate []byte) bool {
+	_, err := new(edwards25519.Point).SetBytes(candidate)
+	return err == nil
+}
+
+// DeriveATA derives the Associated Token Account address for a given wallet and mint.
+func DeriveATA(walletAddr, mintAddr string) ([]byte, error) {
+	wallet, err := base58Decode(walletAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid wallet address: %w", err)
+	}
+	tokenProgram, err := base58Decode(splTokenProgramID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid token program ID: %w", err)
+	}
+	mint, err := base58Decode(mintAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid mint address: %w", err)
+	}
+	ataProgram, err := base58Decode(ataProgramID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ATA program ID: %w", err)
+	}
+
+	seeds := [][]byte{wallet, tokenProgram, mint}
+	addr, _, err := FindProgramAddress(seeds, ataProgram)
+	if err != nil {
+		return nil, fmt.Errorf("derive ATA: %w", err)
+	}
+	return addr, nil
 }
 
 // base58Encode encodes bytes using Bitcoin/Solana Base58 alphabet.

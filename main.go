@@ -69,12 +69,16 @@ func main() {
 		&model.AllowedContract{},
 		&model.AuditLog{},
 		&model.IdempotencyRecord{},
+		&model.CustomChain{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 	// Drop the old single-column unique index on wallet_id (superseded by composite idx_wallet_currency).
 	// GORM AutoMigrate adds new indexes but never removes old ones, so we do it explicitly.
 	db.Exec("DROP INDEX IF EXISTS idx_approval_policies_wallet_id")
+
+	// Merge persisted custom chains into the registry now that the DB is ready.
+	model.LoadCustomChains(db)
 
 	// Init TEENet SDK.
 	opts := &sdk.ClientOptions{
@@ -91,6 +95,7 @@ func main() {
 	defer sessions.Stop()
 
 	// Router.
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.Use(requestIDMiddleware())
 	r.Use(corsMiddleware(frontendURL))
@@ -127,6 +132,7 @@ func main() {
 	})
 
 	// Chain list (public) — used by frontend to populate chain selector.
+	// The "custom" field in each ChainConfig is true for user-added chains.
 	r.GET("/api/chains", func(c *gin.Context) {
 		list := make([]model.ChainConfig, 0, len(model.Chains))
 		for _, cfg := range model.Chains {
@@ -169,6 +175,112 @@ func main() {
 	passkeyOnly.GET("/auth/apikey/list", authH.ListAPIKeys)
 	passkeyOnly.DELETE("/auth/apikey", authH.RevokeAPIKey)
 
+	// Custom chain management (Passkey only — structural change to the wallet service).
+	passkeyOnly.POST("/chains", func(c *gin.Context) {
+		var req struct {
+			Name     string `json:"name"`
+			Label    string `json:"label"`
+			Currency string `json:"currency"`
+			RPCURL   string `json:"rpc_url"`
+			ChainID  uint64 `json:"chain_id"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "invalid request body"})
+			return
+		}
+
+		// Validate required fields.
+		if req.Name == "" {
+			c.JSON(400, gin.H{"error": "name is required"})
+			return
+		}
+		if req.RPCURL == "" {
+			c.JSON(400, gin.H{"error": "rpc_url is required"})
+			return
+		}
+
+		// Only EVM custom chains are supported for now.
+		// (Solana requires different protocol/curve and additional validation.)
+		family := "evm"
+
+		// Reject if it would collide with a built-in chain.
+		if existing, exists := model.Chains[req.Name]; exists && !existing.Custom {
+			c.JSON(409, gin.H{"error": "cannot overwrite a built-in chain"})
+			return
+		}
+		// Reject if a custom chain with this name already exists.
+		if existing, exists := model.Chains[req.Name]; exists && existing.Custom {
+			c.JSON(409, gin.H{"error": "custom chain already exists"})
+			return
+		}
+
+		row := model.CustomChain{
+			Name:     req.Name,
+			Label:    req.Label,
+			Currency: req.Currency,
+			Family:   family,
+			RPCURL:   req.RPCURL,
+			ChainID:  req.ChainID,
+		}
+		if err := db.Create(&row).Error; err != nil {
+			slog.Error("create custom chain", "error", err)
+			c.JSON(500, gin.H{"error": "failed to persist custom chain"})
+			return
+		}
+
+		cfg := model.ChainConfig{
+			Name:     row.Name,
+			Label:    row.Label,
+			Protocol: "ecdsa",
+			Curve:    "secp256k1",
+			Currency: row.Currency,
+			Family:   family,
+			RPCURL:   row.RPCURL,
+			ChainID:  row.ChainID,
+			Custom:   true,
+		}
+		model.Chains[cfg.Name] = cfg
+
+		slog.Info("custom chain added", "name", cfg.Name, "chain_id", cfg.ChainID)
+		c.JSON(201, gin.H{"success": true, "chain": cfg})
+	})
+
+	passkeyOnly.DELETE("/chains/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		existing, exists := model.Chains[name]
+		if !exists {
+			c.JSON(404, gin.H{"error": "chain not found"})
+			return
+		}
+		if !existing.Custom {
+			c.JSON(403, gin.H{"error": "cannot delete a built-in chain"})
+			return
+		}
+
+		// Refuse if any wallet is using this chain.
+		var count int64
+		if err := db.Model(&model.Wallet{}).Where("chain = ?", name).Count(&count).Error; err != nil {
+			slog.Error("check wallets on chain", "error", err)
+			c.JSON(500, gin.H{"error": "failed to check wallets"})
+			return
+		}
+		if count > 0 {
+			c.JSON(409, gin.H{"error": "chain has existing wallets; delete them first"})
+			return
+		}
+
+		if err := db.Where("name = ?", name).Delete(&model.CustomChain{}).Error; err != nil {
+			slog.Error("delete custom chain", "error", err)
+			c.JSON(500, gin.H{"error": "failed to delete custom chain"})
+			return
+		}
+		delete(model.Chains, name)
+
+		slog.Info("custom chain deleted", "name", name)
+		c.JSON(200, gin.H{"success": true})
+	})
+
 	// Contract whitelist (dual-auth for read, Passkey-only for write).
 	contractH := handler.NewContractHandler(db, sdkClient, approvalExpiry)
 	auth.GET("/wallets/:id/contracts", contractH.ListContracts)
@@ -198,6 +310,8 @@ func main() {
 	auth.POST("/wallets/:id/call-read", contractCallH.CallRead)
 
 	auth.POST("/wallets/:id/transfer", walletH.Transfer) // backend builds+broadcasts tx
+	auth.POST("/wallets/:id/wrap-sol", walletH.WrapSOL)
+	auth.POST("/wallets/:id/unwrap-sol", walletH.UnwrapSOL)
 	auth.GET("/wallets/:id/pubkey", walletH.GetPubkey)
 	auth.GET("/wallets/:id/policy", walletH.GetPolicy)        // read: API Key or Passkey
 	auth.PUT("/wallets/:id/policy", walletH.SetPolicy)        // passkey: apply directly; API key: creates approval

@@ -7,7 +7,7 @@ type AuditLog struct {
 	ID       uint   `json:"id" gorm:"primaryKey"`
 	UserID   uint   `json:"user_id" gorm:"not null;index"`
 	Action   string `json:"action" gorm:"size:64;not null;index"` // e.g. "wallet_create", "transfer"
-	WalletID *uint  `json:"wallet_id,omitempty" gorm:"index"`
+	WalletID *string `json:"wallet_id,omitempty" gorm:"size:36;index"`
 	// Details stores optional JSON context (to, amount, tx_hash, etc.).
 	Details  string `json:"details" gorm:"type:text"`
 	AuthMode string `json:"auth_mode" gorm:"size:16"` // "passkey" | "apikey" | ""

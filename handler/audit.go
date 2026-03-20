@@ -69,7 +69,7 @@ func (h *AuditHandler) ListLogs(c *gin.Context) {
 // ─── Audit helpers ─────────────────────────────────────────────────────────────
 
 // writeAuditLog writes a best-effort audit entry. Errors are logged to stdout but not returned.
-func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *uint, details interface{}) {
+func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *string, details interface{}) {
 	entry := model.AuditLog{
 		UserID:    userID,
 		Action:    action,
@@ -89,7 +89,7 @@ func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string
 }
 
 // writeAuditCtx is a convenience wrapper that extracts userID/authMode/IP from the gin context.
-func writeAuditCtx(db *gorm.DB, c *gin.Context, action, status string, walletID *uint, details interface{}) {
+func writeAuditCtx(db *gorm.DB, c *gin.Context, action, status string, walletID *string, details interface{}) {
 	userID := mustUserID(c)
 	if c.IsAborted() {
 		return

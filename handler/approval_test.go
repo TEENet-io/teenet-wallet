@@ -32,7 +32,7 @@ func approvalRouter(db *gorm.DB, userID uint) *gin.Engine {
 }
 
 // seedApproval inserts an ApprovalRequest with the given status and expiry.
-func seedApproval(t *testing.T, db *gorm.DB, walletID, userID uint, status string, expiresAt time.Time) model.ApprovalRequest {
+func seedApproval(t *testing.T, db *gorm.DB, walletID string, userID uint, status string, expiresAt time.Time) model.ApprovalRequest {
 	t.Helper()
 	a := model.ApprovalRequest{
 		WalletID:  walletID,

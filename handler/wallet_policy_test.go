@@ -42,7 +42,7 @@ func TestSetPolicy_Success(t *testing.T) {
 		"currency":         "eth",
 		"enabled":          true,
 	})
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%d/policy", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -77,7 +77,7 @@ func TestSetPolicy_UpdateExisting(t *testing.T) {
 		"threshold_amount": "2.0",
 		"currency":         "ETH",
 	})
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%d/policy", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -103,7 +103,7 @@ func TestSetPolicy_MissingFields_Returns400(t *testing.T) {
 
 	// No threshold_amount field.
 	body := jsonBody(map[string]interface{}{"currency": "ETH"})
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%d/policy", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -124,7 +124,7 @@ func TestSetPolicy_WrongWallet_Returns403(t *testing.T) {
 		"threshold_amount": "0.1",
 		"currency":         "ETH",
 	})
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%d/policy", wallet2.ID), body)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet2.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -141,7 +141,7 @@ func TestGetPolicy_NoPolicy_ReturnsNull(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 	r := policyRouter(db, user.ID)
 
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%d/policy", wallet.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/policy", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -163,7 +163,7 @@ func TestGetPolicy_WithPolicy(t *testing.T) {
 	})
 
 	r := policyRouter(db, user.ID)
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%d/policy", wallet.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/policy", wallet.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -194,7 +194,7 @@ func TestGetPolicy_WrongWallet_Returns403(t *testing.T) {
 	_, wallet2 := seedWallet(t, db)
 
 	r := policyRouter(db, user1.ID)
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%d/policy", wallet2.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/policy", wallet2.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

@@ -7,7 +7,7 @@ import "time"
 // Adding/removing entries requires Passkey authentication (human security gate).
 type AllowedContract struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`
-	WalletID        uint      `json:"wallet_id" gorm:"not null;uniqueIndex:idx_wallet_contract"`
+	WalletID        string    `json:"wallet_id" gorm:"size:36;not null;uniqueIndex:idx_wallet_contract"`
 	ContractAddress string    `json:"contract_address" gorm:"not null;uniqueIndex:idx_wallet_contract"` // lowercase hex
 	Label           string    `json:"label"`    // e.g. "USDC on Ethereum"
 	Symbol          string    `json:"symbol"`   // e.g. "USDC"

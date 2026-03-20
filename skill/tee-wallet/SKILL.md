@@ -50,8 +50,10 @@ Always re-fetch `/api/wallets` before:
 Do not build an “all balances” response from a stale wallet list remembered from earlier in the chat.
 Do not query chain balances for wallets that are no longer present in the latest `/api/wallets` response.
 
+**Wallet IDs are UUIDs** (e.g. `8a2fbc16-faf4-451a-be34-9fc5c49cde00`), not sequential numbers. Never expose raw wallet IDs in normal chat — use list indices instead.
+
 When the user refers to wallets as `1`, `2`, `3`, etc., interpret those numbers as the **current displayed list index**, not the raw wallet `id`.
-Only interpret a number as the real wallet `id` if the user explicitly says `id=7`, `wallet id 7`, or equivalent.
+Only interpret a UUID as the real wallet `id` if the user explicitly provides one.
 
 ## Available Operations
 
@@ -63,10 +65,11 @@ When user asks to create a new wallet:
 curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"chain":"<ethereum|solana>","label":"<user description>"}'
+  -d '{"chain":"<chain_name>","label":"<user description>"}'
 ```
 
-- Ask user which chain (Ethereum or Solana) if not specified
+- The `chain` value must be one of the names returned by `GET /api/chains` (e.g. `ethereum`, `solana`, `sepolia`, `solana-devnet`, or any user-added custom chain)
+- If user doesn't specify a chain, first call `GET /api/chains` to list available options and ask them to choose
 - Ethereum wallets may take 1-2 minutes to create (ECDSA key generation)
 - Solana wallets are created instantly
 - After success, show:
@@ -90,7 +93,7 @@ Present wallets in a clear user-facing list with:
 - Address
 - Status
 
-Do **not** show the raw wallet `id` by default in normal chat responses. Keep the real wallet `id`
+Do **not** show the raw wallet `id` (UUID) by default in normal chat responses. Keep it
 internal and use it only for API calls or debugging.
 
 Mark wallets with status `creating` as ⏳ and `error` as ❌.
@@ -171,28 +174,38 @@ Explorer links by chain:
 
 **If response has `"status":"pending_approval"`**: follow the **Approval Polling Flow** (Section 12).
 
-### 6. ERC-20 Token Transfer
+### 6. ERC-20 Token Transfer (Ethereum) / SPL Token Transfer (Solana)
 
-Use this when the user asks to send an ERC-20 token (e.g. USDC, WETH, USDT).
+Use this when the user asks to send a token (ERC-20 on Ethereum, or SPL token on Solana — e.g. USDC, WETH, USDT).
 
-> ⚠️ **CRITICAL**: When sending ERC-20 tokens you MUST include the `token` field in the request body.
-> Omitting `token` will send **native ETH** instead — a completely different transaction that costs
-> real ETH and cannot be reversed. Always double-check that your curl `-d` payload contains `"token": {...}`.
+> ⚠️ **CRITICAL**: When sending tokens you MUST include the `token` field in the request body.
+> Omitting `token` will send **native ETH/SOL** instead — a completely different transaction that costs
+> real funds and cannot be reversed. Always double-check that your curl `-d` payload contains `"token": {...}`.
 
-**Step 1 — Ensure the contract is whitelisted** (see Section 7):
+**Step 1 — Ensure the contract/mint is whitelisted** (see Section 7):
 ```bash
 curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
 ```
-If the contract is not in the list, you can propose adding it via API key (creates a pending approval — see Section 7):
+If the contract/mint is not in the list, you can propose adding it via API key (creates a pending approval — see Section 7):
+
+For Ethereum ERC-20:
 ```bash
 curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"contract_address":"<0x...>","symbol":"<SYMBOL>","decimals":<N>}'
 ```
+
+For Solana SPL tokens, use the token mint address (base58):
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"contract_address":"<mint_address_base58>","symbol":"<SYMBOL>","decimals":<N>}'
+```
 Then follow the approval polling flow (Section 12, `contract_add` type). Alternatively, direct the user to add it immediately via Web UI (Passkey required):
-> ⚠ The contract `0x…` is not yet whitelisted. Requesting approval to add it… (or open Web UI → Contracts tab → Add to Whitelist for instant approval)
+> ⚠ The contract/mint `…` is not yet whitelisted. Requesting approval to add it… (or open Web UI → Contracts tab → Add to Whitelist for instant approval)
 
 **Step 2 — Call `/transfer` with the `token` field** (no chat confirmation needed — backend enforces approval policies):
 ```bash
@@ -203,7 +216,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/transfer" \
     "to": "<recipient_address>",
     "amount": "<human-readable amount, e.g. 100>",
     "token": {
-      "contract": "<contract_address_lowercase>",
+      "contract": "<contract_address_lowercase_or_mint_base58>",
       "symbol": "<e.g. USDC>",
       "decimals": <e.g. 6>
     }
@@ -211,6 +224,8 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/transfer" \
 ```
 
 The amount is **in token units** (e.g. `100` for 100 USDC — the backend converts to raw units).
+
+**Solana-specific behaviour**: if the recipient does not yet have an Associated Token Account (ATA) for the token mint, the backend creates it automatically in the same transaction. No extra steps are needed.
 
 **Response handling** is identical to native transfer (Section 5) — include explorer link on success.
 
@@ -239,7 +254,11 @@ Base Sepolia Testnet:
 
 ### 7. Manage Contract Whitelist
 
-The contract whitelist is a **security gate**: only pre-registered contracts can be called via `/transfer` or `/contract-call`. Removing entries requires **Passkey hardware authentication**. Adding can be done by either:
+The contract whitelist is a **security gate**: only pre-registered contracts/programs/mints can be called via `/transfer` or `/contract-call`. This applies equally to:
+- **Ethereum**: ERC-20 contract addresses (`0x…`)
+- **Solana**: SPL token mint addresses (base58) and program IDs (base58)
+
+Removing entries requires **Passkey hardware authentication**. Adding can be done by either:
 - **Passkey session** (Web UI): applied immediately
 - **API key**: creates a pending approval (HTTP 202) that the Passkey owner must approve
 
@@ -276,7 +295,7 @@ After receiving a 202 response, tell the user:
 > The wallet owner must approve this via the Web UI before it can be used for ERC-20 transfers.
 > [**→ Approve Request**]({TEE_WALLET_API_URL}/#/approve/{approval_id})
 
-Then poll `GET /api/approvals/{approval_id}` every 15 seconds until `status` is `approved` or `rejected` (same as Section 12). Once `approved`, the contract is whitelisted and ERC-20 transfers can proceed.
+Then poll `GET /api/approvals/{approval_id}` every 15 seconds until `status` is `approved` or `rejected` (same as Section 12). Once `approved`, the contract/mint/program is whitelisted and token transfers or program calls can proceed.
 
 **Add a contract via Passkey** (Web UI, applied immediately):
 > Web UI → Wallets → select wallet → Contracts tab → Add to Whitelist.
@@ -303,23 +322,26 @@ Only include the fields you want to change. A 202 response means the update is p
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `contract_address` | Yes | EVM contract address (0x..., lowercase) |
+| `contract_address` | Yes | EVM contract address (`0x…`, lowercase) **or** Solana mint/program address (base58) |
 | `symbol` | No | Token symbol (e.g. USDC) |
-| `decimals` | No | Token decimals (e.g. 6 for USDC, 18 for WETH) |
+| `decimals` | No | Token decimals (e.g. 6 for USDC, 18 for WETH, 9 for most SPL tokens) |
 | `label` | No | Human-readable label |
-| `allowed_methods` | No | Comma-separated method names (e.g. `transfer,approve`). Empty = all methods allowed |
-| `auto_approve` | No | If `true`, API key can execute calls to this contract without Passkey approval (except high-risk methods). Default: `false` |
+| `allowed_methods` | No | Comma-separated method names (EVM: e.g. `transfer,approve`; Solana programs: leave empty to allow all instructions). Empty = all methods allowed |
+| `auto_approve` | No | If `true`, API key can execute calls to this contract/program without Passkey approval (except high-risk methods). Default: `false`. Also applies to Solana program calls |
 
 **High-risk methods** (always require Passkey approval regardless of `auto_approve`):
 `approve`, `increaseAllowance`, `setApprovalForAll`, `transferFrom`, `safeTransferFrom`
 
+> Note: For Solana programs, `auto_approve: true` enables API-key-initiated program calls without Passkey approval (except when the instruction itself triggers the wallet's transfer approval policy).
+
 ### 7.2. General Contract Call
 
-Use when the user wants to call any smart contract function (not just ERC-20 transfer). This endpoint has **three-layer security**:
-1. Contract must be whitelisted
-2. Method must be in `allowed_methods` (if configured)
-3. High-risk methods always require Passkey approval
+Use when the user wants to call any smart contract function (EVM) or invoke a Solana program instruction. This endpoint has **three-layer security**:
+1. Contract/program must be whitelisted
+2. Method must be in `allowed_methods` (if configured; Solana programs typically leave this empty)
+3. High-risk EVM methods always require Passkey approval; `auto_approve` applies to Solana programs too
 
+**EVM (Ethereum) — use `func_sig` and `args`:**
 ```bash
 curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
@@ -336,6 +358,28 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
 **Function signature format:** Use Solidity-style signatures like `transfer(address,uint256)`, `approve(address,uint256)`, `balanceOf(address)`.
 
 **Supported argument types:** `address`, `uint256`, `int256`, `bool`, `bytes32`
+
+**Solana — use `accounts` and `data` instead of `func_sig`/`args`:**
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contract": "<program_id_base58>",
+    "accounts": [
+      {"pubkey": "<account1_base58>", "is_signer": false, "is_writable": true},
+      {"pubkey": "<account2_base58>", "is_signer": false, "is_writable": false}
+    ],
+    "data": "<hex-encoded instruction data>",
+    "memo": "<optional>"
+  }'
+```
+
+- `contract`: the Solana program ID (base58) — must be whitelisted
+- `accounts`: array of account metas in instruction order; the wallet's own address is added automatically as a signer if required
+- `data`: hex-encoded instruction data (discriminator + encoded arguments)
+
+The program must be added to the whitelist before calling (same API as Section 7). `auto_approve: true` on the whitelist entry allows API-key calls without Passkey.
 
 **Response:** Same as transfer — either `"status":"completed"` with `tx_hash`, or `"status":"pending_approval"` with approval link.
 
@@ -373,7 +417,61 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/revoke-approval" \
 
 > ⚠️ Also a high-risk method — requires Passkey approval.
 
-### 7.5. Read-Only Contract Call
+### 7.5. Wrap SOL (Solana)
+
+Wraps native SOL into wSOL (Wrapped SOL SPL token). Use when the user asks to wrap SOL or convert SOL to wSOL (required by many DeFi protocols on Solana).
+
+The backend creates the wSOL Associated Token Account (ATA) automatically if it does not yet exist.
+
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/wrap-sol" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": "<SOL amount, e.g. 0.1>"}'
+```
+
+- `amount`: human-readable SOL amount to wrap (e.g. `"0.1"` wraps 0.1 SOL into 0.1 wSOL)
+
+**On success:**
+```json
+{"status": "completed", "tx_hash": "...", "action": "wrap"}
+```
+
+Show the user:
+> ✅ **Wrapped SOL**
+> **Amount:** {amount} SOL → wSOL
+> **Hash:** `{tx_hash}`
+> 🔗 https://solscan.io/tx/{tx_hash}[?cluster=devnet]
+
+**If response has `"status":"pending_approval"`**: follow the **Approval Polling Flow** (Section 12).
+
+### 7.6. Unwrap SOL (Solana)
+
+Closes the wSOL ATA and returns all wSOL back to native SOL. Use when the user asks to unwrap wSOL or convert wSOL back to SOL. The entire wSOL balance in the ATA is unwrapped in one operation.
+
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/unwrap-sol" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+No body parameters are required — the backend closes the entire wSOL ATA.
+
+**On success:**
+```json
+{"status": "completed", "tx_hash": "...", "action": "unwrap"}
+```
+
+Show the user:
+> ✅ **Unwrapped wSOL**
+> All wSOL has been converted back to native SOL.
+> **Hash:** `{tx_hash}`
+> 🔗 https://solscan.io/tx/{tx_hash}[?cluster=devnet]
+
+**If response has `"status":"pending_approval"`**: follow the **Approval Polling Flow** (Section 12).
+
+### 7.7. Read-Only Contract Call
 
 Query contract state without signing or sending a transaction. No gas, no approval needed.
 
@@ -573,6 +671,7 @@ Show: wallet, amount, currency, created time, expiry, approval link.
 Use this whenever:
 - A `/sign`, `/transfer`, or `/contract-call` response has `"status":"pending_approval"`, **or**
 - A `/approve-token` or `/revoke-approval` response has `"status":"pending_approval"`, **or**
+- A `/wrap-sol` or `/unwrap-sol` response has `"status":"pending_approval"`, **or**
 - A `PUT /policy` response returns HTTP 202 (`"pending": true`), **or**
 - A `POST /contracts` response returns HTTP 202 (`"pending": true`)
 
@@ -614,6 +713,12 @@ Policy change (`approval_type` is `"policy_change"`):
 Contract call (`approval_type` is `"contract_call"`):
 - `"status":"approved"` with `"tx_hash"` → show success + explorer link
 
+Wrap SOL (`approval_type` is `"wrap_sol"`):
+- `"status":"approved"` with `"tx_hash"` → show "✅ Wrapped SOL — `{tx_hash}`" + Solscan link
+
+Unwrap SOL (`approval_type` is `"unwrap_sol"`):
+- `"status":"approved"` with `"tx_hash"` → show "✅ Unwrapped wSOL — `{tx_hash}`" + Solscan link
+
 Contract whitelist add (`approval_type` is `"contract_add"`):
 - `"status":"approved"` → "✅ Contract `{contract_address}` ({symbol}) has been added to the whitelist. ERC-20 transfers using this contract are now available."
 
@@ -651,7 +756,9 @@ Optional query parameters:
 | `policy_update` | Approval policy set or pending |
 | `approval_approve` | Approval request approved |
 | `approval_reject` | Approval request rejected |
-| `contract_add` | Contract added to whitelist or pending approval |
+| `contract_add` | Contract/mint/program added to whitelist or pending approval |
+| `wrap_sol` | SOL wrapped into wSOL |
+| `unwrap_sol` | wSOL unwrapped back to SOL |
 | `apikey_generate` | API key generated |
 | `apikey_revoke` | API key revoked |
 
@@ -671,7 +778,7 @@ Map common API errors to user-friendly messages:
 |---|---|
 | `insufficient funds` | ❌ Insufficient ETH balance. Check your balance (including ~0.0005 ETH for gas). |
 | `daily spend limit exceeded` | ❌ Daily {currency} spend limit reached. Limit resets at UTC midnight. |
-| `contract not whitelisted` | ❌ This token contract isn't whitelisted. Request approval via API key (`POST /contracts`) or open Web UI → Wallets → Contracts tab → Add to Whitelist. |
+| `contract not whitelisted` | ❌ This token contract/program/mint isn't whitelisted. Request approval via API key (`POST /contracts`) or open Web UI → Wallets → Contracts tab → Add to Whitelist. |
 | `wallet is not ready` | ⏳ Wallet is still being created. Wait a moment and try again. |
 | `invalid API key` | ❌ Invalid API key. Check `TEE_WALLET_API_KEY` in your environment. |
 | `approval has expired` | ⏰ The approval window expired (30 min). Please initiate the transfer again. |
@@ -705,3 +812,8 @@ Map common API errors to user-friendly messages:
 23. **High-risk methods always need Passkey**: `approve`, `increaseAllowance`, `setApprovalForAll`, `transferFrom`, `safeTransferFrom` — even if the contract has `auto_approve: true`.
 24. **Use convenience endpoints**: prefer `/approve-token` and `/revoke-approval` over raw `/contract-call` for token approvals — they handle ABI encoding automatically.
 25. **Method restrictions**: if a contract's `allowed_methods` is set (e.g. `transfer,approve`), only those methods can be called. Empty = all methods allowed.
+26. **SPL token transfer**: use `/transfer` with the `token` field (same as ERC-20). The token mint must be whitelisted. The backend creates the recipient's ATA automatically if needed.
+27. **Solana program calls**: use `/contract-call` with `accounts` (array of `{pubkey, is_signer, is_writable}`) and `data` (hex-encoded instruction data) instead of `func_sig`/`args`. The program ID must be whitelisted. `auto_approve` on the whitelist entry controls whether API-key calls require Passkey.
+28. **Wrap/Unwrap SOL**: use `/wrap-sol` (with `amount`) to convert native SOL to wSOL, and `/unwrap-sol` (no body params) to close the wSOL ATA and recover all SOL. Both endpoints follow the same approval/polling flow as transfers.
+29. **Solana explorer links**: use `https://solscan.io/tx/{hash}` for mainnet and `https://solscan.io/tx/{hash}?cluster=devnet` for devnet.
+30. **Dynamic chain list**: never hardcode chain names. Always call `GET /api/chains` to discover available chains (including user-added custom EVM chains). Custom chains have `"custom": true` in the response.

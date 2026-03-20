@@ -10,18 +10,22 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 
 - **Multi-chain support** -- Ethereum, Solana, and all EVM-compatible chains (Sepolia, Holesky, BSC, Optimism, Base Sepolia, and any custom chain via `chains.json`)
 - **ERC-20 token transfers** with contract whitelist security
-- **General smart contract interaction** via `contract-call` endpoint with full ABI encoding
+- **SPL token transfers** with automatic ATA (Associated Token Account) creation for recipients
+- **General smart contract interaction** via `contract-call` endpoint -- full ABI encoding on EVM, generic program calls on Solana
+- **Wrap/Unwrap SOL** -- convert between native SOL and wSOL (Wrapped SOL) SPL token
 - **Convenience endpoints** -- `approve-token`, `revoke-approval`, `call-read` for common DeFi operations
 - **EIP-1559 transactions** with dynamic fee estimation
-- **Nonce manager** for concurrent transaction safety
+- **Solana transaction building** -- native transfers, SPL TransferChecked, arbitrary program instructions
+- **Nonce manager** for concurrent EVM transaction safety
 - **Idempotent transfers** via `Idempotency-Key` header to prevent duplicates
 - **Native and token balance queries**
 
 ### Smart Contract Security (3-Layer Model)
 
-1. **Contract whitelist** -- only pre-approved contract addresses can be called
-2. **Per-contract method restrictions** -- optional `allowed_methods` list limits which functions can be invoked
-3. **High-risk method force-approval** -- `approve`, `transferFrom`, `increaseAllowance`, `setApprovalForAll`, and `safeTransferFrom` always require Passkey approval, even with auto-approve enabled
+1. **Contract whitelist** -- only pre-approved contract addresses (EVM), token mints (SPL), or program IDs (Solana) can be called
+2. **Per-contract method restrictions** -- optional `allowed_methods` list limits which functions can be invoked (EVM)
+3. **High-risk method force-approval** -- `approve`, `transferFrom`, `increaseAllowance`, `setApprovalForAll`, and `safeTransferFrom` always require Passkey approval, even with auto-approve enabled (EVM)
+4. **Auto-approve mode** -- whitelisted contracts/programs with `auto_approve: true` allow API keys to execute without Passkey confirmation
 
 ### ABI Encoder
 
@@ -172,7 +176,9 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | GET | `/api/wallets/:id` | Dual | Get wallet details |
 | DELETE | `/api/wallets/:id` | Passkey | Delete a wallet (irreversible) |
 | POST | `/api/wallets/:id/sign` | Dual | Sign an arbitrary message |
-| POST | `/api/wallets/:id/transfer` | Dual | Build, sign, and broadcast a transfer |
+| POST | `/api/wallets/:id/transfer` | Dual | Build, sign, and broadcast a transfer (native or token) |
+| POST | `/api/wallets/:id/wrap-sol` | Dual | Wrap native SOL into wSOL (Solana only) |
+| POST | `/api/wallets/:id/unwrap-sol` | Dual | Unwrap all wSOL back to native SOL (Solana only) |
 | GET | `/api/wallets/:id/balance` | Dual | Get native token balance |
 | GET | `/api/wallets/:id/pubkey` | Dual | Get wallet public key |
 
@@ -189,10 +195,10 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/wallets/:id/contract-call` | Dual | Execute a smart contract call (3-layer security) |
+| POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (EVM: ABI-encoded; Solana: program instruction) |
 | POST | `/api/wallets/:id/approve-token` | Dual | Approve ERC-20 token spending (always high-risk) |
 | POST | `/api/wallets/:id/revoke-approval` | Dual | Revoke ERC-20 token approval (always high-risk) |
-| POST | `/api/wallets/:id/call-read` | Dual | Read-only contract call (no signing) |
+| POST | `/api/wallets/:id/call-read` | Dual | Read-only contract call (no signing, EVM only) |
 
 ### Approval Policies
 
@@ -282,10 +288,10 @@ model/
 chain/
   abi.go                 Full Solidity ABI encoder (address, uintN, bytes, tuples, arrays)
   tx_eth.go              EVM transaction building (EIP-1559)
-  tx_sol.go              Solana transaction building
-  nonce.go               Nonce manager for concurrent transactions
+  tx_sol.go              Solana transaction building (native, SPL, program call, wrap/unwrap)
+  nonce.go               Nonce manager for concurrent EVM transactions
   rpc.go                 JSON-RPC client with retry
-  address.go             Address validation and derivation
+  address.go             Address validation, derivation, PDA and ATA computation
 frontend/                Pre-built web UI assets
 skill/tee-wallet/        OpenClaw AI agent skill definition
 chains.json              Supported chain configuration

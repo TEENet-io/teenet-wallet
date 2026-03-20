@@ -26,6 +26,15 @@ var highRiskMethods = map[string]bool{
 	"safetransferfrom":  true,
 }
 
+// highRiskSOLDiscriminators maps first-byte hex discriminators for Solana
+// SPL Token instructions that are always high-risk (require passkey approval).
+var highRiskSOLDiscriminators = map[string]bool{
+	"04": true, // Approve
+	"06": true, // SetAuthority
+	"07": true, // MintTo
+	"09": true, // CloseAccount
+}
+
 // ContractCallHandler handles general-purpose smart contract calls.
 type ContractCallHandler struct {
 	db             *gorm.DB
@@ -45,11 +54,13 @@ func NewContractCallHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, 
 
 // ContractCallRequest is the body for POST /api/wallets/:id/contract-call.
 type ContractCallRequest struct {
-	Contract string        `json:"contract" binding:"required"`
-	FuncSig  string        `json:"func_sig" binding:"required"`
-	Args     []interface{} `json:"args"`
-	Value    string        `json:"value"` // ETH to send (optional, in ETH units)
-	Memo     string        `json:"memo"`
+	Contract string                 `json:"contract" binding:"required"`
+	FuncSig  string                 `json:"func_sig"`                    // EVM only
+	Args     []interface{}          `json:"args"`                        // EVM only
+	Value    string                 `json:"value"`                       // EVM only: ETH to send (optional, in ETH units)
+	Memo     string                 `json:"memo"`
+	Accounts []chain.SOLAccountMeta `json:"accounts"`                    // Solana only
+	Data     string                 `json:"data"`                        // Solana only: hex instruction data
 }
 
 // ContractCall executes a smart contract call with three-layer security:
@@ -70,14 +81,30 @@ func (h *ContractCallHandler) ContractCall(c *gin.Context) {
 	}
 
 	chainCfg, cfgOk := model.Chains[wallet.Chain]
-	if !cfgOk || chainCfg.Family != "evm" {
-		jsonError(c, http.StatusBadRequest, "contract calls are only supported on EVM chains")
+	if !cfgOk {
+		jsonError(c, http.StatusBadRequest, "unsupported chain")
 		return
 	}
+	switch chainCfg.Family {
+	case "evm":
+		h.contractCallEVM(c, wallet, chainCfg)
+	case "solana":
+		h.contractCallSolana(c, wallet, chainCfg)
+	default:
+		jsonError(c, http.StatusBadRequest, "contract calls not supported on "+chainCfg.Family)
+	}
+}
 
+// contractCallEVM implements contract call logic for EVM chains.
+func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Wallet, chainCfg model.ChainConfig) {
 	var req ContractCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		jsonError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if req.FuncSig == "" {
+		jsonError(c, http.StatusBadRequest, "func_sig is required for EVM contract calls")
 		return
 	}
 
@@ -267,6 +294,163 @@ func (h *ContractCallHandler) ContractCall(c *gin.Context) {
 		"from":           wallet.Address,
 		"contract":       contractAddr,
 		"method":         methodName,
+		"wallet_address": wallet.Address,
+	})
+}
+
+// contractCallSolana implements contract call logic for Solana chains (program calls).
+func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wallet, chainCfg model.ChainConfig) {
+	var req ContractCallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	programID := strings.TrimSpace(req.Contract)
+	if _, err := chain.Base58Decode(programID); err != nil {
+		jsonError(c, http.StatusBadRequest, "contract: invalid Solana program ID")
+		return
+	}
+
+	// Layer 1: Whitelist
+	var allowed model.AllowedContract
+	if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, programID).First(&allowed).Error; err != nil {
+		jsonError(c, http.StatusForbidden, "program not whitelisted: "+programID)
+		return
+	}
+
+	// Decode instruction data
+	instrData, decErr := hex.DecodeString(strings.TrimPrefix(req.Data, "0x"))
+	if decErr != nil {
+		jsonError(c, http.StatusBadRequest, "data: invalid hex")
+		return
+	}
+
+	// Layer 2: Discriminator restriction (first byte for SPL Token instructions)
+	discriminator := ""
+	if len(instrData) >= 1 {
+		discriminator = hex.EncodeToString(instrData[:1])
+	}
+	if allowed.AllowedMethods != "" && discriminator != "" {
+		methodAllowed := false
+		for _, m := range strings.Split(allowed.AllowedMethods, ",") {
+			if strings.TrimSpace(strings.ToLower(m)) == strings.ToLower(discriminator) {
+				methodAllowed = true
+				break
+			}
+		}
+		if !methodAllowed {
+			jsonError(c, http.StatusForbidden, fmt.Sprintf("instruction discriminator %q not in allowed list", discriminator))
+			return
+		}
+	}
+
+	// Validate accounts
+	if len(req.Accounts) == 0 {
+		jsonError(c, http.StatusBadRequest, "accounts: at least one account is required")
+		return
+	}
+	for i, a := range req.Accounts {
+		if _, err := chain.Base58Decode(a.Pubkey); err != nil {
+			jsonError(c, http.StatusBadRequest, fmt.Sprintf("accounts[%d].pubkey: invalid base58", i))
+			return
+		}
+	}
+
+	// Build tx
+	txData, buildErr := chain.BuildSOLProgramCallTx(chainCfg.RPCURL, wallet.Address, programID, req.Accounts, instrData)
+	if buildErr != nil {
+		jsonError(c, http.StatusBadGateway, "build program call tx: "+buildErr.Error())
+		return
+	}
+	txParamsJSON, _ := json.Marshal(txData.Params)
+	signingMsg := txData.MessageBytes
+
+	// Layer 3: Security decision
+	needsApproval := false
+	var approvalReason string
+	if !isPasskeyAuth(c) {
+		if highRiskSOLDiscriminators[discriminator] {
+			needsApproval = true
+			approvalReason = fmt.Sprintf("instruction discriminator %q is high-risk", discriminator)
+		} else if !allowed.AutoApprove {
+			needsApproval = true
+			approvalReason = "program does not have auto-approve enabled"
+		}
+	}
+
+	txContext := map[string]interface{}{
+		"type":       "program_call",
+		"from":       wallet.Address,
+		"program_id": programID,
+		"accounts":   req.Accounts,
+		"data":       req.Data,
+		"memo":       req.Memo,
+		"chain":      wallet.Chain,
+	}
+
+	if needsApproval {
+		txContextJSON, _ := json.Marshal(txContext)
+		userID := mustUserID(c)
+		if c.IsAborted() {
+			return
+		}
+		approval := model.ApprovalRequest{
+			WalletID:     wallet.ID,
+			UserID:       userID,
+			ApprovalType: "contract_call",
+			Message:      hex.EncodeToString(signingMsg),
+			TxContext:    string(txContextJSON),
+			TxParams:     string(txParamsJSON),
+			Status:       "pending",
+			CreatedAt:    time.Now(),
+			ExpiresAt:    time.Now().Add(h.approvalExpiry),
+		}
+		if err := h.db.Create(&approval).Error; err != nil {
+			jsonError(c, http.StatusInternalServerError, "create approval request failed")
+			return
+		}
+		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
+		writeAuditCtx(h.db, c, "contract_call", "pending", &wallet.ID, map[string]interface{}{
+			"approval_id": approval.ID, "tx_context": txContext,
+		})
+		c.JSON(http.StatusAccepted, gin.H{
+			"status":       "pending_approval",
+			"approval_id":  approval.ID,
+			"message":      approvalReason,
+			"tx_context":   txContext,
+			"approval_url": approvalURL,
+		})
+		return
+	}
+
+	result, signErr := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
+	if signErr != nil || !result.Success {
+		errMsg := "signing failed"
+		if signErr != nil {
+			errMsg = signErr.Error()
+		} else if result != nil {
+			errMsg = result.Error
+		}
+		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		return
+	}
+
+	txHash, broadcastErr := chain.AssembleAndBroadcastSOLProgram(chainCfg.RPCURL, txData.Params, result.Signature)
+	if broadcastErr != nil {
+		jsonError(c, http.StatusBadGateway, "broadcast failed: "+broadcastErr.Error())
+		return
+	}
+
+	writeAuditCtx(h.db, c, "contract_call", "success", &wallet.ID, map[string]interface{}{
+		"tx_hash": txHash, "tx_context": txContext,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"status":         "completed",
+		"tx_hash":        txHash,
+		"chain":          wallet.Chain,
+		"from":           wallet.Address,
+		"program_id":     programID,
 		"wallet_address": wallet.Address,
 	})
 }

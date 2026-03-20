@@ -11,6 +11,7 @@ import (
 	sdk "github.com/TEENet-io/teenet-sdk/go"
 	"gorm.io/gorm"
 
+	"github.com/TEENet-io/teenet-wallet/chain"
 	"github.com/TEENet-io/teenet-wallet/model"
 )
 
@@ -59,15 +60,27 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 		return
 	}
 
-	// Normalize and validate address.
-	addr, addrErr := normalizeEVMAddress(req.ContractAddress)
-	if addrErr != nil {
-		jsonError(c, http.StatusBadRequest, "contract_address "+addrErr.Error())
-		return
-	}
-	if addr == "0x"+strings.Repeat("0", 40) {
-		jsonError(c, http.StatusBadRequest, "zero address is not a valid contract")
-		return
+	// Normalize and validate address based on chain family.
+	chainCfg := model.Chains[wallet.Chain]
+	var addr string
+	if chainCfg.Family == "solana" {
+		addr = strings.TrimSpace(req.ContractAddress)
+		pub, err := chain.Base58Decode(addr)
+		if err != nil || len(pub) != 32 {
+			jsonError(c, http.StatusBadRequest, "contract_address: invalid Solana program ID")
+			return
+		}
+	} else {
+		var addrErr error
+		addr, addrErr = normalizeEVMAddress(req.ContractAddress)
+		if addrErr != nil {
+			jsonError(c, http.StatusBadRequest, "contract_address "+addrErr.Error())
+			return
+		}
+		if addr == "0x"+strings.Repeat("0", 40) {
+			jsonError(c, http.StatusBadRequest, "zero address is not a valid contract")
+			return
+		}
 	}
 
 	proposed := model.AllowedContract{

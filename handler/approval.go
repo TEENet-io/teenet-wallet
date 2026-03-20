@@ -183,7 +183,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 
 	// Load wallet to get the key name.
 	var wallet model.Wallet
-	if err := h.db.First(&wallet, approval.WalletID).Error; err != nil {
+	if err := h.db.First(&wallet, "id = ?", approval.WalletID).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "wallet not found")
 		return
 	}
@@ -203,13 +203,44 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if cfgOk && approval.TxParams != "" {
 		switch cfg.Family {
 		case "solana":
-			var solParams chain.SOLTxParams
-			if jsonErr := json.Unmarshal([]byte(approval.TxParams), &solParams); jsonErr == nil {
-				amountSOL := float64(solParams.Lamports) / 1e9
-				if freshTx, buildErr := chain.BuildSOLTx(cfg.RPCURL, solParams.From, solParams.To, amountSOL); buildErr == nil {
+			var tokenParams chain.SOLTokenTransferParams
+			if json.Unmarshal([]byte(approval.TxParams), &tokenParams) == nil && tokenParams.Mint != "" {
+				if freshTx, buildErr := chain.RebuildSOLTokenTransferTx(cfg.RPCURL, tokenParams); buildErr == nil {
 					msgBytes = freshTx.MessageBytes
 					if freshJSON, mErr := json.Marshal(freshTx.Params); mErr == nil {
 						txParamsToUse = string(freshJSON)
+					}
+				}
+			} else {
+				var progParams chain.SOLProgramCallParams
+				if json.Unmarshal([]byte(approval.TxParams), &progParams) == nil && progParams.ProgramID != "" {
+					if freshTx, buildErr := chain.RebuildSOLProgramCallTx(cfg.RPCURL, progParams); buildErr == nil {
+						msgBytes = freshTx.MessageBytes
+						if freshJSON, mErr := json.Marshal(freshTx.Params); mErr == nil {
+							txParamsToUse = string(freshJSON)
+						}
+					}
+				} else {
+					var wrapParams chain.SOLWrapParams
+					if json.Unmarshal([]byte(approval.TxParams), &wrapParams) == nil && wrapParams.Blockhash != "" && (wrapParams.Wrap || wrapParams.Lamports == 0) {
+						if freshTx, buildErr := chain.RebuildSOLWrapTx(cfg.RPCURL, wrapParams); buildErr == nil {
+							msgBytes = freshTx.MessageBytes
+							if freshJSON, mErr := json.Marshal(freshTx.Params); mErr == nil {
+								txParamsToUse = string(freshJSON)
+							}
+						}
+					} else {
+						// Existing native SOL transfer rebuild
+						var solParams chain.SOLTxParams
+						if jsonErr := json.Unmarshal([]byte(approval.TxParams), &solParams); jsonErr == nil {
+							amountSOL := float64(solParams.Lamports) / 1e9
+							if freshTx, buildErr := chain.BuildSOLTx(cfg.RPCURL, solParams.From, solParams.To, amountSOL); buildErr == nil {
+								msgBytes = freshTx.MessageBytes
+								if freshJSON, mErr := json.Marshal(freshTx.Params); mErr == nil {
+									txParamsToUse = string(freshJSON)
+								}
+							}
+						}
 					}
 				}
 			}

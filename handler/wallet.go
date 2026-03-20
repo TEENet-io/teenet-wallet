@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,9 +21,9 @@ import (
 )
 
 // walletMu provides per-wallet mutexes to prevent TOCTOU races on daily spend limits.
-var walletMu sync.Map // map[uint]*sync.Mutex
+var walletMu sync.Map // map[string]*sync.Mutex
 
-func getWalletMutex(walletID uint) *sync.Mutex {
+func getWalletMutex(walletID string) *sync.Mutex {
 	v, _ := walletMu.LoadOrStore(walletID, &sync.Mutex{})
 	return v.(*sync.Mutex)
 }
@@ -597,20 +596,67 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		}
 
 	case "solana":
-		amountF, _ := amount.Float64()
-		txData, err := chain.BuildSOLTx(rpcURL, wallet.Address, req.To, amountF)
-		if err != nil {
-			jsonError(c, http.StatusBadGateway, "build tx: "+err.Error())
-			return
+		if req.Token != nil {
+			// SPL Token transfer
+			mintAddr := strings.TrimSpace(req.Token.Contract)
+			if _, err := chain.Base58Decode(mintAddr); err != nil {
+				jsonError(c, http.StatusBadRequest, "token contract: invalid Solana address")
+				return
+			}
+			if _, err := chain.Base58Decode(req.To); err != nil {
+				jsonError(c, http.StatusBadRequest, "to: invalid Solana address")
+				return
+			}
+			// Whitelist check
+			var allowed model.AllowedContract
+			if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, mintAddr).First(&allowed).Error; err != nil {
+				jsonError(c, http.StatusForbidden, "token not whitelisted: "+mintAddr)
+				return
+			}
+			decimals := allowed.Decimals
+			if decimals == 0 && req.Token.Decimals > 0 {
+				decimals = req.Token.Decimals
+			}
+			if decimals == 0 {
+				decimals = 9
+			}
+			exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+			tokenUnitsF := new(big.Float).SetPrec(256).Mul(amount, new(big.Float).SetInt(exp))
+			tokenUnits, _ := tokenUnitsF.Int(nil)
+			if tokenUnits.Sign() <= 0 || !tokenUnits.IsUint64() {
+				jsonError(c, http.StatusBadRequest, "amount out of range")
+				return
+			}
+			txData, err := chain.BuildSOLTokenTransferTx(rpcURL, wallet.Address, req.To, mintAddr, tokenUnits.Uint64(), decimals)
+			if err != nil {
+				jsonError(c, http.StatusBadGateway, "build SPL token tx: "+err.Error())
+				return
+			}
+			signingMsg = txData.MessageBytes
+			b, _ := json.Marshal(txData.Params)
+			txParamsJSON = string(b)
+			currency = strings.ToUpper(allowed.Symbol)
+			if currency == "" {
+				currency = strings.ToUpper(req.Token.Symbol)
+			}
+			txType = "spl_transfer"
+			tokenContractAddr = mintAddr
+		} else {
+			amountF, _ := amount.Float64()
+			txData, err := chain.BuildSOLTx(rpcURL, wallet.Address, req.To, amountF)
+			if err != nil {
+				jsonError(c, http.StatusBadGateway, "build tx: "+err.Error())
+				return
+			}
+			signingMsg = txData.MessageBytes
+			b, marshalErr := json.Marshal(txData.Params)
+			if marshalErr != nil {
+				jsonError(c, http.StatusInternalServerError, "marshal tx params failed")
+				return
+			}
+			txParamsJSON = string(b)
+			currency = chainCfg.Currency
 		}
-		signingMsg = txData.MessageBytes
-		b, marshalErr := json.Marshal(txData.Params)
-		if marshalErr != nil {
-			jsonError(c, http.StatusInternalServerError, "marshal tx params failed")
-			return
-		}
-		txParamsJSON = string(b)
-		currency = chainCfg.Currency
 
 	default:
 		jsonError(c, http.StatusBadRequest, "unsupported chain: "+wallet.Chain)
@@ -696,6 +742,129 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 	respondWithIdempotency(c, h.idempotency, idemKey, userID, http.StatusOK, resp)
 }
 
+// WrapSOL wraps native SOL into wSOL (SPL Wrapped SOL).
+// POST /api/wallets/:id/wrap-sol  { "amount": "0.1" }
+func (h *WalletHandler) WrapSOL(c *gin.Context) {
+	wallet, ok := loadUserWallet(c, h.db)
+	if !ok {
+		return
+	}
+	if wallet.Status != "ready" {
+		jsonError(c, http.StatusBadRequest, "wallet is not ready")
+		return
+	}
+	chainCfg := model.Chains[wallet.Chain]
+	if chainCfg.Family != "solana" {
+		jsonError(c, http.StatusBadRequest, "wrap-sol is only supported on Solana chains")
+		return
+	}
+
+	var req struct {
+		Amount string `json:"amount" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	amount, ok2 := new(big.Float).SetString(req.Amount)
+	if !ok2 || amount.Sign() <= 0 {
+		jsonError(c, http.StatusBadRequest, "invalid amount")
+		return
+	}
+	amountF, _ := amount.Float64()
+
+	txData, err := chain.BuildSOLWrapTx(chainCfg.RPCURL, wallet.Address, amountF)
+	if err != nil {
+		jsonError(c, http.StatusBadGateway, "build wrap tx: "+err.Error())
+		return
+	}
+
+	result, err := h.sdk.Sign(c.Request.Context(), txData.MessageBytes, wallet.KeyName)
+	if err != nil || !result.Success {
+		errMsg := "signing failed"
+		if err != nil {
+			errMsg = err.Error()
+		} else if result != nil {
+			errMsg = result.Error
+		}
+		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		return
+	}
+
+	txParamsJSON, _ := json.Marshal(txData.Params)
+	txHash, err := broadcastSigned(wallet, string(txParamsJSON), result.Signature)
+	if err != nil {
+		respondBroadcastError(c, err)
+		return
+	}
+
+	writeAuditCtx(h.db, c, "wrap_sol", "success", &wallet.ID, map[string]interface{}{
+		"amount": req.Amount, "chain": wallet.Chain, "tx_hash": txHash,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "completed",
+		"tx_hash": txHash,
+		"chain":   wallet.Chain,
+		"from":    wallet.Address,
+		"amount":  req.Amount,
+		"action":  "wrap",
+	})
+}
+
+// UnwrapSOL unwraps all wSOL back to native SOL by closing the wSOL ATA.
+// POST /api/wallets/:id/unwrap-sol
+func (h *WalletHandler) UnwrapSOL(c *gin.Context) {
+	wallet, ok := loadUserWallet(c, h.db)
+	if !ok {
+		return
+	}
+	if wallet.Status != "ready" {
+		jsonError(c, http.StatusBadRequest, "wallet is not ready")
+		return
+	}
+	chainCfg := model.Chains[wallet.Chain]
+	if chainCfg.Family != "solana" {
+		jsonError(c, http.StatusBadRequest, "unwrap-sol is only supported on Solana chains")
+		return
+	}
+
+	txData, err := chain.BuildSOLUnwrapTx(chainCfg.RPCURL, wallet.Address)
+	if err != nil {
+		jsonError(c, http.StatusBadGateway, "build unwrap tx: "+err.Error())
+		return
+	}
+
+	result, err := h.sdk.Sign(c.Request.Context(), txData.MessageBytes, wallet.KeyName)
+	if err != nil || !result.Success {
+		errMsg := "signing failed"
+		if err != nil {
+			errMsg = err.Error()
+		} else if result != nil {
+			errMsg = result.Error
+		}
+		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		return
+	}
+
+	txParamsJSON, _ := json.Marshal(txData.Params)
+	txHash, err := broadcastSigned(wallet, string(txParamsJSON), result.Signature)
+	if err != nil {
+		respondBroadcastError(c, err)
+		return
+	}
+
+	writeAuditCtx(h.db, c, "unwrap_sol", "success", &wallet.ID, map[string]interface{}{
+		"chain": wallet.Chain, "tx_hash": txHash,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "completed",
+		"tx_hash": txHash,
+		"chain":   wallet.Chain,
+		"from":    wallet.Address,
+		"action":  "unwrap",
+	})
+}
+
 // broadcastSigned assembles a signed transaction and broadcasts it to the chain.
 // Exported as a package-level function so the approval handler can reuse it.
 func broadcastSigned(wallet model.Wallet, txParamsJSON string, sig []byte) (string, error) {
@@ -716,6 +885,25 @@ func broadcastSigned(wallet model.Wallet, txParamsJSON string, sig []byte) (stri
 		}
 		return txHash, nil
 	case "solana":
+		// Try SPL Token transfer params (has "mint" field)
+		var tokenParams chain.SOLTokenTransferParams
+		if json.Unmarshal([]byte(txParamsJSON), &tokenParams) == nil && tokenParams.Mint != "" {
+			return chain.AssembleAndBroadcastSOLToken(cfg.RPCURL, tokenParams, sig)
+		}
+		// Try program call params (has "program_id" field)
+		var progParams chain.SOLProgramCallParams
+		if json.Unmarshal([]byte(txParamsJSON), &progParams) == nil && progParams.ProgramID != "" {
+			return chain.AssembleAndBroadcastSOLProgram(cfg.RPCURL, progParams, sig)
+		}
+		// Try wrap/unwrap SOL params (distinguished from native transfer by absence of "to" field)
+		var wrapParams chain.SOLWrapParams
+		var solNative chain.SOLTxParams
+		if json.Unmarshal([]byte(txParamsJSON), &wrapParams) == nil &&
+			wrapParams.From != "" && wrapParams.Blockhash != "" &&
+			(json.Unmarshal([]byte(txParamsJSON), &solNative) != nil || solNative.To == "") {
+			return chain.AssembleAndBroadcastSOLWrap(cfg.RPCURL, wrapParams, sig)
+		}
+		// Fall back to native SOL transfer
 		var params chain.SOLTxParams
 		if err := json.Unmarshal([]byte(txParamsJSON), &params); err != nil {
 			return "", fmt.Errorf("parse sol tx params: %w", err)
@@ -733,13 +921,13 @@ func loadUserWallet(c *gin.Context, db *gorm.DB) (model.Wallet, bool) {
 	if c.IsAborted() {
 		return model.Wallet{}, false
 	}
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
+	id := c.Param("id")
+	if id == "" {
 		jsonError(c, http.StatusBadRequest, "invalid wallet id")
 		return model.Wallet{}, false
 	}
 	var wallet model.Wallet
-	if err := db.First(&wallet, id).Error; err != nil {
+	if err := db.First(&wallet, "id = ?", id).Error; err != nil {
 		jsonError(c, http.StatusNotFound, "wallet not found")
 		return model.Wallet{}, false
 	}
@@ -803,7 +991,7 @@ func respondBroadcastError(c *gin.Context, err error) {
 // Uses a per-wallet mutex to prevent TOCTOU races where concurrent requests could
 // both pass the limit check independently.
 // Returns (exceeded, message, error).
-func checkAndDeductDailyLimit(db *gorm.DB, walletID uint, currency string, amount string) (bool, string, error) {
+func checkAndDeductDailyLimit(db *gorm.DB, walletID string, currency string, amount string) (bool, string, error) {
 	mu := getWalletMutex(walletID)
 	mu.Lock()
 	defer mu.Unlock()

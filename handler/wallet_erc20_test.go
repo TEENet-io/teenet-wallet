@@ -49,7 +49,7 @@ func TestTransfer_ERC20_NotWhitelisted(t *testing.T) {
 			"decimals": 6,
 		},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/transfer", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -80,7 +80,7 @@ func TestTransfer_ERC20_Whitelisted_FailsAtRPC(t *testing.T) {
 		"amount": "100",
 		"token":  map[string]interface{}{"contract": contractAddr, "symbol": "USDC", "decimals": 6},
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/transfer", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -107,7 +107,7 @@ func TestTransfer_NativeETH_SkipsContractCheck(t *testing.T) {
 		"to":     "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		"amount": "0.001",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/transfer", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -133,7 +133,7 @@ func TestTransfer_InvalidAmount(t *testing.T) {
 		"to":     "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		"amount": "not-a-number",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/transfer", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -156,7 +156,7 @@ func TestTransfer_WalletNotReady(t *testing.T) {
 		"to":     "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		"amount": "0.1",
 	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%d/transfer", wallet.ID), body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

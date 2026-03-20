@@ -5,12 +5,26 @@ import (
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
+
+// CustomChain persists user-added EVM chains across restarts.
+type CustomChain struct {
+	ID       uint   `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name     string `json:"name" gorm:"size:50;uniqueIndex"`
+	Label    string `json:"label" gorm:"size:100"`
+	Currency string `json:"currency" gorm:"size:10"`
+	Family   string `json:"family" gorm:"size:10"` // "evm" only for now
+	RPCURL   string `json:"rpc_url" gorm:"size:500"`
+	ChainID  uint64 `json:"chain_id"` // EVM chain ID for replay protection
+}
 
 // Wallet represents a chain wallet backed by a TEE-DAO key pair.
 // The private key never exists outside TEE hardware.
 type Wallet struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
+	ID        string    `json:"id" gorm:"primaryKey;size:36"`
 	UserID    uint      `json:"user_id" gorm:"not null;index"`
 	Chain     string    `json:"chain" gorm:"size:32;not null"`
 	KeyName   string    `json:"key_name" gorm:"not null;uniqueIndex"` // TEE-DAO key name
@@ -23,6 +37,14 @@ type Wallet struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// BeforeCreate generates a UUID v4 for the wallet ID so IDs are not sequential.
+func (w *Wallet) BeforeCreate(tx *gorm.DB) error {
+	if w.ID == "" {
+		w.ID = uuid.New().String()
+	}
+	return nil
+}
+
 // ChainConfig describes one blockchain network.
 type ChainConfig struct {
 	Name     string `json:"name"`     // unique key, e.g. "sepolia"
@@ -32,6 +54,8 @@ type ChainConfig struct {
 	Currency string `json:"currency"` // e.g. "ETH", "SOL"
 	Family   string `json:"family"`   // "evm" | "solana"
 	RPCURL   string `json:"rpc_url"`  // JSON-RPC endpoint
+	ChainID  uint64 `json:"chain_id"` // EVM chain ID (0 for non-EVM)
+	Custom   bool   `json:"custom"`   // true if user-added at runtime
 }
 
 // Chains is the active chain registry, loaded at startup.
@@ -74,5 +98,37 @@ func LoadChains(path string) {
 func useDefaultChains() {
 	for _, c := range defaultChains {
 		Chains[c.Name] = c
+	}
+}
+
+// LoadCustomChains reads all CustomChain rows from the DB and merges them into
+// the Chains registry. Built-in chain names are never overwritten.
+func LoadCustomChains(db *gorm.DB) {
+	var rows []CustomChain
+	if err := db.Find(&rows).Error; err != nil {
+		slog.Warn("failed to load custom chains from db", "error", err)
+		return
+	}
+	added := 0
+	for _, row := range rows {
+		if _, exists := Chains[row.Name]; exists {
+			// Built-in chain — skip silently.
+			continue
+		}
+		Chains[row.Name] = ChainConfig{
+			Name:     row.Name,
+			Label:    row.Label,
+			Protocol: "ecdsa",
+			Curve:    "secp256k1",
+			Currency: row.Currency,
+			Family:   row.Family,
+			RPCURL:   row.RPCURL,
+			ChainID:  row.ChainID,
+			Custom:   true,
+		}
+		added++
+	}
+	if added > 0 {
+		slog.Info("custom chains loaded from db", "count", added)
 	}
 }
