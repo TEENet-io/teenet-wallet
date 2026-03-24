@@ -1,0 +1,2961 @@
+openapi: 3.0.3
+info:
+  title: TEENet Wallet API
+  description: |
+    Multi-chain crypto wallet backed by TEE-DAO threshold cryptography.
+    Private keys never leave TEE hardware -- they are split across distributed
+    TEE-DAO nodes via threshold signing (FROST for Ed25519, GG20 for ECDSA).
+
+    ## Authentication
+
+    Two authentication modes are supported:
+
+    - **API Key** (`ocw_` prefix) -- for AI agent and programmatic automation.
+      Sent via `Authorization: Bearer ocw_...` header.
+    - **Passkey Session** (`ps_` prefix) -- for sensitive operations requiring
+      human presence via WebAuthn hardware keys.
+      Sent via `Authorization: Bearer ps_...` header.
+
+    Endpoints are annotated with one of:
+    - **Public** -- no authentication required.
+    - **Dual** -- API Key or Passkey session.
+    - **Passkey** -- Passkey session only.
+
+    ## CSRF Protection
+
+    All state-changing requests from Passkey sessions must include an
+    `X-CSRF-Token` header matching the token returned at login.
+
+    ## Idempotency
+
+    Transfer requests accept an `Idempotency-Key` header to prevent duplicate
+    transactions. If a key is reused, the original response is returned.
+
+    ## Rate Limiting
+
+    - General API: per-API-key, configurable (default 200 req/min).
+    - Wallet creation: per-user, configurable (default 5/min).
+    - Registration: per-IP, configurable (default 10/min).
+  version: 0.2.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Public
+    description: Unauthenticated endpoints
+  - name: Authentication
+    description: Passkey registration, login, API key management
+  - name: Wallets
+    description: Wallet CRUD, signing, transfers, wrap/unwrap SOL
+  - name: Contracts
+    description: Per-wallet contract/program whitelist management
+  - name: Contract Calls
+    description: Smart contract interaction (EVM + Solana)
+  - name: Approvals
+    description: Pending approval queue (approve/reject)
+  - name: Approval Policies
+    description: USD-denominated threshold and daily limit policies
+  - name: Audit
+    description: Operation audit log
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: "API Key (ocw_ prefix) or Passkey session token (ps_ prefix)"
+    PasskeySession:
+      type: http
+      scheme: bearer
+      description: "Passkey session token (ps_ prefix) only"
+
+  parameters:
+    WalletId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Wallet UUID
+      example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    ContractId:
+      name: cid
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Allowed contract record ID
+      example: 42
+    ApprovalId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Approval request ID (6-digit random)
+      example: 384729
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Required for state-changing requests from Passkey sessions
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Idempotency key to prevent duplicate transfers
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "wallet not found"
+
+    SuccessFlag:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ChainConfig:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "sepolia"
+        label:
+          type: string
+          example: "Sepolia Testnet"
+        protocol:
+          type: string
+          enum: [ecdsa, schnorr]
+          example: "ecdsa"
+        curve:
+          type: string
+          enum: [secp256k1, ed25519]
+          example: "secp256k1"
+        currency:
+          type: string
+          example: "ETH"
+        family:
+          type: string
+          enum: [evm, solana]
+          example: "evm"
+        rpc_url:
+          type: string
+          example: "https://ethereum-sepolia-rpc.publicnode.com"
+        chain_id:
+          type: integer
+          example: 11155111
+        custom:
+          type: boolean
+          example: false
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: "alice"
+        passkey_user_id:
+          type: integer
+          example: 42
+        api_prefix:
+          type: string
+          example: "ocw_a1b2c3d4"
+        created_at:
+          type: string
+          format: date-time
+
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        user_id:
+          type: integer
+          example: 1
+        chain:
+          type: string
+          example: "sepolia"
+        key_name:
+          type: string
+          example: "key_abc123"
+        public_key:
+          type: string
+          description: Hex-encoded compressed public key
+          example: "02a1b2c3..."
+        address:
+          type: string
+          example: "0x1234567890abcdef1234567890abcdef12345678"
+        label:
+          type: string
+          example: "My Sepolia Wallet"
+        curve:
+          type: string
+          enum: [secp256k1, ed25519]
+        protocol:
+          type: string
+          enum: [ecdsa, schnorr]
+        status:
+          type: string
+          enum: [creating, ready, error]
+          example: "ready"
+        created_at:
+          type: string
+          format: date-time
+
+    AllowedContract:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        wallet_id:
+          type: string
+          format: uuid
+        contract_address:
+          type: string
+          example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        label:
+          type: string
+          example: "USDC on Ethereum"
+        symbol:
+          type: string
+          example: "USDC"
+        decimals:
+          type: integer
+          example: 6
+        allowed_methods:
+          type: string
+          description: Comma-separated method names. Empty = all allowed.
+          example: "transfer,transferFrom"
+        auto_approve:
+          type: boolean
+          description: If true, API key can execute non-high-risk methods without Passkey
+          example: false
+        created_at:
+          type: string
+          format: date-time
+
+    ApprovalPolicy:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        wallet_id:
+          type: string
+          format: uuid
+        threshold_usd:
+          type: string
+          description: Single-transaction USD threshold
+          example: "100"
+        daily_limit_usd:
+          type: string
+          description: Max USD spend per UTC day (optional)
+          example: "1000"
+        daily_spent_usd:
+          type: string
+          example: "250.50"
+        daily_reset_at:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+
+    ApprovalRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Random 6-digit ID
+          example: 384729
+        wallet_id:
+          type: string
+          format: uuid
+        user_id:
+          type: integer
+        approval_type:
+          type: string
+          enum: [sign, transfer, contract_call, contract_add, contract_update, policy_change]
+          example: "transfer"
+        message:
+          type: string
+          description: Hex signing hash or message bytes
+        tx_context:
+          type: string
+          description: JSON display info
+        tx_params:
+          type: string
+          description: JSON chain params for broadcast
+        policy_data:
+          type: string
+          description: JSON proposed policy (policy_change only)
+        tx_hash:
+          type: string
+          description: Filled after approval and broadcast
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+          example: "pending"
+        signature:
+          type: string
+          description: Hex signature (filled after approval)
+        approved_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        action:
+          type: string
+          example: "transfer"
+        wallet_id:
+          type: string
+          nullable: true
+        details:
+          type: string
+          description: JSON context (to, amount, tx_hash, etc.)
+        auth_mode:
+          type: string
+          enum: [passkey, apikey, ""]
+        ip:
+          type: string
+          example: "192.168.1.1"
+        status:
+          type: string
+          enum: [success, pending, failed]
+        created_at:
+          type: string
+          format: date-time
+
+    TokenParams:
+      type: object
+      required: [contract]
+      properties:
+        contract:
+          type: string
+          description: ERC-20 contract address or SPL token mint
+          example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        decimals:
+          type: integer
+          description: Token decimals (default 18 for EVM, 9 for Solana)
+          example: 6
+        symbol:
+          type: string
+          example: "USDC"
+
+    SOLAccountMeta:
+      type: object
+      required: [pubkey]
+      properties:
+        pubkey:
+          type: string
+          description: Base58-encoded Solana public key
+          example: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        is_signer:
+          type: boolean
+          example: false
+        is_writable:
+          type: boolean
+          example: true
+
+    PendingApprovalResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "pending_approval"
+        approval_id:
+          type: integer
+          example: 384729
+        message:
+          type: string
+          example: "amount ~$150.00 USD exceeds approval threshold $100 USD"
+        tx_context:
+          type: object
+        approval_url:
+          type: string
+          example: "http://localhost:8080/#/approve/384729"
+
+    BalanceResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          description: Chain-specific balance data
+
+    FreshPasskeyCredential:
+      type: object
+      description: WebAuthn assertion for fresh passkey verification
+      required: [login_session_id, credential]
+      properties:
+        login_session_id:
+          type: integer
+          format: uint64
+          example: 12345
+        credential:
+          type: object
+          description: WebAuthn credential assertion response
+
+paths:
+  # ──────────────────────── Public ────────────────────────
+  /api/health:
+    get:
+      tags: [Public]
+      summary: Health check
+      description: Returns service status and database connectivity.
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                    example: "ok"
+                  service:
+                    type: string
+                    example: "teenet-wallet"
+                  db:
+                    type: boolean
+                    example: true
+
+  /api/chains:
+    get:
+      tags: [Public]
+      summary: List supported chains
+      description: Returns all built-in and custom blockchain configurations.
+      operationId: listChains
+      responses:
+        "200":
+          description: Chain list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  chains:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChainConfig"
+
+    post:
+      tags: [Public]
+      summary: Add a custom EVM chain
+      description: |
+        Adds a custom EVM chain to the registry (persisted in DB across restarts).
+        Only EVM chains are supported. Cannot overwrite built-in chains.
+      operationId: addCustomChain
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, rpc_url]
+              properties:
+                name:
+                  type: string
+                  description: Unique chain identifier
+                  example: "my-l2"
+                label:
+                  type: string
+                  description: Display name
+                  example: "My Custom L2"
+                currency:
+                  type: string
+                  example: "ETH"
+                rpc_url:
+                  type: string
+                  example: "https://rpc.my-l2.example.com"
+                chain_id:
+                  type: integer
+                  format: uint64
+                  example: 12345
+      responses:
+        "201":
+          description: Chain created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  chain:
+                    $ref: "#/components/schemas/ChainConfig"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Chain name conflict (built-in or already exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/chains/{name}:
+    delete:
+      tags: [Public]
+      summary: Remove a custom chain
+      description: |
+        Deletes a user-added custom chain. Fails if any wallets exist on it.
+        Cannot delete built-in chains.
+      operationId: deleteCustomChain
+      security:
+        - PasskeySession: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "my-l2"
+        - $ref: "#/components/parameters/CSRFToken"
+      responses:
+        "200":
+          description: Chain deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Cannot delete built-in chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Chain not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Chain has existing wallets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/prices:
+    get:
+      tags: [Public]
+      summary: Current USD prices
+      description: |
+        Returns current USD prices for ETH, SOL, and stablecoins.
+        Prices are cached for 10 seconds, sourced from CoinGecko.
+      operationId: getPrices
+      responses:
+        "200":
+          description: Price map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  prices:
+                    type: object
+                    additionalProperties:
+                      type: number
+                    example:
+                      ETH: 3500.42
+                      SOL: 145.80
+                      USDC: 1.0
+                      USDT: 1.0
+
+  # ──────────────────────── Authentication ────────────────────────
+  /api/auth/check-name:
+    get:
+      tags: [Authentication]
+      summary: Check display name availability
+      operationId: checkName
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "alice"
+      responses:
+        "200":
+          description: Availability result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available:
+                    type: boolean
+                    example: true
+        "400":
+          description: Missing name parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/passkey/options:
+    get:
+      tags: [Authentication]
+      summary: Get WebAuthn login challenge
+      description: Returns a WebAuthn assertion challenge for passkey login.
+      operationId: passkeyLoginOptions
+      responses:
+        "200":
+          description: WebAuthn challenge options (pass-through from UMS)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: WebAuthn PublicKeyCredentialRequestOptions
+        "502":
+          description: Upstream service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/passkey/verify:
+    post:
+      tags: [Authentication]
+      summary: Verify WebAuthn assertion and create session
+      description: |
+        Verifies a WebAuthn login assertion. On success, creates a local user
+        (if not exists) and returns a session token (`ps_` prefix) and CSRF token.
+      operationId: passkeyLoginVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login_session_id, credential]
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                  example: 12345
+                credential:
+                  type: object
+                  description: WebAuthn credential assertion response
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  session_token:
+                    type: string
+                    description: "Passkey session token (ps_ prefix)"
+                    example: "ps_a1b2c3d4e5f6..."
+                  csrf_token:
+                    type: string
+                    example: "csrf_abcdef123456"
+                  user_id:
+                    type: integer
+                    example: 1
+                  username:
+                    type: string
+                    example: "alice"
+                  ums_token:
+                    type: string
+                    description: UMS token for passkey approval flows
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/passkey/register/begin:
+    post:
+      tags: [Authentication]
+      summary: Begin open registration
+      description: |
+        Auto-generates a short-lived invite and returns WebAuthn registration options.
+        Rate-limited per IP to prevent TEE DKG abuse.
+      operationId: passkeyRegistrationBegin
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                  description: Desired display name (auto-generated if empty)
+                  example: "alice"
+      responses:
+        "200":
+          description: WebAuthn registration options
+          content:
+            application/json:
+              schema:
+                type: object
+                description: WebAuthn PublicKeyCredentialCreationOptions with invite_token
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/passkey/register/options:
+    get:
+      tags: [Authentication]
+      summary: Get registration options (invite-token flow)
+      description: Returns WebAuthn registration options for an existing invite token.
+      operationId: passkeyRegistrationOptions
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Invite token
+          example: "inv_abc123..."
+      responses:
+        "200":
+          description: WebAuthn registration options
+          content:
+            application/json:
+              schema:
+                type: object
+                description: WebAuthn PublicKeyCredentialCreationOptions
+        "400":
+          description: Missing token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/passkey/register/verify:
+    post:
+      tags: [Authentication]
+      summary: Complete passkey registration
+      description: |
+        Verifies the WebAuthn registration ceremony and creates the local user.
+        Rate-limited per IP.
+      operationId: passkeyRegistrationVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invite_token, credential]
+              properties:
+                invite_token:
+                  type: string
+                  example: "inv_abc123..."
+                credential:
+                  type: object
+                  description: WebAuthn credential attestation response
+      responses:
+        "200":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  user_id:
+                    type: integer
+                    example: 1
+                  username:
+                    type: string
+                    example: "alice"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/invite:
+    post:
+      tags: [Authentication]
+      summary: Generate an invite link
+      description: Creates an invite for a new user (Passkey session only).
+      operationId: inviteUser
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [display_name]
+              properties:
+                display_name:
+                  type: string
+                  example: "bob"
+                expires_in_seconds:
+                  type: integer
+                  description: Invite validity in seconds (default 86400)
+                  example: 86400
+      responses:
+        "200":
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  invite_token:
+                    type: string
+                    example: "inv_abc123..."
+                  register_url:
+                    type: string
+                    example: "http://localhost:8080/#/register?token=inv_abc123..."
+                  expires_at:
+                    type: string
+                    format: date-time
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/session:
+    delete:
+      tags: [Authentication]
+      summary: Logout (revoke session)
+      description: Invalidates the current Passkey session immediately.
+      operationId: logout
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/account:
+    delete:
+      tags: [Authentication]
+      summary: Delete account
+      description: |
+        Permanently deletes the user, all wallets, TEE keys, contracts,
+        policies, approvals, and audit logs. Requires fresh passkey verification.
+      operationId: deleteAccount
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreshPasskeyCredential"
+      responses:
+        "200":
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "400":
+          description: Missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/apikey/generate:
+    post:
+      tags: [Authentication]
+      summary: Generate a new API key
+      description: |
+        Generates an API key (`ocw_` prefix). Requires fresh passkey verification.
+        The full key is returned only once -- store it securely.
+      operationId: generateApiKey
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login_session_id, credential]
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                  example: 12345
+                credential:
+                  type: object
+                  description: Fresh WebAuthn assertion
+                label:
+                  type: string
+                  description: Optional label for the key
+                  example: "production-agent"
+      responses:
+        "200":
+          description: API key generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  api_key:
+                    type: string
+                    description: Full API key (shown once only)
+                    example: "ocw_a1b2c3d4e5f6..."
+                  api_prefix:
+                    type: string
+                    description: Key prefix for identification
+                    example: "ocw_a1b2c3d4"
+                  note:
+                    type: string
+                    example: "store this key securely -- it will not be shown again"
+        "400":
+          description: Missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/apikey/list:
+    get:
+      tags: [Authentication]
+      summary: List API key metadata
+      description: Returns the prefix and creation date of the user's API key.
+      operationId: listApiKeys
+      security:
+        - PasskeySession: []
+      responses:
+        "200":
+          description: API key list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        prefix:
+                          type: string
+                          example: "ocw_a1b2c3d4"
+                        created_at:
+                          type: string
+                          format: date-time
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/apikey:
+    delete:
+      tags: [Authentication]
+      summary: Revoke an API key
+      description: |
+        Revokes the user's API key. Requires fresh passkey verification.
+        Prefix can be passed as query parameter or in the request body.
+      operationId: revokeApiKey
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+        - name: prefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: API key prefix to revoke
+          example: "ocw_a1b2c3d4"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                credential:
+                  type: object
+                api_key_prefix:
+                  type: string
+                  description: Alternative to query parameter
+                  example: "ocw_a1b2c3d4"
+      responses:
+        "200":
+          description: API key revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "400":
+          description: Missing prefix or prefix mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Wallets ────────────────────────
+  /api/wallets:
+    post:
+      tags: [Wallets]
+      summary: Create a new wallet
+      description: |
+        Creates a TEE-backed wallet on the specified chain. Triggers Distributed
+        Key Generation (DKG) across the TEE-DAO cluster, which may take 1-2 minutes
+        for ECDSA keys. Rate-limited per user.
+      operationId: createWallet
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chain]
+              properties:
+                chain:
+                  type: string
+                  description: Chain name from /api/chains
+                  example: "sepolia"
+                label:
+                  type: string
+                  example: "My Sepolia Wallet"
+      responses:
+        "200":
+          description: Wallet created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  wallet:
+                    $ref: "#/components/schemas/Wallet"
+        "400":
+          description: Validation error or wallet limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: TEE DKG failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags: [Wallets]
+      summary: List all wallets
+      operationId: listWallets
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Wallet list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  wallets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Wallet"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}:
+    get:
+      tags: [Wallets]
+      summary: Get wallet details
+      operationId: getWallet
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      responses:
+        "200":
+          description: Wallet details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  wallet:
+                    $ref: "#/components/schemas/Wallet"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Access denied (wallet belongs to another user)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Wallets]
+      summary: Rename a wallet
+      operationId: renameWallet
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+                  maxLength: 100
+                  example: "Updated Wallet Name"
+      responses:
+        "200":
+          description: Wallet renamed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  wallet:
+                    $ref: "#/components/schemas/Wallet"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Wallets]
+      summary: Delete a wallet
+      description: |
+        Permanently deletes a wallet and its TEE key. Requires fresh passkey
+        verification. This action is irreversible.
+      operationId: deleteWallet
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreshPasskeyCredential"
+      responses:
+        "200":
+          description: Wallet deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "400":
+          description: Missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session or access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/sign:
+    post:
+      tags: [Wallets]
+      summary: Sign an arbitrary message
+      description: |
+        Signs a hex or base64-encoded message using the wallet's TEE key.
+        If an approval policy is set and the transaction context indicates
+        the USD value exceeds the threshold, returns 202 with a pending approval.
+      operationId: signMessage
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  description: Hex or base64-encoded message to sign
+                  example: "68656c6c6f"
+                encoding:
+                  type: string
+                  enum: [hex, base64]
+                  default: hex
+                  example: "hex"
+                tx_context:
+                  type: object
+                  description: Optional context for approval policy evaluation
+                  example:
+                    amount: "1.5"
+                    currency: "ETH"
+      responses:
+        "200":
+          description: Message signed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "signed"
+                  signature:
+                    type: string
+                    description: Hex-encoded signature with 0x prefix
+                    example: "0xabcdef..."
+                  wallet_address:
+                    type: string
+                    example: "0x1234..."
+                  chain:
+                    type: string
+                    example: "sepolia"
+        "202":
+          description: Pending approval (USD threshold exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApprovalResponse"
+        "400":
+          description: Validation error or wallet not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: TEE signing failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/transfer:
+    post:
+      tags: [Wallets]
+      summary: Build, sign, and broadcast a transfer
+      description: |
+        Builds a blockchain transaction server-side, signs it via TEE threshold
+        signing, and broadcasts it. Supports native tokens (ETH, SOL) and
+        token transfers (ERC-20, SPL) when a `token` object is provided.
+
+        If an approval policy is configured and the USD amount exceeds the
+        threshold or daily limit, the request returns 202 with a pending approval.
+
+        Supports `Idempotency-Key` header to prevent duplicate transactions.
+      operationId: transfer
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, amount]
+              properties:
+                to:
+                  type: string
+                  description: Recipient address (0x... for EVM, base58 for Solana)
+                  example: "0xRecipientAddress..."
+                amount:
+                  type: string
+                  description: Amount in human-readable units (e.g. "1.5" ETH, "0.01" SOL)
+                  example: "0.1"
+                memo:
+                  type: string
+                  description: Optional memo/note
+                  example: "Payment for services"
+                token:
+                  $ref: "#/components/schemas/TokenParams"
+      responses:
+        "200":
+          description: Transfer completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  tx_hash:
+                    type: string
+                    example: "0xabc123..."
+                  chain:
+                    type: string
+                    example: "sepolia"
+                  from:
+                    type: string
+                    example: "0xSenderAddress..."
+                  to:
+                    type: string
+                    example: "0xRecipientAddress..."
+                  amount:
+                    type: string
+                    example: "0.1"
+                  currency:
+                    type: string
+                    example: "ETH"
+        "202":
+          description: Pending approval (USD threshold exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApprovalResponse"
+        "400":
+          description: Validation error, wallet not ready, or daily limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Token contract not whitelisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC, signing, or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/wrap-sol:
+    post:
+      tags: [Wallets]
+      summary: Wrap native SOL into wSOL
+      description: Wraps the specified amount of native SOL into Wrapped SOL (wSOL). Solana wallets only.
+      operationId: wrapSol
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: string
+                  description: Amount of SOL to wrap
+                  example: "0.1"
+      responses:
+        "200":
+          description: Wrap completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  tx_hash:
+                    type: string
+                    example: "5abc..."
+                  chain:
+                    type: string
+                    example: "solana-devnet"
+                  from:
+                    type: string
+                    example: "SolanaAddress..."
+                  amount:
+                    type: string
+                    example: "0.1"
+                  action:
+                    type: string
+                    example: "wrap"
+        "400":
+          description: Not a Solana wallet or invalid amount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC, signing, or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/unwrap-sol:
+    post:
+      tags: [Wallets]
+      summary: Unwrap all wSOL back to native SOL
+      description: Closes the wSOL Associated Token Account, returning all wSOL as native SOL. Solana wallets only.
+      operationId: unwrapSol
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Unwrap completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  tx_hash:
+                    type: string
+                    example: "5abc..."
+                  chain:
+                    type: string
+                    example: "solana-devnet"
+                  from:
+                    type: string
+                    example: "SolanaAddress..."
+                  action:
+                    type: string
+                    example: "unwrap"
+        "400":
+          description: Not a Solana wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC, signing, or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/balance:
+    get:
+      tags: [Wallets]
+      summary: Get native token balance
+      description: Queries the chain RPC for the wallet's current native token balance.
+      operationId: getBalance
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      responses:
+        "200":
+          description: Balance result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResult"
+        "400":
+          description: Wallet not ready or unsupported chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/pubkey:
+    get:
+      tags: [Wallets]
+      summary: Get wallet public key
+      description: Returns the raw public key, address, chain, curve, and protocol.
+      operationId: getPubkey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      responses:
+        "200":
+          description: Public key info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  wallet_id:
+                    type: string
+                    format: uuid
+                  public_key:
+                    type: string
+                    description: Hex-encoded compressed public key
+                    example: "02a1b2c3..."
+                  address:
+                    type: string
+                    example: "0x1234..."
+                  chain:
+                    type: string
+                    example: "sepolia"
+                  curve:
+                    type: string
+                    example: "secp256k1"
+                  protocol:
+                    type: string
+                    example: "ecdsa"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Contracts ────────────────────────
+  /api/wallets/{id}/contracts:
+    get:
+      tags: [Contracts]
+      summary: List whitelisted contracts
+      operationId: listContracts
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      responses:
+        "200":
+          description: Contract list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  contracts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AllowedContract"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags: [Contracts]
+      summary: Add a contract to the whitelist
+      description: |
+        Whitelists a contract address for a wallet.
+        - **Passkey session**: applied immediately (requires fresh credential).
+        - **API key**: creates a pending approval for the Passkey owner to review.
+      operationId: addContract
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract_address]
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                  description: Required for Passkey sessions
+                credential:
+                  type: object
+                  description: Fresh WebAuthn assertion (required for Passkey sessions)
+                contract_address:
+                  type: string
+                  description: EVM contract address (0x...) or Solana program ID (base58)
+                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                label:
+                  type: string
+                  example: "USDC on Ethereum"
+                symbol:
+                  type: string
+                  example: "USDC"
+                decimals:
+                  type: integer
+                  minimum: 0
+                  maximum: 77
+                  example: 6
+                allowed_methods:
+                  type: string
+                  description: Comma-separated method names (empty = all allowed)
+                  example: "transfer,approve"
+                auto_approve:
+                  type: boolean
+                  description: Allow API key execution without Passkey for non-high-risk methods
+                  example: false
+      responses:
+        "200":
+          description: Contract added (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  contract:
+                    $ref: "#/components/schemas/AllowedContract"
+        "202":
+          description: Pending approval (API key path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pending:
+                    type: boolean
+                    example: true
+                  approval_id:
+                    type: integer
+                    example: 384729
+                  message:
+                    type: string
+                    example: "Contract whitelist request submitted for approval"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated or passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Contract already whitelisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/contracts/{cid}:
+    put:
+      tags: [Contracts]
+      summary: Update a whitelisted contract
+      description: |
+        Updates settings of an existing whitelisted contract.
+        - **Passkey session**: applied immediately (requires fresh credential).
+        - **API key**: creates a pending approval.
+      operationId: updateContract
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/ContractId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                credential:
+                  type: object
+                label:
+                  type: string
+                symbol:
+                  type: string
+                decimals:
+                  type: integer
+                  minimum: 0
+                  maximum: 77
+                allowed_methods:
+                  type: string
+                auto_approve:
+                  type: boolean
+      responses:
+        "200":
+          description: Contract updated (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  contract:
+                    $ref: "#/components/schemas/AllowedContract"
+        "202":
+          description: Pending approval (API key path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pending:
+                    type: boolean
+                    example: true
+                  approval_id:
+                    type: integer
+                  message:
+                    type: string
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Contracts]
+      summary: Remove a whitelisted contract
+      description: Removes a contract from the whitelist. Requires fresh passkey verification.
+      operationId: deleteContract
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/ContractId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreshPasskeyCredential"
+      responses:
+        "200":
+          description: Contract removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "400":
+          description: Missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Contract Calls ────────────────────────
+  /api/wallets/{id}/contract-call:
+    post:
+      tags: [Contract Calls]
+      summary: Execute a contract call
+      description: |
+        Executes a smart contract call with three-layer security:
+        1. **Contract whitelist** -- contract must be pre-approved.
+        2. **Method restriction** -- if `allowed_methods` is set, the method must be in the list.
+        3. **Approval gate** -- high-risk methods (approve, transferFrom, etc.) always
+           require Passkey; non-high-risk methods on auto-approve contracts proceed directly.
+
+        Works on both EVM (ABI-encoded function calls) and Solana (program instructions).
+
+        The optional `amount_usd` field lets callers report the USD value of DeFi
+        operations for threshold and daily-limit enforcement.
+      operationId: contractCall
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract]
+              properties:
+                contract:
+                  type: string
+                  description: Contract address (0x... for EVM) or program ID (base58 for Solana)
+                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                func_sig:
+                  type: string
+                  description: "Solidity function signature (EVM only, required for EVM)"
+                  example: "transfer(address,uint256)"
+                args:
+                  type: array
+                  items: {}
+                  description: "Function arguments (EVM only)"
+                  example: ["0xRecipient...", "1000000"]
+                value:
+                  type: string
+                  description: "ETH to send with the call (EVM only, in ETH units)"
+                  example: "0.1"
+                amount_usd:
+                  type: string
+                  description: "Caller-reported USD value for threshold/daily-limit checks"
+                  example: "150.00"
+                memo:
+                  type: string
+                  example: "Swap USDC for ETH"
+                accounts:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/SOLAccountMeta"
+                  description: "Account list (Solana only)"
+                data:
+                  type: string
+                  description: "Hex instruction data (Solana only)"
+                  example: "03a1b2c3..."
+      responses:
+        "200":
+          description: Call completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  tx_hash:
+                    type: string
+                    example: "0xabc123..."
+                  chain:
+                    type: string
+                  from:
+                    type: string
+                  contract:
+                    type: string
+                    description: EVM contract address
+                  program_id:
+                    type: string
+                    description: Solana program ID
+                  method:
+                    type: string
+                    description: EVM method name
+                  wallet_address:
+                    type: string
+        "202":
+          description: Pending approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApprovalResponse"
+        "400":
+          description: Validation error or daily limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Contract not whitelisted or method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC, signing, or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/approve-token:
+    post:
+      tags: [Contract Calls]
+      summary: Approve ERC-20 token spending
+      description: |
+        Convenience endpoint for ERC-20 `approve(spender, amount)`.
+        Always treated as high-risk -- API key auth always returns 202 pending approval.
+        EVM chains only.
+      operationId: approveToken
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract, spender, amount]
+              properties:
+                contract:
+                  type: string
+                  description: ERC-20 token contract address
+                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                spender:
+                  type: string
+                  description: Address to approve for spending
+                  example: "0xSpenderAddress..."
+                amount:
+                  type: string
+                  description: Token amount in human-readable units
+                  example: "1000"
+      responses:
+        "200":
+          description: Approval executed (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  tx_hash:
+                    type: string
+                  chain:
+                    type: string
+                  from:
+                    type: string
+                  contract:
+                    type: string
+                  spender:
+                    type: string
+                  wallet_address:
+                    type: string
+        "202":
+          description: Pending approval (API key path -- always for this endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApprovalResponse"
+        "400":
+          description: Validation error or non-EVM chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Contract not whitelisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC, signing, or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/revoke-approval:
+    post:
+      tags: [Contract Calls]
+      summary: Revoke ERC-20 token approval
+      description: |
+        Convenience endpoint that calls ERC-20 `approve(spender, 0)`.
+        Always treated as high-risk -- API key auth always returns 202 pending approval.
+        EVM chains only.
+      operationId: revokeApproval
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract, spender]
+              properties:
+                contract:
+                  type: string
+                  description: ERC-20 token contract address
+                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                spender:
+                  type: string
+                  description: Address whose approval to revoke
+                  example: "0xSpenderAddress..."
+      responses:
+        "200":
+          description: Approval revoked (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "completed"
+                  tx_hash:
+                    type: string
+                  chain:
+                    type: string
+                  from:
+                    type: string
+                  contract:
+                    type: string
+                  spender:
+                    type: string
+                  wallet_address:
+                    type: string
+        "202":
+          description: Pending approval (API key path)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApprovalResponse"
+        "400":
+          description: Validation error or non-EVM chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Contract not whitelisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC, signing, or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/call-read:
+    post:
+      tags: [Contract Calls]
+      summary: Read-only contract call
+      description: |
+        Performs an `eth_call` against a contract. No signing, no transaction,
+        no gas fees. EVM chains only. Returns raw hex-encoded return data.
+      operationId: callRead
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract, func_sig]
+              properties:
+                contract:
+                  type: string
+                  description: Contract address (0x...)
+                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                func_sig:
+                  type: string
+                  description: Solidity function signature
+                  example: "balanceOf(address)"
+                args:
+                  type: array
+                  items: {}
+                  description: Function arguments
+                  example: ["0xOwnerAddress..."]
+      responses:
+        "200":
+          description: Call result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  result:
+                    type: string
+                    description: Hex-encoded return data with 0x prefix
+                    example: "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  contract:
+                    type: string
+                    example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                  method:
+                    type: string
+                    example: "balanceOf"
+        "400":
+          description: Validation error or non-EVM chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: RPC error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Approval Policies ────────────────────────
+  /api/wallets/{id}/policy:
+    get:
+      tags: [Approval Policies]
+      summary: Get approval policy
+      description: Returns the USD-denominated approval policy for the wallet, or null if not set.
+      operationId: getPolicy
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      responses:
+        "200":
+          description: Policy (may be null)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  policy:
+                    nullable: true
+                    allOf:
+                      - $ref: "#/components/schemas/ApprovalPolicy"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      tags: [Approval Policies]
+      summary: Set approval policy
+      description: |
+        Creates or updates the USD-denominated approval policy for a wallet.
+        - **Passkey session**: applied immediately (requires fresh credential).
+        - **API key**: creates a pending approval for the Passkey owner.
+      operationId: setPolicy
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [threshold_usd]
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                  description: Required for Passkey sessions
+                credential:
+                  type: object
+                  description: Fresh WebAuthn assertion (required for Passkey sessions)
+                threshold_usd:
+                  type: string
+                  description: Single-transaction USD threshold (must be positive)
+                  example: "100"
+                daily_limit_usd:
+                  type: string
+                  description: Optional daily USD spend limit
+                  example: "1000"
+                enabled:
+                  type: boolean
+                  description: Enable/disable the policy (default true)
+                  example: true
+      responses:
+        "200":
+          description: Policy applied (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  policy:
+                    $ref: "#/components/schemas/ApprovalPolicy"
+        "202":
+          description: Pending approval (API key path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pending:
+                    type: boolean
+                    example: true
+                  approval_id:
+                    type: integer
+                  message:
+                    type: string
+                    example: "Policy change submitted for approval"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated or passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Approval Policies]
+      summary: Remove approval policy
+      description: Deletes the approval policy for a wallet. Requires fresh passkey verification.
+      operationId: deletePolicy
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreshPasskeyCredential"
+      responses:
+        "200":
+          description: Policy deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "400":
+          description: Missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Approvals ────────────────────────
+  /api/approvals/pending:
+    get:
+      tags: [Approvals]
+      summary: List pending approvals
+      description: |
+        Returns all pending approval requests for the current user.
+        Expired approvals are auto-updated to "expired" status.
+      operationId: listPendingApprovals
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  approvals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApprovalRequest"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/approvals/{id}:
+    get:
+      tags: [Approvals]
+      summary: Get approval details
+      description: Returns the full details and status of an approval request.
+      operationId: getApproval
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ApprovalId"
+      responses:
+        "200":
+          description: Approval details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  approval:
+                    $ref: "#/components/schemas/ApprovalRequest"
+                  tx_context:
+                    type: object
+                    description: Parsed transaction context
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Access denied (approval belongs to another user)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Approval not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/approvals/{id}/approve:
+    post:
+      tags: [Approvals]
+      summary: Approve a pending request
+      description: |
+        Approves a pending approval request. Requires a fresh WebAuthn assertion
+        so a stolen session token alone cannot approve transactions.
+
+        For transfer/contract_call approvals, the transaction is rebuilt with fresh
+        chain state (nonce, blockhash), signed via TEE, and broadcast.
+        For policy_change and contract_add/update approvals, the change is applied.
+      operationId: approveRequest
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/ApprovalId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreshPasskeyCredential"
+      responses:
+        "200":
+          description: Approved (and broadcast for transfer/contract_call types)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  status:
+                    type: string
+                    example: "approved"
+                  signature:
+                    type: string
+                    description: Hex signature (for sign/transfer/contract_call types)
+                    example: "0xabcdef..."
+                  tx_hash:
+                    type: string
+                    description: Transaction hash (for transfer/contract_call types)
+                    example: "0xabc123..."
+                  wallet_address:
+                    type: string
+                  chain:
+                    type: string
+                  policy:
+                    description: Applied policy (for policy_change type)
+                    $ref: "#/components/schemas/ApprovalPolicy"
+                  contract:
+                    description: Added/updated contract (for contract_add/update type)
+                    $ref: "#/components/schemas/AllowedContract"
+        "400":
+          description: Not pending, expired, or missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session or access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Approval not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: TEE signing or broadcast failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/approvals/{id}/reject:
+    post:
+      tags: [Approvals]
+      summary: Reject a pending request
+      description: |
+        Rejects a pending approval request. Requires fresh passkey verification.
+      operationId: rejectRequest
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/ApprovalId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreshPasskeyCredential"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  status:
+                    type: string
+                    example: "rejected"
+        "400":
+          description: Not pending or missing credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session or access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Approval not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Audit ────────────────────────
+  /api/audit/logs:
+    get:
+      tags: [Audit]
+      summary: Query audit log
+      description: Returns a paginated list of the current user's operation audit logs.
+      operationId: listAuditLogs
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          example: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 100
+          example: 30
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: Filter by action type
+          example: "transfer"
+        - name: wallet_id
+          in: query
+          schema:
+            type: string
+          description: Filter by wallet ID
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        "200":
+          description: Audit log page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  logs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLog"
+                  total:
+                    type: integer
+                    description: Total matching records
+                    example: 150
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 30
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

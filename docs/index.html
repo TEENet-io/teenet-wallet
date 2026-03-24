@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TEENet Wallet Documentation</title>
+  <meta name="description" content="TEENet Wallet — Multi-chain crypto wallet with TEE-based threshold cryptography" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css" />
+  <style>
+    :root {
+      --base-background-color: #ffffff;
+      --sidebar-background: #f8f9fb;
+      --sidebar-border-color: #e8ecf1;
+      --sidebar-nav-link-color--active: #7c3aed;
+      --sidebar-nav-link-border-color--active: #7c3aed;
+      --link-color: #7c3aed;
+      --heading-color: #1a1a2e;
+      --base-color: #374151;
+      --code-theme-background: #f4f2ff;
+      --theme-color: #7c3aed;
+    }
+    .sidebar-nav > ul > li > a { font-weight: 600; }
+    .markdown-section code { color: #6d28d9; background: #f4f2ff; }
+    .markdown-section pre { border-radius: 8px; }
+    .markdown-section table { border-collapse: collapse; }
+    .markdown-section table th { background: #f8f9fb; }
+
+    /* Language switch button */
+    .lang-switch {
+      position: fixed;
+      top: 12px;
+      right: 16px;
+      z-index: 100;
+      display: flex;
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 2px;
+      gap: 2px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .lang-btn {
+      padding: 4px 12px;
+      border: none;
+      background: none;
+      color: #6b7280;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s;
+      font-weight: 500;
+    }
+    .lang-btn:hover { color: #374151; }
+    .lang-btn.active {
+      background: #7c3aed;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <!-- Language switch -->
+  <div class="lang-switch">
+    <button class="lang-btn" id="lang-en" onclick="switchLang('en')">EN</button>
+    <button class="lang-btn" id="lang-zh" onclick="switchLang('zh')">中文</button>
+  </div>
+
+  <div id="app"></div>
+  <script>
+    // Detect current language from URL hash
+    function currentLang() {
+      var hash = location.hash || '';
+      return hash.indexOf('zh/') !== -1 ? 'zh' : 'en';
+    }
+
+    // Map EN page paths to ZH equivalents and vice versa
+    var pageMap = {
+      'en/user-guide': 'zh/user-guide',
+      'en/introduction': 'zh/introduction',
+      'en/quick-start': 'zh/quick-start',
+      'en/configuration': 'zh/configuration',
+      'en/authentication': 'zh/authentication',
+      'en/wallets': 'zh/wallets',
+      'en/transfers': 'zh/transfers',
+      'en/smart-contracts': 'zh/smart-contracts',
+      'en/approvals': 'zh/approvals',
+      'en/agent-integration': 'zh/agent-integration',
+      'en/api-overview': 'zh/api-overview',
+      'en/whitepaper': 'zh/whitepaper',
+    };
+    // Build reverse map
+    var reverseMap = {};
+    for (var k in pageMap) { reverseMap[pageMap[k]] = k; }
+
+    function switchLang(lang) {
+      var hash = (location.hash || '#/').replace('#/', '').replace(/\.md$/, '');
+      var target;
+      if (lang === 'zh') {
+        target = pageMap[hash] || 'zh/';
+      } else {
+        target = reverseMap[hash] || '';
+      }
+      location.hash = '#/' + target;
+      updateLangButtons();
+    }
+
+    function updateLangButtons() {
+      var lang = currentLang();
+      document.getElementById('lang-en').className = 'lang-btn' + (lang === 'en' ? ' active' : '');
+      document.getElementById('lang-zh').className = 'lang-btn' + (lang === 'zh' ? ' active' : '');
+    }
+
+    window.$docsify = {
+      name: 'TEENet Wallet',
+      repo: '',
+      loadSidebar: true,
+      subMaxLevel: 3,
+      auto2top: true,
+      search: {
+        placeholder: {'/zh/': '搜索文档...', '/': 'Search docs...'},
+        noData: {'/zh/': '没有结果', '/': 'No results.'},
+        paths: 'auto',
+      },
+      alias: {
+        '/zh/.*/_sidebar.md': '/zh/_sidebar.md',
+        '/_sidebar.md': '/_sidebar.md',
+      },
+      coverpage: false,
+      formatUpdated: '{MM}/{DD}/{YYYY}',
+      plugins: [
+        function(hook) {
+          hook.doneEach(function() { updateLangButtons(); });
+        }
+      ],
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-go.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+</body>
+</html>
