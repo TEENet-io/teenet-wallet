@@ -249,7 +249,7 @@ func (h *AuthHandler) PasskeyVerify(c *gin.Context) {
 	sessionToken := "ps_" + randomHex(24)
 	csrfToken := h.sessions.Set(sessionToken, user.ID, 24*time.Hour)
 
-	writeAuditLog(h.db, user.ID, "login", "success", "passkey", c.ClientIP(), nil, nil)
+	writeAuditLog(h.db, user.ID, "login", "success", "passkey", c.ClientIP(), nil, nil, "")
 	c.JSON(http.StatusOK, gin.H{
 		"success":       true,
 		"session_token": sessionToken,
@@ -277,29 +277,41 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 		return
 	}
 
+	// Enforce per-user limit.
+	var count int64
+	if err := h.db.Model(&model.APIKey{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+		jsonError(c, http.StatusInternalServerError, "db error")
+		return
+	}
+	if count >= 10 {
+		jsonError(c, http.StatusConflict, "maximum 10 API keys per user")
+		return
+	}
+
 	rawKey := "ocw_" + randomHex(32)
 	salt := randomHex(16)
 	hash := hashAPIKeyWithSalt(rawKey, salt)
 	prefix := rawKey[:12] // "ocw_" + 8 chars
 
-	var user model.User
-	if err := h.db.First(&user, userID).Error; err != nil {
-		jsonError(c, http.StatusNotFound, "user not found")
-		return
+	label := strings.TrimSpace(req.Label)
+
+	apiKey := model.APIKey{
+		UserID:  userID,
+		KeyHash: hash,
+		KeySalt: salt,
+		Prefix:  prefix,
+		Label:   label,
 	}
-	if err := h.db.Model(&user).Updates(map[string]interface{}{
-		"api_key_hash": hash,
-		"api_key_salt": salt,
-		"api_prefix":   prefix,
-	}).Error; err != nil {
+	if err := h.db.Create(&apiKey).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "failed to save key")
 		return
 	}
-	writeAuditCtx(h.db, c, "apikey_generate", "success", nil, map[string]interface{}{"prefix": prefix})
+	writeAuditCtx(h.db, c, "apikey_generate", "success", nil, map[string]interface{}{"prefix": prefix, "label": label})
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
 		"api_key":    rawKey, // shown once only
 		"api_prefix": prefix,
+		"label":      label,
 		"note":       "store this key securely — it will not be shown again",
 	})
 }
@@ -311,16 +323,18 @@ func (h *AuthHandler) ListAPIKeys(c *gin.Context) {
 	if c.IsAborted() {
 		return
 	}
-	var user model.User
-	if err := h.db.First(&user, userID).Error; err != nil {
-		jsonError(c, http.StatusNotFound, "user not found")
+	var apiKeys []model.APIKey
+	if err := h.db.Where("user_id = ?", userID).Order("created_at asc").Find(&apiKeys).Error; err != nil {
+		jsonError(c, http.StatusInternalServerError, "db error")
 		return
 	}
 	keys := []gin.H{}
-	if user.APIPrefix != "" {
+	for _, k := range apiKeys {
 		keys = append(keys, gin.H{
-			"prefix":     user.APIPrefix,
-			"created_at": user.CreatedAt,
+			"id":         k.ID,
+			"prefix":     k.Prefix,
+			"label":      k.Label,
+			"created_at": k.CreatedAt,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "keys": keys})
@@ -387,6 +401,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalRequest{})
 		}
 		tx.Where("user_id = ?", userID).Delete(&model.AuditLog{})
+		tx.Where("user_id = ?", userID).Delete(&model.APIKey{})
 		if err := tx.Where("user_id = ?", userID).Delete(&model.Wallet{}).Error; err != nil {
 			return err
 		}
@@ -438,26 +453,17 @@ func (h *AuthHandler) RevokeAPIKey(c *gin.Context) {
 		return
 	}
 
-	// Verify the prefix matches the user's current API key.
-	var user model.User
-	if err := h.db.First(&user, userID).Error; err != nil {
-		jsonError(c, http.StatusNotFound, "user not found")
-		return
-	}
-	if user.APIPrefix == "" || user.APIPrefix != prefix {
-		jsonError(c, http.StatusBadRequest, "prefix does not match current API key")
+	var apiKey model.APIKey
+	if err := h.db.Where("user_id = ? AND prefix = ?", userID, prefix).First(&apiKey).Error; err != nil {
+		jsonError(c, http.StatusNotFound, "API key not found")
 		return
 	}
 
-	if err := h.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
-		"api_key_hash": nil,
-		"api_key_salt": nil,
-		"api_prefix":   "",
-	}).Error; err != nil {
+	if err := h.db.Delete(&apiKey).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "revoke failed")
 		return
 	}
-	writeAuditCtx(h.db, c, "apikey_revoke", "success", nil, map[string]interface{}{"prefix": prefix})
+	writeAuditCtx(h.db, c, "apikey_revoke", "success", nil, map[string]interface{}{"prefix": prefix, "label": apiKey.Label})
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 

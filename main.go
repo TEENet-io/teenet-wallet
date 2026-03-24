@@ -63,6 +63,7 @@ func main() {
 
 	if err := db.AutoMigrate(
 		&model.User{},
+		&model.APIKey{},
 		&model.Wallet{},
 		&model.ApprovalPolicy{},
 		&model.ApprovalRequest{},
@@ -72,13 +73,6 @@ func main() {
 		&model.CustomChain{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
-	}
-	// Migration: drop the old approval_policies table (had per-currency composite index)
-	// and let AutoMigrate recreate it with the new USD-based schema (single wallet_id unique).
-	// Safe in early-stage product; existing policies are discarded.
-	db.Exec("DROP TABLE IF EXISTS approval_policies")
-	if err := db.AutoMigrate(&model.ApprovalPolicy{}); err != nil {
-		log.Fatalf("re-migrate approval_policies: %v", err)
 	}
 
 	// Merge persisted custom chains into the registry now that the DB is ready.

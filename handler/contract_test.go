@@ -44,10 +44,12 @@ func testDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxOpenConns(1)
 	if err := db.AutoMigrate(
 		&model.User{},
+		&model.APIKey{},
 		&model.Wallet{},
 		&model.AllowedContract{},
 		&model.ApprovalPolicy{},
 		&model.ApprovalRequest{},
+		&model.AuditLog{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

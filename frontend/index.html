@@ -427,10 +427,12 @@
       <div class="card">
         <div class="card-title">👤 Account</div>
         <div id="account-info" class="tx-grid" style="margin-bottom:1rem;"></div>
-        <div class="btn-group">
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:0.5rem;">
+          <div style="flex:1;min-width:120px;">
+            <label style="font-size:0.7rem;color:#64748b;display:block;margin-bottom:0.2rem;">Label (optional)</label>
+            <input id="apikey-label" type="text" placeholder="e.g. my-bot" maxlength="100" style="width:100%;padding:0.35rem 0.5rem;background:#111120;border:1px solid #2a2a45;border-radius:6px;color:#e2e8f0;font-size:0.8rem;" />
+          </div>
           <button class="btn btn-primary btn-sm" onclick="generateAPIKey()">Generate API Key</button>
-          <button class="btn btn-ghost btn-sm" onclick="listAPIKeys()">List Keys</button>
-          <button class="btn btn-danger btn-sm" onclick="revokeAPIKey()">Revoke Key</button>
         </div>
         <div id="apikey-result" style="margin-top:0.75rem;"></div>
       </div>
@@ -654,6 +656,7 @@ function showTab(id) {
   if (id === 'tab-wallets') loadWallets();
   if (id === 'tab-approvals') loadApprovals();
   if (id === 'tab-history') loadAuditLogs();
+  if (id === 'tab-account') listAPIKeys();
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -724,9 +727,10 @@ async function deleteAccount() {
 }
 
 async function generateAPIKey() {
-  if (!await customConfirm({ title: 'Generate New API Key', message: 'Generating a new key will immediately invalidate your existing key.\nAny apps using the old key will stop working.', confirmText: 'Generate', danger: true })) return;
+  const label = (document.getElementById('apikey-label').value || '').trim();
   const passkeyBody = await getFreshPasskeyCredential();
   if (!passkeyBody) return;
+  passkeyBody.label = label;
   const res = await api('/api/auth/apikey/generate', { method: 'POST', body: JSON.stringify(passkeyBody) });
   const el = document.getElementById('apikey-result');
   if (res.success) {
@@ -734,7 +738,11 @@ async function generateAPIKey() {
       {tag: 'strong', text: 'API Key (save \u2014 shown once):'},
       {tag: 'br'},
       {tag: 'span', text: res.api_key, className: 'mono', style: 'font-size:0.78rem;word-break:break-all'},
+      ...(res.label ? [{tag: 'br'}, {tag: 'span', text: 'Label: ' + res.label, style: 'font-size:0.75rem;color:#64748b'}] : []),
     ]);
+    document.getElementById('apikey-label').value = '';
+    // Refresh key list after a short delay.
+    setTimeout(listAPIKeys, 500);
   } else { safeSetResult(el, res.error, 'error'); }
 }
 
@@ -743,15 +751,42 @@ async function listAPIKeys() {
   const el = document.getElementById('apikey-result');
   if (res.success && res.keys?.length) {
     el.textContent = '';
-    var div = document.createElement('div');
-    div.className = 'tx-result';
-    div.style.cssText = 'background:#111120;border:1px solid #2a2a45;color:#94a3b8';
-    div.appendChild(document.createTextNode('Keys: '));
-    res.keys.forEach(function(k, i) {
-      if (i > 0) div.appendChild(document.createTextNode(', '));
-      var code = document.createElement('code'); code.textContent = k.prefix + '\u2026'; div.appendChild(code);
+    res.keys.forEach(function(k) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.5rem;background:#111120;border:1px solid #2a2a45;border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.35rem;';
+
+      var info = document.createElement('div');
+      info.style.cssText = 'min-width:0;flex:1;';
+
+      var prefixEl = document.createElement('code');
+      prefixEl.textContent = k.prefix + '\u2026';
+      prefixEl.style.cssText = 'font-size:0.78rem;color:#e2e8f0;';
+      info.appendChild(prefixEl);
+
+      if (k.label) {
+        var labelEl = document.createElement('span');
+        labelEl.textContent = ' \u00B7 ' + k.label;
+        labelEl.style.cssText = 'font-size:0.75rem;color:#64748b;';
+        info.appendChild(labelEl);
+      }
+
+      var dateEl = document.createElement('div');
+      var d = new Date(k.created_at);
+      dateEl.textContent = d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      dateEl.style.cssText = 'font-size:0.65rem;color:#475569;margin-top:0.15rem;';
+      info.appendChild(dateEl);
+
+      row.appendChild(info);
+
+      var revokeBtn = document.createElement('button');
+      revokeBtn.className = 'btn btn-danger btn-sm';
+      revokeBtn.textContent = 'Revoke';
+      revokeBtn.style.cssText = 'font-size:0.7rem;padding:0.2rem 0.5rem;flex-shrink:0;';
+      revokeBtn.onclick = function() { revokeAPIKey(k.prefix, k.label); };
+      row.appendChild(revokeBtn);
+
+      el.appendChild(row);
     });
-    el.appendChild(div);
   } else {
     el.textContent = '';
     var noDiv = document.createElement('div');
@@ -762,13 +797,16 @@ async function listAPIKeys() {
   }
 }
 
-async function revokeAPIKey() {
-  if (!await customConfirm({ title: 'Revoke API Key', message: 'OpenClaw and any integrations using this key will immediately lose access.', confirmText: 'Revoke', danger: true })) return;
+async function revokeAPIKey(prefix, label) {
+  var msg = 'Any integrations using this key will immediately lose access.';
+  if (label) msg = 'Revoke key "' + label + '"?\n' + msg;
+  if (!await customConfirm({ title: 'Revoke API Key', message: msg, confirmText: 'Revoke', danger: true })) return;
   const passkeyBody = await getFreshPasskeyCredential();
   if (!passkeyBody) return;
-  const res = await api('/api/auth/apikey', { method: 'DELETE', body: JSON.stringify(passkeyBody) });
+  passkeyBody.api_key_prefix = prefix;
+  const res = await api('/api/auth/apikey?prefix=' + encodeURIComponent(prefix), { method: 'DELETE', body: JSON.stringify(passkeyBody) });
   toast(res.success ? 'API key revoked' : (res.error || 'Revoke failed'), res.success ? 'success' : 'error');
-  if (res.success) document.getElementById('apikey-result').innerHTML = '';
+  if (res.success) listAPIKeys();
 }
 
 // ─── Create Wallet ────────────────────────────────────────────────────────────
@@ -844,7 +882,7 @@ function renderWalletCard(w) {
   const chainClass = isEVM ? 'chain-eth' : 'chain-sol';
   const statusClass = w.status === 'ready' ? 'badge-green' : w.status === 'creating' ? 'badge-yellow' : 'badge-red';
   const addrShort = w.address ? (w.address.slice(0, 10) + '…' + w.address.slice(-8)) : '—';
-  const sub = activeSubTab[w.id] || 'transfer';
+  const sub = activeSubTab[w.id] || 'contracts';
 
   return `<div class="wallet-card" id="wcard-${w.id}">
     <div class="wallet-header" onclick="toggleWallet('${w.id}')">
@@ -877,24 +915,12 @@ function renderWalletCard(w) {
         </div>
       </div>
       <div class="sub-tabs">
-        ${(isEVM || isSolana) ? `<button class="sub-tab ${sub==='transfer'?'active':''}" onclick="showSubTab('${w.id}','transfer')">Transfer</button>` : ''}
-        ${(isEVM || isSolana) ? `<button class="sub-tab ${sub==='contract'?'active':''}" onclick="showSubTab('${w.id}','contract')">${isSolana ? 'Program' : 'Contract'}</button>` : ''}
         ${(isEVM || isSolana) ? `<button class="sub-tab ${sub==='contracts'?'active':''}" onclick="showSubTab('${w.id}','contracts')">Whitelist</button>` : ''}
-        ${isSolana ? `<button class="sub-tab ${sub==='wrap'?'active':''}" onclick="showSubTab('${w.id}','wrap')">Wrap/Unwrap</button>` : ''}
         <button class="sub-tab ${sub==='policy'?'active':''}" onclick="showSubTab('${w.id}','policy')">Policy</button>
         <button class="sub-tab" style="color:#ef4444" onclick="event.stopPropagation();deleteWallet('${w.id}')">🗑 Delete</button>
       </div>
-      <div class="sub-panel ${sub==='transfer'?'active':''}" id="sp-transfer-${w.id}">
-        ${renderTransferPanel(w)}
-      </div>
-      ${(isEVM || isSolana) ? `<div class="sub-panel ${sub==='contract'?'active':''}" id="sp-contract-${w.id}">
-        ${renderContractPanel(w)}
-      </div>` : ''}
       ${(isEVM || isSolana) ? `<div class="sub-panel ${sub==='contracts'?'active':''}" id="sp-contracts-${w.id}">
         <div id="contracts-content-${w.id}">Loading…</div>
-      </div>` : ''}
-      ${isSolana ? `<div class="sub-panel ${sub==='wrap'?'active':''}" id="sp-wrap-${w.id}">
-        ${renderWrapPanel(w)}
       </div>` : ''}
       <div class="sub-panel ${sub==='policy'?'active':''}" id="sp-policy-${w.id}">
         ${renderPolicyPanel(w)}
@@ -994,7 +1020,7 @@ function toggleWallet(id) {
     card.classList.add('expanded');
     detail.style.display = 'block';
     expandedWalletId = id;
-    const sub = activeSubTab[id] || 'transfer';
+    const sub = activeSubTab[id] || 'contracts';
     if (sub === 'contracts') loadContracts(id);
     if (sub === 'policy') loadPolicy(id);
   }
@@ -1022,7 +1048,7 @@ function showSubTab(walletId, tab) {
 }
 
 function restoreSubTabs(walletId) {
-  const sub = activeSubTab[walletId] || 'transfer';
+  const sub = activeSubTab[walletId] || 'contracts';
   const card = document.getElementById(`wcard-${walletId}`);
   if (!card) return;
   card.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
@@ -1576,32 +1602,15 @@ async function loadContracts(walletId) {
             </div>
             ${methods.length ? `<div style="font-size:0.7rem;color:#475569;margin-top:0.2rem;">${methodsLabel}: ${methods.map(m => `<code style="background:#1e1e35;padding:0.05rem 0.3rem;border-radius:3px">${m}</code>`).join(' ')}</div>` : ''}
           </div>
-          <div style="display:flex;flex-direction:column;gap:0.3rem;flex-shrink:0">
-            <button class="btn btn-ghost btn-sm btn-icon" onclick="toggleEditContract('${walletId}',${c.id})" title="Edit">✎</button>
+          <div style="flex-shrink:0">
             <button class="btn btn-danger btn-sm btn-icon" onclick="deleteContract('${walletId}',${c.id})" title="Remove from whitelist">\u2715</button>
           </div>
         </div>
-        <div id="cedit-form-${c.id}" style="display:none;padding:0.6rem 0.75rem;margin-bottom:0.4rem;background:#0f0f1e;border:1px solid #2a2a45;border-radius:8px;">
-          <div class="form-row">
-            <div class="form-group"><label>Symbol</label><input id="cedit-sym-${c.id}" value="${c.symbol || ''}" style="text-transform:uppercase" /></div>
-            <div class="form-group"><label>Decimals</label><input id="cedit-dec-${c.id}" type="number" value="${c.decimals || ''}" /></div>
-          </div>
-          <div class="form-row">
-            <div class="form-group"><label>Label</label><input id="cedit-lbl-${c.id}" value="${c.label || ''}" /></div>
-            <div class="form-group"><label>${methodsLabel}</label><input id="cedit-methods-${c.id}" value="${c.allowed_methods || ''}" /></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.4rem;">
-            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;cursor:pointer">
-              <input id="cedit-auto-${c.id}" type="checkbox" ${c.auto_approve ? 'checked' : ''} style="width:auto;padding:0;margin:0" /> Auto Approve
-            </label>
-            <button class="btn btn-primary btn-sm" onclick="saveEditContract('${walletId}',${c.id})">Save</button>
-            <button class="btn btn-ghost btn-sm" onclick="toggleEditContract('${walletId}',${c.id})">Cancel</button>
-          </div>
-        </div>`;
+        `;
       }).join('')
     : `<div class="empty-state" style="padding:1rem">${emptyMsg}</div>`;
 
-  el.innerHTML += addContractForm(walletId);
+  el.innerHTML += `<p class="note" style="margin-top:0.75rem">Whitelist changes are managed through your AI agent. The agent will submit proposals for your approval.</p>`;
 }
 
 function addContractForm(walletId) {
@@ -2806,6 +2815,9 @@ async function loadAuditLogs(page) {
     const d = new Date(log.created_at);
     const ts = d.toLocaleDateString([], {month:'short', day:'numeric'})
              + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const apiKeyLabelBadge = (log.auth_mode === 'apikey' && log.api_key_label)
+      ? '<span class="badge badge-blue" style="font-size:0.62rem">key: ' + log.api_key_label.replace(/</g, '&lt;') + '</span>'
+      : '';
     const authBadge = log.auth_mode === 'passkey'
       ? '<span class="badge badge-purple" style="font-size:0.62rem">passkey</span>'
       : log.auth_mode === 'apikey'
@@ -2824,7 +2836,7 @@ async function loadAuditLogs(page) {
             </div>
           </div>
           <div style="display:flex;gap:0.35rem;flex-wrap:wrap;${summary ? 'margin-bottom:0.3rem' : ''}">
-            ${statusBadge}${authBadge}
+            ${statusBadge}${authBadge}${apiKeyLabelBadge}
           </div>
           ${summary ? `<div style="font-size:0.75rem;color:#94a3b8;word-break:break-all;line-height:1.5">${summary}</div>` : ''}
         </div>

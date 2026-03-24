@@ -36,7 +36,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 ### Authentication and Authorization
 
 - **Dual auth model:**
-  - **API Keys** (`ocw_` prefix) -- for AI agent and programmatic automation
+  - **API Keys** (`ocw_` prefix) -- up to 10 per user with optional labels, for AI agent and programmatic automation
   - **Passkey sessions** (`ps_` prefix) -- for sensitive operations requiring human presence
 - **Passkey (WebAuthn)** hardware approval for high-value transactions and destructive operations
 - **Auto-approve mode** -- trusted contracts can be flagged so API keys execute without Passkey, except for high-risk methods
@@ -48,7 +48,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 ### Infrastructure
 
 - **Structured logging** (slog, JSON format)
-- **Audit logging** for all wallet operations
+- **Audit logging** for all wallet operations with API key label tracking
 - **Graceful shutdown** with configurable timeout
 - **SQLite with WAL mode** for concurrent read performance
 - **Built-in web UI** for account management and transaction approval
@@ -165,9 +165,9 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | POST | `/api/auth/invite` | Passkey | Generate an invite link |
 | DELETE | `/api/auth/session` | Passkey | Logout (revoke current session) |
 | DELETE | `/api/auth/account` | Passkey | Delete account and all keys |
-| POST | `/api/auth/apikey/generate` | Passkey | Generate a new API key |
-| GET | `/api/auth/apikey/list` | Passkey | List API key metadata |
-| DELETE | `/api/auth/apikey` | Passkey | Revoke an API key |
+| POST | `/api/auth/apikey/generate` | Passkey | Generate a new API key (max 10, optional label) |
+| GET | `/api/auth/apikey/list` | Passkey | List all API keys (id, prefix, label, created_at) |
+| DELETE | `/api/auth/apikey` | Passkey | Revoke an API key by prefix |
 
 ### Custom Chains
 
@@ -290,7 +290,8 @@ handler/
   helpers.go             Shared handler utilities
   response.go            Standardized JSON response helpers
 model/
-  user.go                User and API key models
+  user.go                User model
+  apikey.go              APIKey model (multi-key per user, max 10)
   wallet.go              Wallet, CustomChain models and chain config loader
   contract.go            AllowedContract model (whitelist + method restrictions)
   policy.go              ApprovalPolicy and ApprovalRequest models

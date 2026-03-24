@@ -124,29 +124,29 @@ func AuthMiddleware(db *gorm.DB, sessions *SessionStore) gin.HandlerFunc {
 		}
 
 		// API Key auth (ocw_... prefix)
-		// Look up user by prefix, then verify hash with per-key salt.
 		prefix := ""
 		if len(token) >= 12 {
 			prefix = token[:12]
 		}
-		var user model.User
-		if prefix == "" || db.Where("api_prefix = ?", prefix).First(&user).Error != nil || user.APIKeySalt == nil || user.APIKeyHash == nil {
+		var apiKey model.APIKey
+		if prefix == "" || db.Where("prefix = ?", prefix).First(&apiKey).Error != nil {
 			safePrefix := "****"
 			if len(token) >= 12 {
-				safePrefix = token[:4] + "****" // shows "ocw_****" for ocw_ keys
+				safePrefix = token[:4] + "****"
 			}
 			slog.Warn("invalid API key", "prefix", safePrefix, "method", c.Request.Method, "path", c.Request.URL.Path, "ip", c.ClientIP())
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 			return
 		}
-		if hashAPIKeyWithSalt(token, *user.APIKeySalt) != *user.APIKeyHash {
+		if hashAPIKeyWithSalt(token, apiKey.KeySalt) != apiKey.KeyHash {
 			safePrefix := token[:4] + "****"
 			slog.Warn("invalid API key", "prefix", safePrefix, "method", c.Request.Method, "path", c.Request.URL.Path, "ip", c.ClientIP())
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 			return
 		}
-		c.Set("userID", user.ID)
+		c.Set("userID", apiKey.UserID)
 		c.Set("authMode", "apikey")
+		c.Set("apiKeyLabel", apiKey.Label)
 		c.Next()
 	}
 }
