@@ -73,9 +73,13 @@ func main() {
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
-	// Drop the old single-column unique index on wallet_id (superseded by composite idx_wallet_currency).
-	// GORM AutoMigrate adds new indexes but never removes old ones, so we do it explicitly.
-	db.Exec("DROP INDEX IF EXISTS idx_approval_policies_wallet_id")
+	// Migration: drop the old approval_policies table (had per-currency composite index)
+	// and let AutoMigrate recreate it with the new USD-based schema (single wallet_id unique).
+	// Safe in early-stage product; existing policies are discarded.
+	db.Exec("DROP TABLE IF EXISTS approval_policies")
+	if err := db.AutoMigrate(&model.ApprovalPolicy{}); err != nil {
+		log.Fatalf("re-migrate approval_policies: %v", err)
+	}
 
 	// Merge persisted custom chains into the registry now that the DB is ready.
 	model.LoadCustomChains(db)
@@ -93,6 +97,9 @@ func main() {
 
 	sessions := handler.NewSessionStore()
 	defer sessions.Stop()
+
+	// Price service for USD threshold conversion.
+	priceService := handler.NewPriceService(10 * time.Second)
 
 	// Router.
 	gin.SetMode(gin.ReleaseMode)
@@ -139,6 +146,11 @@ func main() {
 			list = append(list, cfg)
 		}
 		c.JSON(200, gin.H{"success": true, "chains": list})
+	})
+
+	// USD prices (public) — used by frontend to display reference prices.
+	r.GET("/api/prices", func(c *gin.Context) {
+		c.JSON(200, gin.H{"success": true, "prices": priceService.GetAllPrices()})
 	})
 
 	// Auth handlers (public: login + registration flows only).
@@ -294,16 +306,19 @@ func main() {
 
 	// Wallet routes (API Key or Passkey).
 	walletH := handler.NewWalletHandler(db, sdkClient, baseURL, approvalExpiry)
+	walletH.SetPriceService(priceService)
 	walletH.SetMaxWallets(maxWalletsPerUser)
 	walletH.SetIdempotencyStore(idempotencyStore)
 	auth.POST("/wallets", handler.UserRateLimitMiddleware(walletRateLimiter), walletH.CreateWallet)
 	auth.GET("/wallets", walletH.ListWallets)
 	auth.GET("/wallets/:id", walletH.GetWallet)
+	auth.PATCH("/wallets/:id", walletH.RenameWallet)         // rename: API Key or Passkey
 	passkeyOnly.DELETE("/wallets/:id", walletH.DeleteWallet) // irreversible: Passkey only
 	auth.POST("/wallets/:id/sign", walletH.Sign)
 
 	// General contract call (API Key or Passkey, with security layers).
 	contractCallH := handler.NewContractCallHandler(db, sdkClient, baseURL, approvalExpiry)
+	contractCallH.SetPriceService(priceService)
 	auth.POST("/wallets/:id/contract-call", contractCallH.ContractCall)
 	auth.POST("/wallets/:id/approve-token", contractCallH.ApproveToken)
 	auth.POST("/wallets/:id/revoke-approval", contractCallH.RevokeApproval)
@@ -327,6 +342,7 @@ func main() {
 
 	// Approval routes.
 	approvalH := handler.NewApprovalHandler(db, sdkClient)
+	approvalH.SetPriceService(priceService)
 	auth.GET("/approvals/pending", approvalH.ListPending)
 	auth.GET("/approvals/:id", approvalH.GetApproval)
 

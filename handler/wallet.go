@@ -36,6 +36,7 @@ type WalletHandler struct {
 	approvalExpiry time.Duration
 	maxWallets     int
 	idempotency    *IdempotencyStore
+	prices         *PriceService
 }
 
 func NewWalletHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, approvalExpiry ...time.Duration) *WalletHandler {
@@ -48,6 +49,9 @@ func NewWalletHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, approv
 
 // SetMaxWallets sets the maximum number of wallets a user can create.
 func (h *WalletHandler) SetMaxWallets(n int) { h.maxWallets = n }
+
+// SetPriceService sets the USD price service used for threshold conversion.
+func (h *WalletHandler) SetPriceService(ps *PriceService) { h.prices = ps }
 
 // CreateWallet creates a new TEE-backed wallet on the specified chain.
 // POST /api/wallets
@@ -168,6 +172,37 @@ func (h *WalletHandler) GetWallet(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "wallet": wallet})
 }
 
+// RenameWallet updates the label of a wallet.
+// PATCH /api/wallets/:id
+func (h *WalletHandler) RenameWallet(c *gin.Context) {
+	wallet, ok := loadUserWallet(c, h.db)
+	if !ok {
+		return
+	}
+	var req struct {
+		Label string `json:"label" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonError(c, http.StatusBadRequest, "label is required")
+		return
+	}
+	label := strings.TrimSpace(req.Label)
+	if label == "" {
+		jsonError(c, http.StatusBadRequest, "label must not be empty")
+		return
+	}
+	if len(label) > 100 {
+		jsonError(c, http.StatusBadRequest, "label must be at most 100 characters")
+		return
+	}
+	if err := h.db.Model(&wallet).Update("label", label).Error; err != nil {
+		jsonError(c, http.StatusInternalServerError, "update failed")
+		return
+	}
+	wallet.Label = label
+	c.JSON(http.StatusOK, gin.H{"success": true, "wallet": wallet})
+}
+
 // DeleteWallet deletes a wallet record.
 // DELETE /api/wallets/:id
 func (h *WalletHandler) DeleteWallet(c *gin.Context) {
@@ -243,15 +278,13 @@ func (h *WalletHandler) Sign(c *gin.Context) {
 		return
 	}
 
-	// Check approval policy (per currency derived from tx_context).
+	// Check USD approval policy (amount × price vs threshold_usd).
 	if req.TxContext != nil {
 		amount, txCurrency := extractAmountCurrency(req.TxContext)
 		if txCurrency != "" {
 			var policy model.ApprovalPolicy
-			policyFound := h.db.Where("wallet_id = ? AND currency = ? AND enabled = ?", wallet.ID, txCurrency, true).First(&policy).Error == nil
-			if policyFound && exceedsThreshold(amount, policy.ThresholdAmount) {
-				// Create an approval request; signing deferred until human approves.
-				// txParams is empty: /sign callers handle their own broadcast after receiving the signature.
+			policyFound := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil
+			if policyFound && h.exceedsUSDThreshold(amount, txCurrency, policy.ThresholdUSD) {
 				h.createApprovalRequest(c, wallet, req, msgBytes, &policy, "")
 				return
 			}
@@ -279,7 +312,7 @@ func (h *WalletHandler) Sign(c *gin.Context) {
 	})
 }
 
-// SetPolicy upserts an approval policy for a wallet+currency pair.
+// SetPolicy upserts the USD-denominated approval policy for a wallet.
 // PUT /api/wallets/:id/policy
 func (h *WalletHandler) SetPolicy(c *gin.Context) {
 	wallet, ok := loadUserWallet(c, h.db)
@@ -287,12 +320,11 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 		return
 	}
 	var req struct {
-		LoginSessionID  uint64      `json:"login_session_id"`
-		Credential      interface{} `json:"credential"`
-		ThresholdAmount string      `json:"threshold_amount" binding:"required"`
-		Currency        string      `json:"currency"         binding:"required"`
-		Enabled         *bool       `json:"enabled"`
-		DailyLimit      string      `json:"daily_limit"` // optional: max total spend per UTC day
+		LoginSessionID uint64      `json:"login_session_id"`
+		Credential     interface{} `json:"credential"`
+		ThresholdUSD   string      `json:"threshold_usd" binding:"required"`
+		DailyLimitUSD  string      `json:"daily_limit_usd"`
+		Enabled        *bool       `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		jsonError(c, http.StatusBadRequest, err.Error())
@@ -302,37 +334,33 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	t, ok3 := new(big.Float).SetString(req.ThresholdAmount)
+	t, ok3 := new(big.Float).SetString(req.ThresholdUSD)
 	if !ok3 || t.Sign() <= 0 {
-		jsonError(c, http.StatusBadRequest, "threshold_amount must be a positive number")
+		jsonError(c, http.StatusBadRequest, "threshold_usd must be a positive number")
 		return
 	}
-	if req.DailyLimit != "" {
-		dl, ok4 := new(big.Float).SetString(req.DailyLimit)
+	if req.DailyLimitUSD != "" {
+		dl, ok4 := new(big.Float).SetString(req.DailyLimitUSD)
 		if !ok4 || dl.Sign() <= 0 {
-			jsonError(c, http.StatusBadRequest, "daily_limit must be a positive number")
+			jsonError(c, http.StatusBadRequest, "daily_limit_usd must be a positive number")
 			return
 		}
 	}
 
-	currency := strings.ToUpper(strings.TrimSpace(req.Currency))
-
 	// API key requests create a pending approval instead of applying directly.
-	// Passkey sessions apply immediately (the human is already authenticated).
 	if !isPasskeyAuth(c) {
 		proposed := model.ApprovalPolicy{
-			WalletID:        wallet.ID,
-			Currency:        currency,
-			ThresholdAmount: req.ThresholdAmount,
-			Enabled:         enabled,
-			DailyLimit:      req.DailyLimit,
+			WalletID:      wallet.ID,
+			ThresholdUSD:  req.ThresholdUSD,
+			Enabled:       enabled,
+			DailyLimitUSD: req.DailyLimitUSD,
 		}
 		approval, created := createPendingApproval(h.db, c, wallet.ID, "policy_change", proposed, h.approvalExpiry)
 		if !created {
 			return
 		}
 		writeAuditCtx(h.db, c, "policy_update", "pending", &wallet.ID, map[string]interface{}{
-			"currency": currency, "threshold": req.ThresholdAmount, "approval_id": approval.ID,
+			"threshold_usd": req.ThresholdUSD, "approval_id": approval.ID,
 		})
 		c.JSON(http.StatusAccepted, gin.H{
 			"success":     true,
@@ -349,45 +377,40 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 	}
 
 	var policy model.ApprovalPolicy
-	if h.db.Where("wallet_id = ? AND currency = ?", wallet.ID, currency).First(&policy).Error != nil {
-		policy = model.ApprovalPolicy{WalletID: wallet.ID, Currency: currency}
+	if h.db.Where("wallet_id = ?", wallet.ID).First(&policy).Error != nil {
+		policy = model.ApprovalPolicy{WalletID: wallet.ID}
 	}
-	policy.ThresholdAmount = req.ThresholdAmount
+	policy.ThresholdUSD = req.ThresholdUSD
 	policy.Enabled = enabled
-	policy.DailyLimit = req.DailyLimit
+	policy.DailyLimitUSD = req.DailyLimitUSD
 
 	if err := h.db.Save(&policy).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "save policy failed")
 		return
 	}
 	writeAuditCtx(h.db, c, "policy_update", "success", &wallet.ID, map[string]interface{}{
-		"currency": currency, "threshold": req.ThresholdAmount, "daily_limit": req.DailyLimit,
+		"threshold_usd": req.ThresholdUSD, "daily_limit_usd": req.DailyLimitUSD,
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true, "policy": policy})
 }
 
-// GetPolicy returns all approval policies for a wallet.
+// GetPolicy returns the USD approval policy for a wallet (one per wallet).
 // GET /api/wallets/:id/policy
-// Optional query param ?currency=ETH to filter to a single policy.
 func (h *WalletHandler) GetPolicy(c *gin.Context) {
 	wallet, ok := loadUserWallet(c, h.db)
 	if !ok {
 		return
 	}
-	q := h.db.Where("wallet_id = ?", wallet.ID)
-	if currency := strings.ToUpper(strings.TrimSpace(c.Query("currency"))); currency != "" {
-		q = q.Where("currency = ?", currency)
-	}
-	var policies []model.ApprovalPolicy
-	if err := q.Order("currency").Find(&policies).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "db error")
+	var policy model.ApprovalPolicy
+	if err := h.db.Where("wallet_id = ?", wallet.ID).First(&policy).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": true, "policy": nil})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "policies": policies})
+	c.JSON(http.StatusOK, gin.H{"success": true, "policy": policy})
 }
 
-// DeletePolicy deletes the approval policy for a specific currency (Passkey only).
-// DELETE /api/wallets/:id/policy?currency=ETH
+// DeletePolicy deletes the approval policy for a wallet (Passkey only).
+// DELETE /api/wallets/:id/policy
 func (h *WalletHandler) DeletePolicy(c *gin.Context) {
 	if !verifyFreshPasskey(h.sdk, c) {
 		return
@@ -396,12 +419,7 @@ func (h *WalletHandler) DeletePolicy(c *gin.Context) {
 	if !ok {
 		return
 	}
-	currency := strings.ToUpper(strings.TrimSpace(c.Query("currency")))
-	if currency == "" {
-		jsonError(c, http.StatusBadRequest, "currency query param is required")
-		return
-	}
-	result := h.db.Where("wallet_id = ? AND currency = ?", wallet.ID, currency).Delete(&model.ApprovalPolicy{})
+	result := h.db.Where("wallet_id = ?", wallet.ID).Delete(&model.ApprovalPolicy{})
 	if result.Error != nil {
 		jsonError(c, http.StatusInternalServerError, "delete failed")
 		return
@@ -411,7 +429,7 @@ func (h *WalletHandler) DeletePolicy(c *gin.Context) {
 		return
 	}
 	writeAuditCtx(h.db, c, "policy_update", "success", &wallet.ID, map[string]interface{}{
-		"currency": currency, "action": "delete",
+		"action": "delete",
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
@@ -461,8 +479,7 @@ func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Walle
 		"approval_id":  approval.ID,
 		"message":      msg,
 		"tx_context":   req.TxContext,
-		"threshold":    policy.ThresholdAmount,
-		"currency":     policy.Currency,
+		"threshold_usd": policy.ThresholdUSD,
 		"approval_url": approvalURL,
 	})
 }
@@ -675,27 +692,44 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		txContext["contract"] = tokenContractAddr
 	}
 
-	// Load the per-currency approval policy (if any).
+	// Load the wallet's USD approval policy (if any).
 	var policy model.ApprovalPolicy
-	policyFound := h.db.Where("wallet_id = ? AND currency = ? AND enabled = ?", wallet.ID, currency, true).First(&policy).Error == nil
+	policyFound := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil
 
-	// Check daily spend limit atomically (hard block — no approval path for this).
-	if policyFound && policy.DailyLimit != "" {
-		exceeded, msg, err := checkAndDeductDailyLimit(h.db, wallet.ID, currency, req.Amount)
+	// Convert amount to USD for threshold/limit checks.
+	var amountUSD float64
+	if policyFound {
+		if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
+			if a, ok := new(big.Float).SetString(req.Amount); ok {
+				f, _ := a.Float64()
+				amountUSD = f * usdPrice
+			}
+		}
+	}
+
+	// Check daily spend limit in USD atomically (pre-deduct, rollback on failure).
+	var deductedUSDStr string // non-empty if we pre-deducted
+	if policyFound && policy.DailyLimitUSD != "" && amountUSD > 0 {
+		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 2)
+		exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
 		if err != nil {
 			slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
 			jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
 			return
 		}
 		if exceeded {
+			deductedUSDStr = "" // nothing was deducted
 			jsonError(c, http.StatusBadRequest, msg)
 			return
 		}
 	}
 
-	// Check single-transaction approval threshold.
-	if policyFound && exceedsThreshold(req.Amount, policy.ThresholdAmount) {
-		// Create approval request — TxParams is stored so the approval handler can broadcast after signing.
+	// Check single-transaction USD approval threshold.
+	if policyFound && amountUSD > 0 && exceedsUSDThreshold(amountUSD, policy.ThresholdUSD) {
+		// Approval path: rollback pre-deduction — addDailySpentUSD will add it back on approve+broadcast.
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		signReq := SignRequest{
 			Message:   hex.EncodeToString(signingMsg),
 			Encoding:  "hex",
@@ -708,6 +742,9 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 	// Direct path: sign via TEE.
 	result, err := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
 	if err != nil || !result.Success {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		errMsg := "signing failed"
 		if err != nil {
 			errMsg = err.Error()
@@ -722,6 +759,9 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 	// Assemble and broadcast.
 	txHash, err := broadcastSigned(wallet, txParamsJSON, result.Signature)
 	if err != nil {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		respondBroadcastError(c, err)
 		return
 	}
@@ -965,13 +1005,31 @@ func extractAmountCurrency(txCtx map[string]interface{}) (string, string) {
 	return amount, strings.ToUpper(currency)
 }
 
-func exceedsThreshold(amount, threshold string) bool {
-	a, ok1 := new(big.Float).SetString(amount)
-	t, ok2 := new(big.Float).SetString(threshold)
-	if !ok1 || !ok2 {
+// exceedsUSDThreshold checks if amountUSD (float64) exceeds a USD threshold string.
+func exceedsUSDThreshold(amountUSD float64, thresholdUSD string) bool {
+	t, ok := new(big.Float).SetString(thresholdUSD)
+	if !ok || t.Sign() <= 0 {
 		return false
 	}
+	a := new(big.Float).SetFloat64(amountUSD)
 	return a.Cmp(t) > 0
+}
+
+// exceedsUSDThreshold on handler converts amount+currency to USD and checks threshold.
+func (h *WalletHandler) exceedsUSDThreshold(amount, currency, thresholdUSD string) bool {
+	if h.prices == nil {
+		return false
+	}
+	usdPrice, err := h.prices.GetUSDPrice(currency)
+	if err != nil || usdPrice <= 0 {
+		return false
+	}
+	a, ok := new(big.Float).SetString(amount)
+	if !ok || a.Sign() <= 0 {
+		return false
+	}
+	f, _ := a.Float64()
+	return exceedsUSDThreshold(f*usdPrice, thresholdUSD)
 }
 
 // respondBroadcastError returns 400 when the chain rejected the tx (user/input error)
@@ -986,36 +1044,33 @@ func respondBroadcastError(c *gin.Context, err error) {
 	jsonError(c, http.StatusBadGateway, "broadcast failed: "+msg)
 }
 
-// checkAndDeductDailyLimit atomically checks whether adding `amount` would exceed
-// the wallet's daily spend limit, and if not, deducts it from the remaining allowance.
-// Uses a per-wallet mutex to prevent TOCTOU races where concurrent requests could
-// both pass the limit check independently.
+// checkAndDeductDailyLimitUSD atomically checks whether adding amountUSD would exceed
+// the wallet's daily USD spend limit. Uses a per-wallet mutex to prevent TOCTOU races.
 // Returns (exceeded, message, error).
-func checkAndDeductDailyLimit(db *gorm.DB, walletID string, currency string, amount string) (bool, string, error) {
+func checkAndDeductDailyLimitUSD(db *gorm.DB, walletID string, amountUSD string) (bool, string, error) {
 	mu := getWalletMutex(walletID)
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Re-read the policy from DB under the lock to get the latest spent counter.
 	var policy model.ApprovalPolicy
-	if err := db.Where("wallet_id = ? AND currency = ? AND enabled = ?", walletID, currency, true).First(&policy).Error; err != nil {
-		return false, "", nil // no policy — not exceeded
+	if err := db.Where("wallet_id = ? AND enabled = ?", walletID, true).First(&policy).Error; err != nil {
+		return false, "", nil
 	}
-	if policy.DailyLimit == "" {
+	if policy.DailyLimitUSD == "" {
 		return false, "", nil
 	}
 
-	dailyLimit, ok := new(big.Float).SetString(policy.DailyLimit)
+	dailyLimit, ok := new(big.Float).SetString(policy.DailyLimitUSD)
 	if !ok || dailyLimit.Sign() <= 0 {
 		return false, "", nil
 	}
-	amountF, ok2 := new(big.Float).SetString(amount)
+	amountF, ok2 := new(big.Float).SetString(amountUSD)
 	if !ok2 || amountF.Sign() <= 0 {
 		return false, "", nil
 	}
 
 	startOfDay := utcStartOfDay()
-	currentSpent := policy.DailySpent
+	currentSpent := policy.DailySpentUSD
 	resetAt := policy.DailyResetAt
 	if resetAt.Before(startOfDay) {
 		currentSpent = "0"
@@ -1029,43 +1084,72 @@ func checkAndDeductDailyLimit(db *gorm.DB, walletID string, currency string, amo
 	newSpent := new(big.Float).Add(spent, amountF)
 	if newSpent.Cmp(dailyLimit) > 0 {
 		return true, fmt.Sprintf(
-			"daily spend limit exceeded: limit %s %s, already spent %s %s today",
-			policy.DailyLimit, policy.Currency, currentSpent, policy.Currency,
+			"daily spend limit exceeded: limit $%s USD, already spent $%s USD today",
+			policy.DailyLimitUSD, currentSpent,
 		), nil
 	}
 
-	// Deduct: persist the updated counter while still holding the lock.
 	if err := db.Model(&policy).Updates(map[string]interface{}{
-		"daily_spent":    newSpent.Text('f', -1),
-		"daily_reset_at": resetAt,
+		"daily_spent_usd": newSpent.Text('f', 2),
+		"daily_reset_at":  resetAt,
 	}).Error; err != nil {
 		return false, "", fmt.Errorf("failed to update daily spent: %w", err)
 	}
 	return false, "", nil
 }
 
-// addDailySpent increments the daily spend counter on the policy after a successful broadcast.
-// Uses the per-wallet mutex to stay consistent with checkAndDeductDailyLimit.
-// Resets the counter first if a new UTC day has started. Silently ignores DB errors.
-func addDailySpent(db *gorm.DB, policy *model.ApprovalPolicy, amount string) {
-	amountF, ok := new(big.Float).SetString(amount)
+// releaseDailySpentUSD rolls back a prior pre-deduction when signing or broadcast fails.
+// Uses the per-wallet mutex to stay consistent with checkAndDeductDailyLimitUSD.
+func releaseDailySpentUSD(db *gorm.DB, walletID string, amountUSD string) {
+	amountF, ok := new(big.Float).SetString(amountUSD)
 	if !ok || amountF.Sign() <= 0 {
 		return
 	}
 
-	mu := getWalletMutex(policy.WalletID)
+	mu := getWalletMutex(walletID)
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Re-read policy under lock for fresh DailySpent value.
-	var fresh model.ApprovalPolicy
-	if db.First(&fresh, policy.ID).Error != nil {
+	var policy model.ApprovalPolicy
+	if db.Where("wallet_id = ? AND enabled = ?", walletID, true).First(&policy).Error != nil {
 		return
 	}
 
 	startOfDay := utcStartOfDay()
-	currentSpent := fresh.DailySpent
-	resetAt := fresh.DailyResetAt
+	currentSpent := policy.DailySpentUSD
+	if policy.DailyResetAt.Before(startOfDay) {
+		return // already reset for a new day, nothing to release
+	}
+	spent, _ := new(big.Float).SetString(currentSpent)
+	if spent == nil {
+		return
+	}
+	newSpent := new(big.Float).Sub(spent, amountF)
+	if newSpent.Sign() < 0 {
+		newSpent = new(big.Float)
+	}
+	db.Model(&policy).Update("daily_spent_usd", newSpent.Text('f', 2))
+}
+
+// addDailySpentUSD increments the daily USD spend counter after a successful broadcast.
+func addDailySpentUSD(db *gorm.DB, walletID string, amountUSD string) {
+	amountF, ok := new(big.Float).SetString(amountUSD)
+	if !ok || amountF.Sign() <= 0 {
+		return
+	}
+
+	mu := getWalletMutex(walletID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	var policy model.ApprovalPolicy
+	if db.Where("wallet_id = ? AND enabled = ?", walletID, true).First(&policy).Error != nil {
+		return
+	}
+
+	startOfDay := utcStartOfDay()
+	currentSpent := policy.DailySpentUSD
+	resetAt := policy.DailyResetAt
 	if resetAt.Before(startOfDay) {
 		currentSpent = "0"
 		resetAt = startOfDay
@@ -1075,9 +1159,9 @@ func addDailySpent(db *gorm.DB, policy *model.ApprovalPolicy, amount string) {
 		spent = new(big.Float)
 	}
 	newSpent := new(big.Float).Add(spent, amountF)
-	db.Model(&fresh).Updates(map[string]interface{}{
-		"daily_spent":    newSpent.Text('f', -1),
-		"daily_reset_at": resetAt,
+	db.Model(&policy).Updates(map[string]interface{}{
+		"daily_spent_usd": newSpent.Text('f', 2),
+		"daily_reset_at":  resetAt,
 	})
 }
 

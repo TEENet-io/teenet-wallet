@@ -351,9 +351,12 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
     "func_sig": "<function signature, e.g. transfer(address,uint256)>",
     "args": ["<arg1>", "<arg2>"],
     "value": "<optional: ETH to send, e.g. 0.1>",
+    "amount_usd": "<optional: USD value of this call for threshold/daily-limit, e.g. 150.00>",
     "memo": "<optional>"
   }'
 ```
+
+**`amount_usd` field:** When the contract call involves transferring value (e.g. a DeFi swap, token transfer via contract), report the approximate USD value so the wallet can enforce threshold and daily limit policies. If `value` (native ETH) is also present, the wallet uses whichever is larger. If omitted and no `value` is sent, threshold/daily-limit checks are skipped for this call.
 
 **Function signature format:** Use Solidity-style signatures like `transfer(address,uint256)`, `approve(address,uint256)`, `balanceOf(address)`.
 
@@ -371,6 +374,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
       {"pubkey": "<account2_base58>", "is_signer": false, "is_writable": false}
     ],
     "data": "<hex-encoded instruction data>",
+    "amount_usd": "<optional: USD value for threshold/daily-limit>",
     "memo": "<optional>"
   }'
 ```
@@ -617,25 +621,26 @@ Public Sepolia fallbacks: `https://ethereum-sepolia-rpc.publicnode.com`, `https:
 
 ### 10. Set Approval Policy
 
-Each wallet can have one policy **per currency** (ETH, USDC, SOL, etc.).
+Each wallet has a single USD-denominated approval policy. Token amounts are converted to USD at request time using real-time prices (ETH/SOL via CoinGecko, stablecoins pegged to $1). You can check current prices via `GET /api/prices`.
 
 ```bash
 curl -s -X PUT "${TEE_WALLET_API_URL}/api/wallets/<id>/policy" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "threshold_amount": "<amount>",
-    "currency": "<ETH|USDC|SOL|…>",
+    "threshold_usd": "<USD amount, e.g. 100>",
     "enabled": true,
-    "daily_limit": "<optional: max total spend per UTC day>"
+    "daily_limit_usd": "<optional: max USD spend per UTC day, e.g. 5000>"
   }'
 ```
 
-- `threshold_amount`: single transaction above this amount requires Passkey approval
-- `daily_limit` (optional): cumulative spend per UTC calendar day; if this would be exceeded the transfer is **hard-blocked** (no approval path)
-- Run the command once per currency to configure each policy independently
+- `threshold_usd`: single transaction above this USD value requires Passkey approval
+- `daily_limit_usd` (optional): cumulative USD spend per UTC calendar day; if exceeded the transfer is **hard-blocked** (no approval path)
+- One policy per wallet — covers all currencies (ETH, SOL, tokens)
 
-Ask user for the threshold amount if not specified. If they also want a daily cap, ask for `daily_limit`.
+For contract calls, include `amount_usd` in the request body so the wallet can enforce threshold/daily-limit (see Section 7.2).
+
+Ask user for the threshold amount if not specified. If they also want a daily cap, ask for `daily_limit_usd`.
 
 **When called with an API key**, the policy change is **not applied immediately** — it creates a pending approval request (HTTP 202) that the wallet owner must approve via Passkey:
 
@@ -645,14 +650,14 @@ Ask user for the threshold amount if not specified. If they also want a daily ca
 
 After receiving a 202 response, tell the user:
 > 🔐 **Policy change submitted** (Approval ID: {approval_id})
-> **Currency:** {currency} · **New threshold:** {threshold_amount} {currency}
-> **Daily limit:** {daily_limit or "—"}
+> **Threshold:** ${threshold_usd} USD
+> **Daily limit:** ${daily_limit_usd or "—"} USD
 >
 > The wallet owner must approve this change via the Web UI before it takes effect.
 > [**→ Approve Policy Change**]({TEE_WALLET_API_URL}/#/approve/{approval_id})
 
 Then poll `GET /api/approvals/{approval_id}` every 15 seconds until `status` is `approved` or `rejected`:
-- `approved` → "✅ Policy applied. Transfers above {threshold} {currency} now require Passkey approval."
+- `approved` → "✅ Policy applied. Transactions above ${threshold_usd} USD now require Passkey approval."
 - `rejected` → "🚫 Policy change rejected. No changes were made."
 
 **When called with a Passkey session** (Web UI), the policy is applied immediately and returns HTTP 200.
@@ -687,8 +692,8 @@ For transfer/sign:
 
 For policy change:
 > 🔐 **Policy change pending approval** (ID: {approval_id})
-> **Currency:** {currency} · **New threshold:** {threshold_amount}
-> **Daily limit:** {daily_limit or "—"}
+> **Threshold:** ${threshold_usd} USD
+> **Daily limit:** ${daily_limit_usd or "—"} USD
 > [**→ Approve with Passkey**]({TEE_WALLET_API_URL}/#/approve/{approval_id})
 
 **2. Poll every 15 seconds** until resolved or 25 minutes elapsed:
@@ -708,7 +713,7 @@ Transfer / sign (`approval_type` is `"transfer"` or `"sign"`):
 - `"status":"approved"` without `tx_hash` → show signature (sign-only requests)
 
 Policy change (`approval_type` is `"policy_change"`):
-- `"status":"approved"` → "✅ Policy applied. {currency} transfers above {threshold} now require Passkey approval."
+- `"status":"approved"` → "✅ Policy applied. Transactions above ${threshold_usd} USD now require Passkey approval."
 
 Contract call (`approval_type` is `"contract_call"`):
 - `"status":"approved"` with `"tx_hash"` → show success + explorer link
@@ -777,7 +782,7 @@ Map common API errors to user-friendly messages:
 | Error contains | User-facing message |
 |---|---|
 | `insufficient funds` | ❌ Insufficient ETH balance. Check your balance (including ~0.0005 ETH for gas). |
-| `daily spend limit exceeded` | ❌ Daily {currency} spend limit reached. Limit resets at UTC midnight. |
+| `daily spend limit exceeded` | ❌ Daily USD spend limit reached. Limit resets at UTC midnight. |
 | `contract not whitelisted` | ❌ This token contract/program/mint isn't whitelisted. Request approval via API key (`POST /contracts`) or open Web UI → Wallets → Contracts tab → Add to Whitelist. |
 | `wallet is not ready` | ⏳ Wallet is still being created. Wait a moment and try again. |
 | `invalid API key` | ❌ Invalid API key. Check `TEE_WALLET_API_KEY` in your environment. |
@@ -803,7 +808,7 @@ Map common API errors to user-friendly messages:
 14. **Always include explorer link** after a successful transfer
 15. **Poll with countdown**: when waiting for approval, show remaining time on each poll update
 16. **Follow Smart Wallet Selection rules at all times**: refresh `/api/wallets` before account-wide views, never report balances for deleted wallets, hide raw wallet ids in normal UX, and interpret numeric references as list indices unless the user explicitly says `id=...` (see Smart Wallet Selection section for full details).
-17. **Policy changes via API key always need approval**: `PUT /policy` with an API key returns 202 and creates a pending approval — always follow the Approval Polling Flow (Section 12) and share the approval link with the wallet owner.
+17. **Policy changes via API key always need approval**: `PUT /policy` with an API key returns 202 and creates a pending approval — always follow the Approval Polling Flow (Section 12) and share the approval link with the wallet owner. Policies are USD-denominated — one per wallet, covering all currencies.
 18. **Contract whitelist proposals via API key**: `POST /contracts` with an API key returns 202 — follow the Approval Polling Flow (Section 12, `contract_add` type) and share the approval link. The passkey owner must approve before the contract can be used.
 19. **Approve/reject is hardware-protected**: each approve or reject action requires a fresh hardware Passkey assertion at that moment — a stolen session token alone cannot approve. The Web UI handles this automatically.
 20. **Audit log available**: users can check their operation history via `GET /api/audit/logs` (Section 13).
@@ -817,3 +822,5 @@ Map common API errors to user-friendly messages:
 28. **Wrap/Unwrap SOL**: use `/wrap-sol` (with `amount`) to convert native SOL to wSOL, and `/unwrap-sol` (no body params) to close the wSOL ATA and recover all SOL. Both endpoints follow the same approval/polling flow as transfers.
 29. **Solana explorer links**: use `https://solscan.io/tx/{hash}` for mainnet and `https://solscan.io/tx/{hash}?cluster=devnet` for devnet.
 30. **Dynamic chain list**: never hardcode chain names. Always call `GET /api/chains` to discover available chains (including user-added custom EVM chains). Custom chains have `"custom": true` in the response.
+31. **Report `amount_usd` on contract calls**: when calling `/contract-call` for operations that transfer value (swaps, DeFi deposits, token transfers via contract), always include `"amount_usd"` with the approximate USD value. This enables the wallet's threshold and daily-limit policies. For read-only or config-only calls (no value transferred), omit it.
+32. **USD prices**: call `GET /api/prices` to get current ETH/SOL/stablecoin USD prices. Use these to compute `amount_usd` when reporting contract call values.

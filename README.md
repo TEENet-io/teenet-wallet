@@ -8,7 +8,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 
 ### Wallet and Blockchain
 
-- **Multi-chain support** -- Ethereum, Solana, and all EVM-compatible chains (Sepolia, Holesky, BSC, Optimism, Base Sepolia, and any custom chain via `chains.json`)
+- **Multi-chain support** -- Ethereum, Solana, and all EVM-compatible chains (Sepolia, Holesky, BSC, Optimism, Base Sepolia, and any custom chain via `chains.json` or the runtime API)
 - **ERC-20 token transfers** with contract whitelist security
 - **SPL token transfers** with automatic ATA (Associated Token Account) creation for recipients
 - **General smart contract interaction** via `contract-call` endpoint -- full ABI encoding on EVM, generic program calls on Solana
@@ -19,6 +19,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 - **Nonce manager** for concurrent EVM transaction safety
 - **Idempotent transfers** via `Idempotency-Key` header to prevent duplicates
 - **Native and token balance queries**
+- **Custom chain management** -- add or remove EVM chains at runtime via API (persisted in DB across restarts)
 
 ### Smart Contract Security (3-Layer Model)
 
@@ -29,8 +30,8 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 
 ### ABI Encoder
 
-- Full Solidity ABI encoding: `address`, `bool`, `uintN`, `intN`, `bytesN`, `bytes`, `string`, dynamic arrays, and tuples
-- Supports complex DeFi calls including Uniswap V3 `exactInputSingle` with tuple parameters
+- Full Solidity ABI encoding: `address`, `bool`, `uintN`, `intN`, `bytesN`, `bytes`, `string`, dynamic arrays, fixed-size arrays (`T[N]`), and tuples
+- Supports complex DeFi calls including Uniswap V3 `exactInputSingle` with tuple parameters and fixed-size array arguments
 
 ### Authentication and Authorization
 
@@ -39,7 +40,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
   - **Passkey sessions** (`ps_` prefix) -- for sensitive operations requiring human presence
 - **Passkey (WebAuthn)** hardware approval for high-value transactions and destructive operations
 - **Auto-approve mode** -- trusted contracts can be flagged so API keys execute without Passkey, except for high-risk methods
-- **Per-currency approval thresholds** with configurable daily spend limits
+- **USD-denominated approval thresholds** with configurable daily spend limits (ETH/SOL prices via CoinGecko, stablecoins pegged to $1)
 - **CSRF protection** via `X-CSRF-Token` header for Passkey sessions
 - **Rate limiting** -- per-API-key for general requests, per-IP for registration endpoints
 - **Invite-based and open registration** flows
@@ -137,7 +138,7 @@ All configuration is via environment variables:
 | `APPROVAL_EXPIRY_MINUTES` | `30` | Minutes before a pending approval expires |
 | `MAX_WALLETS_PER_USER` | `20` | Maximum wallets a single user can create |
 
-RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Override the file path with `CHAINS_FILE` if needed.
+RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Override the file path with `CHAINS_FILE` if needed. Additional EVM chains can also be added at runtime via the `POST /api/chains` endpoint (Passkey required); these are persisted in the database and survive restarts.
 
 ## API Reference
 
@@ -148,7 +149,8 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/health` | Health check (returns DB status) |
-| GET | `/api/chains` | List supported chains |
+| GET | `/api/chains` | List supported chains (built-in + custom) |
+| GET | `/api/prices` | Current USD prices for ETH, SOL, stablecoins |
 
 ### Authentication
 
@@ -167,6 +169,13 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | GET | `/api/auth/apikey/list` | Passkey | List API key metadata |
 | DELETE | `/api/auth/apikey` | Passkey | Revoke an API key |
 
+### Custom Chains
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/chains` | Passkey | Add a custom EVM chain (persisted across restarts) |
+| DELETE | `/api/chains/:name` | Passkey | Remove a custom chain (fails if wallets exist on it) |
+
 ### Wallets
 
 | Method | Endpoint | Auth | Description |
@@ -174,6 +183,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | POST | `/api/wallets` | Dual | Create a new wallet (rate-limited) |
 | GET | `/api/wallets` | Dual | List all wallets |
 | GET | `/api/wallets/:id` | Dual | Get wallet details |
+| PATCH | `/api/wallets/:id` | Dual | Rename a wallet (update label) |
 | DELETE | `/api/wallets/:id` | Passkey | Delete a wallet (irreversible) |
 | POST | `/api/wallets/:id/sign` | Dual | Sign an arbitrary message |
 | POST | `/api/wallets/:id/transfer` | Dual | Build, sign, and broadcast a transfer (native or token) |
@@ -195,7 +205,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (EVM: ABI-encoded; Solana: program instruction) |
+| POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (EVM: ABI-encoded; Solana: program instruction). Optional `amount_usd` field for threshold/daily-limit enforcement |
 | POST | `/api/wallets/:id/approve-token` | Dual | Approve ERC-20 token spending (always high-risk) |
 | POST | `/api/wallets/:id/revoke-approval` | Dual | Revoke ERC-20 token approval (always high-risk) |
 | POST | `/api/wallets/:id/call-read` | Dual | Read-only contract call (no signing, EVM only) |
@@ -204,8 +214,8 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/wallets/:id/policy` | Dual | Get current approval policy |
-| PUT | `/api/wallets/:id/policy` | Dual | Set policy (API key creates pending approval) |
+| GET | `/api/wallets/:id/policy` | Dual | Get USD approval policy (one per wallet) |
+| PUT | `/api/wallets/:id/policy` | Dual | Set USD policy: `threshold_usd`, `daily_limit_usd` (API key creates pending approval) |
 | DELETE | `/api/wallets/:id/policy` | Passkey | Remove approval policy |
 
 ### Approvals
@@ -232,7 +242,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 - **Auto-Approve Mode:** Trusted contracts can be flagged with `auto_approve: true`, allowing API keys to execute non-high-risk methods without Passkey confirmation.
 - **CSRF Protection:** All state-changing API requests from Passkey sessions require a `X-CSRF-Token` header.
 - **Rate Limiting:** Per-API-key and per-IP rate limits protect against abuse and prevent TEE DKG resource exhaustion.
-- **Daily Spend Limits:** Optional per-currency daily limits that hard-block transfers when exceeded.
+- **Daily Spend Limits:** Optional USD-denominated daily limits that hard-block transfers when exceeded. Uses pre-deduction with rollback on signing/broadcast failure (auth/capture pattern) to prevent phantom spend from failed transactions.
 - **Content Security Policy:** The web UI is served with a restrictive CSP header. Additional security headers include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: strict-origin-when-cross-origin`.
 
 ## Supported Chains
@@ -248,7 +258,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | Solana Mainnet | SOL | Schnorr | ed25519 | Solana |
 | Solana Devnet | SOL | Schnorr | ed25519 | Solana |
 
-Add or modify chains by editing `chains.json`. Any EVM-compatible chain can be added by providing a name, RPC URL, and currency.
+Add or modify chains by editing `chains.json`, or add custom EVM chains at runtime via `POST /api/chains` (persisted in the database). Any EVM-compatible chain can be added by providing a name, RPC URL, and currency.
 
 ## Development
 
@@ -276,23 +286,25 @@ handler/
   middleware.go          Auth, CSRF, Passkey-only middleware
   ratelimit.go           Per-key and per-IP rate limiters
   idempotency.go         Idempotent transfer deduplication
+  price.go               USD price service (CoinGecko + cache)
   helpers.go             Shared handler utilities
   response.go            Standardized JSON response helpers
 model/
   user.go                User and API key models
-  wallet.go              Wallet model and chain config loader
+  wallet.go              Wallet, CustomChain models and chain config loader
   contract.go            AllowedContract model (whitelist + method restrictions)
   policy.go              ApprovalPolicy and ApprovalRequest models
   audit.go               AuditLog model
   idempotency.go         IdempotencyRecord model
 chain/
-  abi.go                 Full Solidity ABI encoder (address, uintN, bytes, tuples, arrays)
+  abi.go                 Full Solidity ABI encoder (address, uintN, bytes, tuples, fixed arrays)
   tx_eth.go              EVM transaction building (EIP-1559)
   tx_sol.go              Solana transaction building (native, SPL, program call, wrap/unwrap)
   nonce.go               Nonce manager for concurrent EVM transactions
   rpc.go                 JSON-RPC client with retry
   address.go             Address validation, derivation, PDA and ATA computation
 frontend/                Pre-built web UI assets
+docs/                    Design documents
 skill/tee-wallet/        OpenClaw AI agent skill definition
 chains.json              Supported chain configuration
 Dockerfile               Multi-stage Docker build (non-root runtime)

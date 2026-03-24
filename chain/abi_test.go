@@ -221,3 +221,104 @@ func TestEncodeCall_UnsupportedType(t *testing.T) {
 		t.Fatal("expected error for unsupported type")
 	}
 }
+
+// ─── Fixed-size array T[N] tests ────────────────────────────────────────────
+
+func TestEncodeCall_FixedArrayUint256(t *testing.T) {
+	// foo(uint256[3]) — three static uint256 values, no length prefix
+	data, err := EncodeCall("foo(uint256[3])", []interface{}{
+		[]interface{}{"1", "2", "3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 selector + 3*32 = 100
+	if len(data) != 100 {
+		t.Fatalf("expected 100 bytes, got %d", len(data))
+	}
+	// Verify values in words.
+	if data[4+31] != 1 {
+		t.Fatalf("expected word[0] = 1, got %d", data[4+31])
+	}
+	if data[4+32+31] != 2 {
+		t.Fatalf("expected word[1] = 2, got %d", data[4+32+31])
+	}
+	if data[4+64+31] != 3 {
+		t.Fatalf("expected word[2] = 3, got %d", data[4+64+31])
+	}
+}
+
+func TestEncodeCall_FixedArrayAddress(t *testing.T) {
+	// bar(address[2])
+	data, err := EncodeCall("bar(address[2])", []interface{}{
+		[]interface{}{
+			"0x1111111111111111111111111111111111111111",
+			"0x2222222222222222222222222222222222222222",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 + 2*32 = 68
+	if len(data) != 68 {
+		t.Fatalf("expected 68 bytes, got %d", len(data))
+	}
+}
+
+func TestEncodeCall_FixedArrayWrongCount(t *testing.T) {
+	// Providing 2 elements for a [3] array should fail.
+	_, err := EncodeCall("foo(uint256[3])", []interface{}{
+		[]interface{}{"1", "2"},
+	})
+	if err == nil {
+		t.Fatal("expected error for wrong element count")
+	}
+}
+
+func TestEncodeCall_FixedArrayWithStaticArgs(t *testing.T) {
+	// Mixed: baz(address,uint256[2],bool)
+	data, err := EncodeCall("baz(address,uint256[2],bool)", []interface{}{
+		"0x1111111111111111111111111111111111111111",
+		[]interface{}{"100", "200"},
+		true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 + 32(address) + 2*32(array) + 32(bool) = 132
+	if len(data) != 132 {
+		t.Fatalf("expected 132 bytes, got %d", len(data))
+	}
+}
+
+func TestEncodeCall_FixedArrayTuple(t *testing.T) {
+	// qux((address,uint256)[2])
+	data, err := EncodeCall("qux((address,uint256)[2])", []interface{}{
+		[]interface{}{
+			[]interface{}{"0x1111111111111111111111111111111111111111", "100"},
+			[]interface{}{"0x2222222222222222222222222222222222222222", "200"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 + 2*(32+32) = 132
+	if len(data) != 132 {
+		t.Fatalf("expected 132 bytes, got %d", len(data))
+	}
+}
+
+func TestEncodeCall_FixedArrayDynamic(t *testing.T) {
+	// dynArr(string[2]) — fixed-size array of dynamic type
+	data, err := EncodeCall("dynArr(string[2])", []interface{}{
+		[]interface{}{"hello", "world"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should encode without error; exact layout:
+	// selector(4) + offset-to-array(32) + [head: 2*32 offset words] + [tail: 2*(32 len + 32 data)]
+	if len(data) <= 4 {
+		t.Fatal("expected encoded data longer than 4 bytes")
+	}
+}

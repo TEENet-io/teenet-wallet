@@ -38,9 +38,8 @@ func TestSetPolicy_Success(t *testing.T) {
 	r := policyRouter(db, user.ID)
 
 	body := jsonBody(map[string]interface{}{
-		"threshold_amount": "0.5",
-		"currency":         "eth",
-		"enabled":          true,
+		"threshold_usd": "100",
+		"enabled":       true,
 	})
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
@@ -55,11 +54,8 @@ func TestSetPolicy_Success(t *testing.T) {
 	if err := db.Where("wallet_id = ?", wallet.ID).First(&stored).Error; err != nil {
 		t.Fatal("policy not persisted to DB")
 	}
-	if stored.ThresholdAmount != "0.5" {
-		t.Errorf("threshold: got %s, want 0.5", stored.ThresholdAmount)
-	}
-	if stored.Currency != "ETH" { // SetPolicy normalises to uppercase
-		t.Errorf("currency: got %s, want ETH", stored.Currency)
+	if stored.ThresholdUSD != "100" {
+		t.Errorf("threshold_usd: got %s, want 100", stored.ThresholdUSD)
 	}
 }
 
@@ -69,13 +65,12 @@ func TestSetPolicy_UpdateExisting(t *testing.T) {
 
 	// Seed an initial policy.
 	db.Create(&model.ApprovalPolicy{
-		WalletID: wallet.ID, ThresholdAmount: "1.0", Currency: "ETH", Enabled: true,
+		WalletID: wallet.ID, ThresholdUSD: "50", Enabled: true,
 	})
 
 	r := policyRouter(db, user.ID)
 	body := jsonBody(map[string]interface{}{
-		"threshold_amount": "2.0",
-		"currency":         "ETH",
+		"threshold_usd": "200",
 	})
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
@@ -91,8 +86,8 @@ func TestSetPolicy_UpdateExisting(t *testing.T) {
 	if len(policies) != 1 {
 		t.Errorf("expected 1 policy (upsert), got %d", len(policies))
 	}
-	if policies[0].ThresholdAmount != "2.0" {
-		t.Errorf("expected threshold 2.0, got %s", policies[0].ThresholdAmount)
+	if policies[0].ThresholdUSD != "200" {
+		t.Errorf("expected threshold_usd 200, got %s", policies[0].ThresholdUSD)
 	}
 }
 
@@ -101,8 +96,8 @@ func TestSetPolicy_MissingFields_Returns400(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 	r := policyRouter(db, user.ID)
 
-	// No threshold_amount field.
-	body := jsonBody(map[string]interface{}{"currency": "ETH"})
+	// No threshold_usd field.
+	body := jsonBody(map[string]interface{}{"enabled": true})
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -121,8 +116,7 @@ func TestSetPolicy_WrongWallet_Returns403(t *testing.T) {
 	// Authenticate as user1 but target wallet2 (owned by another user).
 	r := policyRouter(db, user1.ID)
 	body := jsonBody(map[string]interface{}{
-		"threshold_amount": "0.1",
-		"currency":         "ETH",
+		"threshold_usd": "100",
 	})
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet2.ID), body)
 	req.Header.Set("Content-Type", "application/json")
@@ -159,7 +153,7 @@ func TestGetPolicy_WithPolicy(t *testing.T) {
 	db := testDB(t)
 	user, wallet := seedWallet(t, db)
 	db.Create(&model.ApprovalPolicy{
-		WalletID: wallet.ID, ThresholdAmount: "1.5", Currency: "SOL", Enabled: true,
+		WalletID: wallet.ID, ThresholdUSD: "500", Enabled: true,
 	})
 
 	r := policyRouter(db, user.ID)
@@ -172,19 +166,12 @@ func TestGetPolicy_WithPolicy(t *testing.T) {
 	}
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	policies, ok := resp["policies"].([]interface{})
-	if !ok || len(policies) == 0 {
-		t.Fatalf("expected non-empty policies array, got %v", resp["policies"])
-	}
-	policy, ok := policies[0].(map[string]interface{})
+	policy, ok := resp["policy"].(map[string]interface{})
 	if !ok || policy == nil {
 		t.Fatal("expected non-null policy object")
 	}
-	if policy["threshold_amount"] != "1.5" {
-		t.Errorf("expected threshold_amount=1.5, got %v", policy["threshold_amount"])
-	}
-	if policy["currency"] != "SOL" {
-		t.Errorf("expected currency=SOL, got %v", policy["currency"])
+	if policy["threshold_usd"] != "500" {
+		t.Errorf("expected threshold_usd=500, got %v", policy["threshold_usd"])
 	}
 }
 
@@ -200,5 +187,31 @@ func TestGetPolicy_WrongWallet_Returns403(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for another user's wallet, got %d", w.Code)
+	}
+}
+
+func TestSetPolicy_WithDailyLimit(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db)
+	r := policyRouter(db, user.ID)
+
+	body := jsonBody(map[string]interface{}{
+		"threshold_usd":  "100",
+		"daily_limit_usd": "5000",
+		"enabled":         true,
+	})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/policy", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var stored model.ApprovalPolicy
+	db.Where("wallet_id = ?", wallet.ID).First(&stored)
+	if stored.DailyLimitUSD != "5000" {
+		t.Errorf("daily_limit_usd: got %s, want 5000", stored.DailyLimitUSD)
 	}
 }

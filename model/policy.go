@@ -9,17 +9,17 @@ import (
 )
 
 // ApprovalPolicy defines when a signing request requires human approval.
-// One policy per (wallet, currency) pair — each currency gets its own threshold and daily limit.
+// One policy per wallet — all thresholds and limits are denominated in USD.
+// Token prices (ETH, SOL) are fetched at request time; stablecoins are pegged to $1.
 type ApprovalPolicy struct {
-	ID              uint      `json:"id" gorm:"primaryKey"`
-	WalletID        string    `json:"wallet_id" gorm:"size:36;not null;uniqueIndex:idx_wallet_currency"`
-	ThresholdAmount string    `json:"threshold_amount" gorm:"not null"` // single-tx threshold, e.g. "0.1"
-	Currency        string    `json:"currency" gorm:"not null;uniqueIndex:idx_wallet_currency"` // "ETH", "USDC", "SOL", …
-	Enabled         bool      `json:"enabled" gorm:"default:true"`
-	DailyLimit      string    `json:"daily_limit"`                     // optional: max total spend per UTC day, e.g. "1000"
-	DailySpent      string    `json:"daily_spent" gorm:"default:'0'"` // cumulative spend in the current UTC day
-	DailyResetAt    time.Time `json:"daily_reset_at"`                  // start of the day DailySpent was last reset/updated
-	CreatedAt       time.Time `json:"created_at"`
+	ID            uint      `json:"id" gorm:"primaryKey"`
+	WalletID      string    `json:"wallet_id" gorm:"size:36;not null;uniqueIndex"`
+	ThresholdUSD  string    `json:"threshold_usd" gorm:"not null"`   // single-tx USD threshold, e.g. "100"
+	DailyLimitUSD string    `json:"daily_limit_usd"`                 // optional: max USD spend per UTC day
+	DailySpentUSD string    `json:"daily_spent_usd" gorm:"default:'0'"` // cumulative USD spent today
+	DailyResetAt  time.Time `json:"daily_reset_at"`
+	Enabled       bool      `json:"enabled" gorm:"default:true"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // ApprovalRequest is created when a sign/transfer request exceeds the policy threshold,

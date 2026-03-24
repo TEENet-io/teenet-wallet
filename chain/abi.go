@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	uintRe  = regexp.MustCompile(`^uint(\d+)$`)
-	intRe   = regexp.MustCompile(`^int(\d+)$`)
-	bytesNRe = regexp.MustCompile(`^bytes(\d+)$`)
+	uintRe      = regexp.MustCompile(`^uint(\d+)$`)
+	intRe       = regexp.MustCompile(`^int(\d+)$`)
+	bytesNRe    = regexp.MustCompile(`^bytes(\d+)$`)
+	fixedArrRe  = regexp.MustCompile(`^(.+)\[(\d+)\]$`)
 )
 
 // EncodeCall encodes a Solidity function call into raw EVM calldata.
@@ -101,6 +102,10 @@ func isDynamic(typ string) bool {
 	if strings.HasSuffix(typ, "[]") {
 		return true
 	}
+	// Fixed-size array T[N]: dynamic if element type is dynamic.
+	if m := parseFixedArray(typ); m != nil {
+		return isDynamic(m.elemType)
+	}
 	if strings.HasPrefix(typ, "(") {
 		// Tuple is dynamic if any element is dynamic.
 		inner := typ[1 : len(typ)-1]
@@ -111,6 +116,57 @@ func isDynamic(typ string) bool {
 		}
 	}
 	return false
+}
+
+// fixedArrayMatch holds the parsed parts of a T[N] type.
+type fixedArrayMatch struct {
+	elemType string
+	size     int
+}
+
+// parseFixedArray parses a fixed-size array type like "uint256[3]" or "(address,bool)[2]".
+// Returns nil if typ is not a fixed-size array.
+func parseFixedArray(typ string) *fixedArrayMatch {
+	// Handle tuple arrays like (address,uint256)[3] — regex won't work due to parens.
+	if strings.HasPrefix(typ, "(") {
+		// Find matching close paren, then check for [N].
+		depth := 0
+		closeIdx := -1
+		for i, c := range typ {
+			switch c {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					closeIdx = i
+					break
+				}
+			}
+			if closeIdx >= 0 {
+				break
+			}
+		}
+		if closeIdx >= 0 && closeIdx < len(typ)-1 {
+			suffix := typ[closeIdx+1:]
+			if len(suffix) >= 3 && suffix[0] == '[' && suffix[len(suffix)-1] == ']' {
+				n, err := strconv.Atoi(suffix[1 : len(suffix)-1])
+				if err == nil && n > 0 {
+					return &fixedArrayMatch{elemType: typ[:closeIdx+1], size: n}
+				}
+			}
+		}
+		return nil
+	}
+	m := fixedArrRe.FindStringSubmatch(typ)
+	if m == nil {
+		return nil
+	}
+	n, err := strconv.Atoi(m[2])
+	if err != nil || n == 0 {
+		return nil
+	}
+	return &fixedArrayMatch{elemType: m[1], size: n}
 }
 
 // encodeArgs encodes multiple arguments with proper head/tail layout for dynamic types.
@@ -228,11 +284,15 @@ func encodeStatic(typ string, arg interface{}) ([]byte, error) {
 		}
 		return encodeBytesN(n, arg)
 
-	case strings.HasPrefix(typ, "("):
-		// Static tuple.
-		return encodeTuple(typ, arg)
-
 	default:
+		// Check for fixed-size array T[N] before tuple — tuple arrays like (T1,T2)[N] start with "(".
+		if fa := parseFixedArray(typ); fa != nil && !isDynamic(fa.elemType) {
+			return encodeFixedArray(fa, arg)
+		}
+		// Static tuple.
+		if strings.HasPrefix(typ, "(") {
+			return encodeTuple(typ, arg)
+		}
 		return nil, fmt.Errorf("unsupported static type: %s", typ)
 	}
 }
@@ -254,10 +314,15 @@ func encodeDynamic(typ string, arg interface{}) ([]byte, error) {
 		elemType := typ[:len(typ)-2]
 		return encodeDynamicArray(elemType, arg)
 
-	case strings.HasPrefix(typ, "("):
-		return encodeTupleDynamic(typ, arg)
-
 	default:
+		// Check for fixed-size array T[N] with dynamic element type.
+		if fa := parseFixedArray(typ); fa != nil {
+			return encodeFixedArrayDynamic(fa, arg)
+		}
+		// Dynamic tuple.
+		if strings.HasPrefix(typ, "(") {
+			return encodeTupleDynamic(typ, arg)
+		}
 		return nil, fmt.Errorf("unsupported dynamic type: %s", typ)
 	}
 }
@@ -405,6 +470,28 @@ func encodeTuple(typ string, arg interface{}) ([]byte, error) {
 // encodeTupleDynamic encodes a tuple that may contain dynamic elements.
 func encodeTupleDynamic(typ string, arg interface{}) ([]byte, error) {
 	return encodeTuple(typ, arg) // encodeArgs handles dynamic elements internally
+}
+
+// encodeFixedArray encodes a fixed-size array T[N] where T is a static type.
+// T[N] is encoded as N consecutive 32-byte words (no length prefix).
+func encodeFixedArray(fa *fixedArrayMatch, arg interface{}) ([]byte, error) {
+	items, err := toSlice(arg)
+	if err != nil {
+		return nil, fmt.Errorf("%s[%d]: %w", fa.elemType, fa.size, err)
+	}
+	if len(items) != fa.size {
+		return nil, fmt.Errorf("%s[%d]: expected %d elements, got %d", fa.elemType, fa.size, fa.size, len(items))
+	}
+	types := make([]string, fa.size)
+	for i := range types {
+		types[i] = fa.elemType
+	}
+	return encodeArgs(types, items)
+}
+
+// encodeFixedArrayDynamic encodes a fixed-size array T[N] where T is a dynamic type.
+func encodeFixedArrayDynamic(fa *fixedArrayMatch, arg interface{}) ([]byte, error) {
+	return encodeFixedArray(fa, arg)
 }
 
 // toSlice converts an interface to []interface{} (handles JSON arrays).

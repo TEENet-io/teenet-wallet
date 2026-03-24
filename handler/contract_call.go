@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -42,6 +43,7 @@ type ContractCallHandler struct {
 	baseURL        string
 	approvalExpiry time.Duration
 	idempotency    *IdempotencyStore
+	prices         *PriceService
 }
 
 func NewContractCallHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, approvalExpiry ...time.Duration) *ContractCallHandler {
@@ -52,15 +54,19 @@ func NewContractCallHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, 
 	return &ContractCallHandler{db: db, sdk: sdkClient, baseURL: baseURL, approvalExpiry: expiry}
 }
 
+// SetPriceService sets the USD price service used for threshold conversion.
+func (h *ContractCallHandler) SetPriceService(ps *PriceService) { h.prices = ps }
+
 // ContractCallRequest is the body for POST /api/wallets/:id/contract-call.
 type ContractCallRequest struct {
-	Contract string                 `json:"contract" binding:"required"`
-	FuncSig  string                 `json:"func_sig"`                    // EVM only
-	Args     []interface{}          `json:"args"`                        // EVM only
-	Value    string                 `json:"value"`                       // EVM only: ETH to send (optional, in ETH units)
-	Memo     string                 `json:"memo"`
-	Accounts []chain.SOLAccountMeta `json:"accounts"`                    // Solana only
-	Data     string                 `json:"data"`                        // Solana only: hex instruction data
+	Contract  string                 `json:"contract" binding:"required"`
+	FuncSig   string                 `json:"func_sig"`                    // EVM only
+	Args      []interface{}          `json:"args"`                        // EVM only
+	Value     string                 `json:"value"`                       // EVM only: ETH to send (optional, in ETH units)
+	AmountUSD string                 `json:"amount_usd"`                  // optional: caller-reported USD value for threshold/daily-limit
+	Memo      string                 `json:"memo"`
+	Accounts  []chain.SOLAccountMeta `json:"accounts"`                    // Solana only
+	Data      string                 `json:"data"`                        // Solana only: hex instruction data
 }
 
 // ContractCall executes a smart contract call with three-layer security:
@@ -202,15 +208,54 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		}
 	}
 
-	// Also check value-based approval policy for payable calls carrying ETH.
-	if !needsApproval && valueWei != nil && valueWei.Sign() > 0 && req.Value != "" {
-		currency := chainCfg.Currency
-		var policy model.ApprovalPolicy
-		if h.db.Where("wallet_id = ? AND currency = ? AND enabled = ?", wallet.ID, currency, true).First(&policy).Error == nil {
-			if exceedsThreshold(req.Value, policy.ThresholdAmount) {
-				needsApproval = true
-				approvalReason = fmt.Sprintf("value %s %s exceeds approval threshold %s", req.Value, currency, policy.ThresholdAmount)
+	// Compute effective USD amount for threshold / daily limit checks.
+	// Sources: (1) native value × price, (2) caller-reported amount_usd. Use the larger value.
+	var effectiveUSD float64
+	if h.prices != nil {
+		if valueWei != nil && valueWei.Sign() > 0 && req.Value != "" {
+			currency := chainCfg.Currency
+			if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
+				if a, ok := new(big.Float).SetString(req.Value); ok {
+					f, _ := a.Float64()
+					effectiveUSD = f * usdPrice
+				}
 			}
+		}
+		if req.AmountUSD != "" {
+			if reported, ok := new(big.Float).SetString(req.AmountUSD); ok && reported.Sign() > 0 {
+				f, _ := reported.Float64()
+				if f > effectiveUSD {
+					effectiveUSD = f
+				}
+			}
+		}
+	}
+
+	// Check USD approval policy (threshold + daily limit).
+	var policy model.ApprovalPolicy
+	policyFound := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil
+
+	var deductedUSDStr string // non-empty if we pre-deducted from daily limit
+	if !needsApproval && policyFound && effectiveUSD > 0 {
+		// Daily limit check (pre-deduct, rollback on failure).
+		if policy.DailyLimitUSD != "" {
+			deductedUSDStr = new(big.Float).SetFloat64(effectiveUSD).Text('f', 2)
+			exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
+			if err != nil {
+				slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
+				jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
+				return
+			}
+			if exceeded {
+				deductedUSDStr = ""
+				jsonError(c, http.StatusBadRequest, msg)
+				return
+			}
+		}
+		// Threshold check.
+		if exceedsUSDThreshold(effectiveUSD, policy.ThresholdUSD) {
+			needsApproval = true
+			approvalReason = fmt.Sprintf("amount ~$%.2f USD exceeds approval threshold $%s USD", effectiveUSD, policy.ThresholdUSD)
 		}
 	}
 
@@ -227,10 +272,15 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	if req.Value != "" {
 		txContext["value_eth"] = req.Value
 	}
+	if effectiveUSD > 0 {
+		txContext["amount_usd"] = fmt.Sprintf("%.2f", effectiveUSD)
+	}
 
 	if needsApproval {
-		// Store ETHTxParams so the approve handler can call RebuildETHTx with fresh nonce/gas.
-		// Store the signing hash hex as Message, consistent with how /transfer does it.
+		// Approval path: rollback pre-deduction — addDailySpentUSD handles it on approve+broadcast.
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		txContextJSON, _ := json.Marshal(txContext)
 
 		userID := mustUserID(c)
@@ -268,6 +318,9 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 
 	result, signErr := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
 	if signErr != nil || !result.Success {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		errMsg := "signing failed"
 		if signErr != nil {
 			errMsg = signErr.Error()
@@ -280,6 +333,9 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 
 	txHash, broadcastErr := broadcastSigned(wallet, string(txParamsJSON), result.Signature)
 	if broadcastErr != nil {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		respondBroadcastError(c, broadcastErr)
 		return
 	}
@@ -379,6 +435,39 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		}
 	}
 
+	// Caller-reported USD amount for threshold / daily limit.
+	var effectiveUSD float64
+	if h.prices != nil && req.AmountUSD != "" {
+		if reported, ok := new(big.Float).SetString(req.AmountUSD); ok && reported.Sign() > 0 {
+			effectiveUSD, _ = reported.Float64()
+		}
+	}
+
+	var policy model.ApprovalPolicy
+	policyFound := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil
+
+	var deductedUSDStr string
+	if !needsApproval && policyFound && effectiveUSD > 0 {
+		if policy.DailyLimitUSD != "" {
+			deductedUSDStr = new(big.Float).SetFloat64(effectiveUSD).Text('f', 2)
+			exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
+			if err != nil {
+				slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
+				jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
+				return
+			}
+			if exceeded {
+				deductedUSDStr = ""
+				jsonError(c, http.StatusBadRequest, msg)
+				return
+			}
+		}
+		if exceedsUSDThreshold(effectiveUSD, policy.ThresholdUSD) {
+			needsApproval = true
+			approvalReason = fmt.Sprintf("amount ~$%.2f USD exceeds approval threshold $%s USD", effectiveUSD, policy.ThresholdUSD)
+		}
+	}
+
 	txContext := map[string]interface{}{
 		"type":       "program_call",
 		"from":       wallet.Address,
@@ -388,8 +477,14 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		"memo":       req.Memo,
 		"chain":      wallet.Chain,
 	}
+	if effectiveUSD > 0 {
+		txContext["amount_usd"] = fmt.Sprintf("%.2f", effectiveUSD)
+	}
 
 	if needsApproval {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		txContextJSON, _ := json.Marshal(txContext)
 		userID := mustUserID(c)
 		if c.IsAborted() {
@@ -426,6 +521,9 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 
 	result, signErr := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
 	if signErr != nil || !result.Success {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		errMsg := "signing failed"
 		if signErr != nil {
 			errMsg = signErr.Error()
@@ -438,6 +536,9 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 
 	txHash, broadcastErr := chain.AssembleAndBroadcastSOLProgram(chainCfg.RPCURL, txData.Params, result.Signature)
 	if broadcastErr != nil {
+		if deductedUSDStr != "" {
+			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
+		}
 		jsonError(c, http.StatusBadGateway, "broadcast failed: "+broadcastErr.Error())
 		return
 	}

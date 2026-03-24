@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,13 +20,17 @@ import (
 
 // ApprovalHandler handles approval request lifecycle.
 type ApprovalHandler struct {
-	db  *gorm.DB
-	sdk *sdk.Client
+	db     *gorm.DB
+	sdk    *sdk.Client
+	prices *PriceService
 }
 
 func NewApprovalHandler(db *gorm.DB, sdkClient *sdk.Client) *ApprovalHandler {
 	return &ApprovalHandler{db: db, sdk: sdkClient}
 }
+
+// SetPriceService sets the USD price service used for daily spent conversion.
+func (h *ApprovalHandler) SetPriceService(ps *PriceService) { h.prices = ps }
 
 // ListPending returns all pending approval requests for the current user.
 // GET /api/approvals/pending
@@ -156,12 +161,12 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			return
 		}
 		var policy model.ApprovalPolicy
-		if h.db.Where("wallet_id = ? AND currency = ?", approval.WalletID, proposed.Currency).First(&policy).Error != nil {
-			policy = model.ApprovalPolicy{WalletID: approval.WalletID, Currency: proposed.Currency}
+		if h.db.Where("wallet_id = ?", approval.WalletID).First(&policy).Error != nil {
+			policy = model.ApprovalPolicy{WalletID: approval.WalletID}
 		}
-		policy.ThresholdAmount = proposed.ThresholdAmount
+		policy.ThresholdUSD = proposed.ThresholdUSD
 		policy.Enabled = proposed.Enabled
-		policy.DailyLimit = proposed.DailyLimit
+		policy.DailyLimitUSD = proposed.DailyLimitUSD
 		if err := h.db.Save(&policy).Error; err != nil {
 			jsonError(c, http.StatusInternalServerError, "failed to apply policy")
 			return
@@ -171,7 +176,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		h.db.Model(&approval).Updates(updates)
 		writeAuditCtx(h.db, c, "approval_approve", "success", &approval.WalletID, map[string]interface{}{
 			"approval_id": approval.ID, "type": "policy_change",
-			"currency": proposed.Currency, "threshold": proposed.ThresholdAmount,
+			"threshold_usd": proposed.ThresholdUSD,
 		})
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
@@ -323,14 +328,15 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	}
 	writeAuditCtx(h.db, c, "approval_approve", "success", &approval.WalletID, auditDetails)
 
-	// Update daily spent counter for /transfer approvals that were successfully broadcast.
-	if txHash != "" && txCtx != nil {
+	// Update daily USD spent counter for /transfer approvals that were successfully broadcast.
+	if txHash != "" && txCtx != nil && h.prices != nil {
 		amount, currency := extractAmountCurrency(txCtx)
 		if amount != "" && currency != "" {
-			var pol model.ApprovalPolicy
-			if h.db.Where("wallet_id = ? AND currency = ? AND enabled = ?", approval.WalletID, currency, true).First(&pol).Error == nil {
-				if pol.DailyLimit != "" {
-					addDailySpent(h.db, &pol, amount)
+			if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
+				if a, ok := new(big.Float).SetString(amount); ok {
+					f, _ := a.Float64()
+					amountUSD := new(big.Float).SetFloat64(f * usdPrice).Text('f', 2)
+					addDailySpentUSD(h.db, approval.WalletID, amountUSD)
 				}
 			}
 		}
