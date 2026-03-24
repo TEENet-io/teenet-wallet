@@ -83,7 +83,7 @@ curl -s -X POST http://localhost:8080/api/approvals/APPROVAL_ID/reject \
   -H "X-CSRF-Token: nocheck"
 ```
 
-Pending approvals expire after the configured timeout (default: 30 minutes).
+Pending approvals expire after the configured timeout (default: 24 hours).
 
 **Approval types:**
 

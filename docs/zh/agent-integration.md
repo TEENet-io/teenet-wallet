@@ -10,7 +10,7 @@ Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://opencl
 
 | 变量 | 说明 |
 |------|------|
-| `TEE_WALLET_API_URL` | 钱包服务地址（如 `https://wallet.example.com`） |
+| `TEE_WALLET_API_URL` | 钱包服务地址（如 `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`） |
 | `TEE_WALLET_API_KEY` | API Key（`ocw_` 前缀） |
 
 **Agent 可执行的操作：**

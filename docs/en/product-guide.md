@@ -229,8 +229,10 @@ All configuration is via environment variables. No configuration files are requi
 | `API_KEY_RATE_LIMIT` | `200` | Maximum requests per minute per API key |
 | `WALLET_CREATE_RATE_LIMIT` | `5` | Maximum wallet creations per minute per key (TEE DKG is expensive) |
 | `REGISTRATION_RATE_LIMIT` | `10` | Maximum registration attempts per minute per IP |
-| `APPROVAL_EXPIRY_MINUTES` | `30` | Minutes before a pending approval request expires |
-| `MAX_WALLETS_PER_USER` | `20` | Maximum wallets a single user can create |
+| `APPROVAL_EXPIRY_MINUTES` | `1440` | Minutes before a pending approval request expires |
+| `MAX_WALLETS_PER_USER` | `10` | Maximum wallets a single user can create |
+| `MAX_API_KEYS_PER_USER` | `10` | Maximum API keys per user |
+| `MAX_USERS` | `500` | Maximum registered users, 0 = unlimited |
 
 RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Additional EVM chains can be added at runtime via `POST /api/chains` (Passkey required); these are persisted in the database and survive restarts.
 
@@ -337,7 +339,7 @@ curl -s -X POST http://localhost:8080/api/wallets \
 
 The `chain` field must match a name from `GET /api/chains` (e.g., `ethereum`, `solana`, `sepolia`, `solana-devnet`, or a custom chain name). Ethereum/EVM wallets use ECDSA on secp256k1 and may take 1-2 minutes for distributed key generation. Solana wallets use Schnorr on ed25519 and are created instantly.
 
-Each user can create up to `MAX_WALLETS_PER_USER` wallets (default: 20).
+Each user can create up to `MAX_WALLETS_PER_USER` wallets (default: 10).
 
 ### List Wallets
 
@@ -810,7 +812,7 @@ curl -s -X POST http://localhost:8080/api/approvals/APPROVAL_ID/reject \
   -H "X-CSRF-Token: nocheck"
 ```
 
-Pending approvals expire after the configured timeout (default: 30 minutes).
+Pending approvals expire after the configured timeout (default: 24 hours).
 
 **Approval types:**
 
@@ -943,7 +945,7 @@ Base Sepolia Testnet:
 | `method not allowed` | The contract's `allowed_methods` list does not include the requested function | Update the contract's `allowed_methods` via `PUT /api/wallets/:id/contracts/:cid`. |
 | `wallet is not ready` | The wallet is still in the `creating` state (DKG in progress) | Wait 1-2 minutes for ECDSA key generation to complete, then retry. |
 | `invalid API key` | The provided API key is not valid or has been revoked | Verify the `Authorization` header value. Generate a new key if needed. |
-| `approval has expired` | The pending approval was not acted on within the expiry window (default: 30 minutes) | Initiate the operation again to create a new approval request. |
+| `approval has expired` | The pending approval was not acted on within the expiry window (default: 24 hours) | Initiate the operation again to create a new approval request. |
 | `cannot overwrite a built-in chain` | Attempted to create a custom chain with the same name as a built-in chain | Choose a different name for the custom chain. |
 | `chain has existing wallets; delete them first` | Attempted to delete a custom chain that still has wallets | Delete all wallets on the chain before removing it. |
 | `rate limit exceeded` | Too many requests in the current time window | Wait and retry. Default limits: 200 requests/min per API key, 5 wallet creations/min, 10 registrations/min per IP. |

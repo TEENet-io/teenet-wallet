@@ -295,8 +295,10 @@ curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/policy" \
 | `API_KEY_RATE_LIMIT` | `200` | 每个 API Key 每分钟最大请求数 |
 | `WALLET_CREATE_RATE_LIMIT` | `5` | 每个 Key 每分钟最大钱包创建数（DKG 资源密集） |
 | `REGISTRATION_RATE_LIMIT` | `10` | 每个 IP 每分钟最大注册尝试次数 |
-| `APPROVAL_EXPIRY_MINUTES` | `30` | 待审批请求的过期时间（分钟） |
-| `MAX_WALLETS_PER_USER` | `20` | 每个用户可创建的最大钱包数 |
+| `APPROVAL_EXPIRY_MINUTES` | `1440` | 待审批请求的过期时间（分钟） |
+| `MAX_WALLETS_PER_USER` | `10` | 每个用户可创建的最大钱包数 |
+| `MAX_API_KEYS_PER_USER` | `10` | 每个用户最大 API Key 数量 |
+| `MAX_USERS` | `500` | 最大注册用户数（0 表示不限制） |
 
 区块链 RPC URL 在 `chains.json` 文件中定义，不作为独立环境变量。可通过 `CHAINS_FILE` 环境变量指定自定义路径。也可在运行时通过 `POST /api/chains` 动态添加自定义 EVM 链。
 
@@ -394,7 +396,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets" \
 **注意事项：**
 - EVM 链（ECDSA）钱包创建需要分布式密钥生成，耗时约 1-2 分钟
 - Solana（Schnorr/Ed25519）钱包通常即时完成
-- 每个用户最多创建 20 个钱包（可通过 `MAX_WALLETS_PER_USER` 调整）
+- 每个用户最多创建 10 个钱包（可通过 `MAX_WALLETS_PER_USER` 调整）
 - 钱包创建受独立速率限制（默认每分钟 5 个）
 
 ### 列出钱包
@@ -851,7 +853,7 @@ curl -s "${TEE_WALLET_URL}/api/approvals/${APPROVAL_ID}" \
 4. **处理结果**：
 - `status: "approved"` + `tx_hash`：交易已完成并广播
 - `status: "rejected"`：审批被拒绝，未执行任何操作
-- `status: "expired"`：审批超时（默认 30 分钟），需重新发起
+- `status: "expired"`：审批超时（默认 24 小时），需重新发起
 
 **查看所有待审批请求：**
 
@@ -922,7 +924,7 @@ Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://opencl
 
 | 变量 | 说明 |
 |------|------|
-| `TEE_WALLET_API_URL` | 钱包服务地址（如 `https://wallet.example.com`） |
+| `TEE_WALLET_API_URL` | 钱包服务地址（如 `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`） |
 | `TEE_WALLET_API_KEY` | API Key（`ocw_` 前缀） |
 
 **Agent 可执行的操作：**
@@ -1016,7 +1018,7 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/chains/arbitrum" \
 | `method not allowed` | 调用的方法不在合约的 `allowed_methods` 列表中 | 更新白名单条目，将所需方法加入 `allowed_methods` |
 | `wallet is not ready` | 钱包仍在创建中（DKG 进行中） | 等待 1-2 分钟后重试 |
 | `invalid API key` | API Key 无效或已被撤销 | 检查 API Key 是否正确，或重新生成 |
-| `approval has expired` | 审批请求已超时（默认 30 分钟） | 重新发起转账或操作 |
+| `approval has expired` | 审批请求已超时（默认 24 小时） | 重新发起转账或操作 |
 | `pending_approval` (策略变更) | 通过 API Key 设置策略需要 Passkey 审批 | 在 Web UI 中审批待处理的策略变更请求 |
 | `cannot overwrite a built-in chain` | 试图添加与内置链同名的自定义链 | 使用不同的链名称 |
 | `chain has existing wallets` | 试图删除仍有钱包的自定义链 | 先删除该链上的所有钱包 |

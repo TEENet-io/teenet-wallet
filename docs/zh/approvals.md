@@ -60,7 +60,7 @@ curl -s "${TEE_WALLET_URL}/api/approvals/${APPROVAL_ID}" \
 4. **处理结果**：
 - `status: "approved"` + `tx_hash`：交易已完成并广播
 - `status: "rejected"`：审批被拒绝，未执行任何操作
-- `status: "expired"`：审批超时（默认 30 分钟），需重新发起
+- `status: "expired"`：审批超时（默认 24 小时），需重新发起
 
 **查看所有待审批请求：**
 

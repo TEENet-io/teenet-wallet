@@ -11,7 +11,7 @@ curl -s -X POST http://localhost:8080/api/wallets \
 
 The `chain` field must match a name from `GET /api/chains` (e.g., `ethereum`, `solana`, `sepolia`, `solana-devnet`, or a custom chain name). Ethereum/EVM wallets use ECDSA on secp256k1 and may take 1-2 minutes for distributed key generation. Solana wallets use Schnorr on ed25519 and are created instantly.
 
-Each user can create up to `MAX_WALLETS_PER_USER` wallets (default: 20).
+Each user can create up to `MAX_WALLETS_PER_USER` wallets (default: 10).
 
 ### List Wallets
 

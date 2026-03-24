@@ -59,7 +59,7 @@ Base Sepolia Testnet:
 | `method not allowed` | The contract's `allowed_methods` list does not include the requested function | Update the contract's `allowed_methods` via `PUT /api/wallets/:id/contracts/:cid`. |
 | `wallet is not ready` | The wallet is still in the `creating` state (DKG in progress) | Wait 1-2 minutes for ECDSA key generation to complete, then retry. |
 | `invalid API key` | The provided API key is not valid or has been revoked | Verify the `Authorization` header value. Generate a new key if needed. |
-| `approval has expired` | The pending approval was not acted on within the expiry window (default: 30 minutes) | Initiate the operation again to create a new approval request. |
+| `approval has expired` | The pending approval was not acted on within the expiry window (default: 24 hours) | Initiate the operation again to create a new approval request. |
 | `cannot overwrite a built-in chain` | Attempted to create a custom chain with the same name as a built-in chain | Choose a different name for the custom chain. |
 | `chain has existing wallets; delete them first` | Attempted to delete a custom chain that still has wallets | Delete all wallets on the chain before removing it. |
 | `rate limit exceeded` | Too many requests in the current time window | Wait and retry. Default limits: 200 requests/min per API key, 5 wallet creations/min, 10 registrations/min per IP. |

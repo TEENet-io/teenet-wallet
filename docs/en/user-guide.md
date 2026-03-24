@@ -1,3 +1,5 @@
+[wallet-url]: https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a
+
 # User Guide
 
 Welcome to the TEENet Wallet user guide. This covers everything you need to get up and running with your wallet and OpenClaw on Telegram.
@@ -25,7 +27,7 @@ Here is how the flow works in practice:
 
 Like having a crypto-savvy assistant with a spending limit you control.
 
-The Web UI at https://wallet.example.com is your dashboard for oversight. You use it to view wallets, set spending policies, approve or reject pending transactions, manage API keys, and review a full history of everything OpenClaw has done on your behalf.
+The Web UI at [TEENet Wallet][wallet-url] is your dashboard for oversight. You use it to view wallets, set spending policies, approve or reject pending transactions, manage API keys, and review a full history of everything OpenClaw has done on your behalf.
 
 ---
 
@@ -33,7 +35,7 @@ The Web UI at https://wallet.example.com is your dashboard for oversight. You us
 
 ### Step 1: Create Your Account
 
-1. Open your browser and go to https://wallet.example.com.
+1. Open your browser and go to [TEENet Wallet][wallet-url].
 
 2. You will see a screen with two options at the top: **Login** and **Register**. Click **Register**.
 
@@ -56,7 +58,7 @@ A Passkey is a modern replacement for passwords. Instead of typing a password, y
 
 The API key is how OpenClaw authenticates with your wallet. Without it, OpenClaw cannot access your account.
 
-1. Log in to https://wallet.example.com.
+1. Log in to [TEENet Wallet][wallet-url].
 
 2. Click the **Account** tab at the top of the screen.
 
@@ -82,7 +84,7 @@ Now you connect OpenClaw to your wallet by installing the TEENet Wallet skill.
 
 3. OpenClaw will confirm it found the skill and ask you for two settings:
 
-   - **TEE_WALLET_API_URL** -- enter your wallet URL: **https://wallet.example.com**
+   - **TEE_WALLET_API_URL** -- enter your wallet URL: `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`
    - **TEE_WALLET_API_KEY** -- paste the API key you copied in Step 2 (the one starting with ocw_)
 
 4. OpenClaw will confirm the skill is installed and ready to use.
@@ -106,7 +108,7 @@ Before OpenClaw starts handling real money, set an approval policy so large tran
 
 **Through the Web UI:**
 
-1. Go to https://wallet.example.com and click on your wallet to expand it.
+1. Go to [TEENet Wallet][wallet-url] and click on your wallet to expand it.
 
 2. Click the **Policy** tab.
 
@@ -182,7 +184,7 @@ When OpenClaw submits a transaction that exceeds your spending threshold, the tr
 
 ### Using the Web UI directly
 
-You can also go to https://wallet.example.com and click the **Approvals** tab to see all pending transactions. Each one shows:
+You can also go to [TEENet Wallet][wallet-url] and click the **Approvals** tab to see all pending transactions. Each one shows:
 
 - The wallet the transaction is from.
 - The recipient address.
@@ -192,13 +194,13 @@ You can also go to https://wallet.example.com and click the **Approvals** tab to
 
 ### Expiry
 
-Pending approvals expire after **30 minutes**. If you do not approve or reject within that window, the transaction is automatically cancelled. If you still want to proceed, ask OpenClaw to submit it again.
+Pending approvals expire after **24 hours**. If you do not approve or reject within that window, the transaction is automatically cancelled. If you still want to proceed, ask OpenClaw to submit it again.
 
 ---
 
 ## Web UI Overview
 
-The Web UI at https://wallet.example.com is your dashboard for oversight and management. Here is what you can do:
+The Web UI at [TEENet Wallet][wallet-url] is your dashboard for oversight and management. Here is what you can do:
 
 - **Wallets tab** -- View all your wallets, their addresses, and balances. Expand a wallet to see its full details, approval policy, and contract whitelist.
 
@@ -240,7 +242,7 @@ TEENet Wallet is built with multiple layers of protection:
 
 ### How do I install the wallet skill on OpenClaw?
 
-Open your OpenClaw chat on Telegram and send: **"Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md"**. OpenClaw will ask you for two settings: TEE_WALLET_API_URL (enter https://wallet.example.com) and TEE_WALLET_API_KEY (paste your API key starting with ocw_). Once both are provided, the skill is installed and ready.
+Open your OpenClaw chat on Telegram and send: **"Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md"**. OpenClaw will ask you for two settings: TEE_WALLET_API_URL (enter `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`) and TEE_WALLET_API_KEY (paste your API key starting with ocw_). Once both are provided, the skill is installed and ready.
 
 ### What can OpenClaw do without my approval?
 
@@ -275,7 +277,7 @@ If OpenClaw submits a transaction above your threshold, it is held in a pending 
 
 ### How do I stop OpenClaw from using my wallet?
 
-Go to https://wallet.example.com, click the **Account** tab, find the API key OpenClaw is using, and click **Revoke**. Authenticate with your Passkey. OpenClaw immediately loses all access to your wallets. If you want to reconnect later, generate a new API key and provide it to OpenClaw.
+Go to [TEENet Wallet][wallet-url], click the **Account** tab, find the API key OpenClaw is using, and click **Revoke**. Authenticate with your Passkey. OpenClaw immediately loses all access to your wallets. If you want to reconnect later, generate a new API key and provide it to OpenClaw.
 
 ### What is a Passkey?
 
