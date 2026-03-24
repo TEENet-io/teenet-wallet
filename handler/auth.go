@@ -20,15 +20,20 @@ import (
 
 // AuthHandler handles passkey registration, login, and API key management.
 type AuthHandler struct {
-	db       *gorm.DB
-	sdk      *sdk.Client
-	sessions *SessionStore
-	baseURL  string
+	db         *gorm.DB
+	sdk        *sdk.Client
+	sessions   *SessionStore
+	baseURL    string
+	maxAPIKeys int
+	maxUsers   int
 }
 
 func NewAuthHandler(db *gorm.DB, sdkClient *sdk.Client, sessions *SessionStore, baseURL string) *AuthHandler {
-	return &AuthHandler{db: db, sdk: sdkClient, sessions: sessions, baseURL: baseURL}
+	return &AuthHandler{db: db, sdk: sdkClient, sessions: sessions, baseURL: baseURL, maxAPIKeys: 10, maxUsers: 0}
 }
+
+func (h *AuthHandler) SetMaxAPIKeys(n int) { h.maxAPIKeys = n }
+func (h *AuthHandler) SetMaxUsers(n int)   { h.maxUsers = n }
 
 // InviteUser invites a passkey user via the SDK admin bridge.
 // POST /api/auth/invite
@@ -176,6 +181,15 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		jsonError(c, http.StatusBadGateway, msg)
 		return
 	}
+	// Enforce user limit.
+	if h.maxUsers > 0 {
+		var userCount int64
+		h.db.Model(&model.User{}).Count(&userCount)
+		if userCount >= int64(h.maxUsers) {
+			jsonError(c, http.StatusConflict, "registration is closed — maximum number of users reached")
+			return
+		}
+	}
 	// Use DisplayName from the passkey system as the username.
 	username := strings.TrimSpace(res.DisplayName)
 	if username == "" {
@@ -231,6 +245,15 @@ func (h *AuthHandler) PasskeyVerify(c *gin.Context) {
 	// UMS is the auth authority — a valid passkey login means the user is legitimate.
 	var user model.User
 	if err := h.db.Where("passkey_user_id = ?", passkeyUserID).First(&user).Error; err != nil {
+		// Enforce user limit before auto-creating.
+		if h.maxUsers > 0 {
+			var userCount int64
+			h.db.Model(&model.User{}).Count(&userCount)
+			if userCount >= int64(h.maxUsers) {
+				jsonError(c, http.StatusConflict, "registration is closed — maximum number of users reached")
+				return
+			}
+		}
 		displayName, _ := res.Data["display_name"].(string)
 		username := strings.TrimSpace(displayName)
 		if username == "" {
@@ -283,8 +306,8 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 		jsonError(c, http.StatusInternalServerError, "db error")
 		return
 	}
-	if count >= 10 {
-		jsonError(c, http.StatusConflict, "maximum 10 API keys per user")
+	if count >= int64(h.maxAPIKeys) {
+		jsonError(c, http.StatusConflict, fmt.Sprintf("maximum %d API keys per user", h.maxAPIKeys))
 		return
 	}
 

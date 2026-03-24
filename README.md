@@ -135,8 +135,10 @@ All configuration is via environment variables:
 | `API_KEY_RATE_LIMIT` | `200` | Max requests per minute per API key |
 | `WALLET_CREATE_RATE_LIMIT` | `5` | Max wallet creations per minute per key |
 | `REGISTRATION_RATE_LIMIT` | `10` | Max registration attempts per minute per IP |
-| `APPROVAL_EXPIRY_MINUTES` | `30` | Minutes before a pending approval expires |
-| `MAX_WALLETS_PER_USER` | `20` | Maximum wallets a single user can create |
+| `APPROVAL_EXPIRY_MINUTES` | `1440` | Minutes before a pending approval expires (default: 24h) |
+| `MAX_WALLETS_PER_USER` | `10` | Maximum wallets a single user can create |
+| `MAX_API_KEYS_PER_USER` | `10` | Maximum API keys a single user can hold |
+| `MAX_USERS` | `500` | Maximum registered users (0 = unlimited) |
 
 RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Override the file path with `CHAINS_FILE` if needed. Additional EVM chains can also be added at runtime via the `POST /api/chains` endpoint (Passkey required); these are persisted in the database and survive restarts.
 

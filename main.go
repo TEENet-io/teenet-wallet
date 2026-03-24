@@ -39,8 +39,10 @@ func main() {
 	apiKeyRateLimit        := envOrDefaultInt("API_KEY_RATE_LIMIT", 200)       // general: requests per minute per API key
 	walletCreateRateLimit  := envOrDefaultInt("WALLET_CREATE_RATE_LIMIT", 5)  // wallet creation is TEE-DKG-bound
 	registrationRateLimit  := envOrDefaultInt("REGISTRATION_RATE_LIMIT", 10)  // public auth: prevent TEE DKG abuse
-	approvalExpiryMinutes  := envOrDefaultInt("APPROVAL_EXPIRY_MINUTES", 30)
-	maxWalletsPerUser      := envOrDefaultInt("MAX_WALLETS_PER_USER", 20)
+	approvalExpiryMinutes  := envOrDefaultInt("APPROVAL_EXPIRY_MINUTES", 1440)
+	maxWalletsPerUser      := envOrDefaultInt("MAX_WALLETS_PER_USER", 10)
+	maxAPIKeysPerUser      := envOrDefaultInt("MAX_API_KEYS_PER_USER", 10)
+	maxUsers               := envOrDefaultInt("MAX_USERS", 500)
 	approvalExpiry         := time.Duration(approvalExpiryMinutes) * time.Minute
 
 	// Load chain configuration.
@@ -151,6 +153,8 @@ func main() {
 	// Registration and login discovery endpoints are IP-rate-limited to prevent
 	// an attacker from spamming TEE DKG operations (each takes 1-2 min of cluster compute).
 	authH := handler.NewAuthHandler(db, sdkClient, sessions, baseURL)
+	authH.SetMaxAPIKeys(maxAPIKeysPerUser)
+	authH.SetMaxUsers(maxUsers)
 	ipLimiter := handler.NewIPRateLimiter(registrationRateLimit, time.Minute)
 	defer ipLimiter.Stop()
 	ipRL := handler.IPRateLimitMiddleware(ipLimiter)
@@ -354,6 +358,9 @@ func main() {
 		"chains_file", chainsFile,
 		"chains_loaded", len(model.Chains),
 		"approval_expiry_minutes", approvalExpiryMinutes,
+		"max_wallets_per_user", maxWalletsPerUser,
+		"max_api_keys_per_user", maxAPIKeysPerUser,
+		"max_users", maxUsers,
 	)
 
 	srv := &http.Server{Addr: addr, Handler: r}
