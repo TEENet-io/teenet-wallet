@@ -112,7 +112,7 @@ func contractCallRouter(db *gorm.DB, userID uint, authMode string, rpcURL string
 }
 
 // seedWalletWithContract creates a user, an ethereum wallet, and a whitelisted contract.
-func seedWalletWithContract(t *testing.T, db *gorm.DB, allowedMethods string, autoApprove bool) (model.User, model.Wallet, model.AllowedContract) {
+func seedWalletWithContract(t *testing.T, db *gorm.DB) (model.User, model.Wallet, model.AllowedContract) {
 	t.Helper()
 	user, wallet := seedWallet(t, db)
 	contract := model.AllowedContract{
@@ -120,8 +120,6 @@ func seedWalletWithContract(t *testing.T, db *gorm.DB, allowedMethods string, au
 		ContractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		Symbol:          "USDC",
 		Decimals:        6,
-		AllowedMethods:  allowedMethods,
-		AutoApprove:     autoApprove,
 	}
 	if err := db.Create(&contract).Error; err != nil {
 		t.Fatalf("seed contract: %v", err)
@@ -152,40 +150,12 @@ func TestContractCall_NotWhitelisted(t *testing.T) {
 	}
 }
 
-// ─── TestContractCall_MethodNotAllowed ────────────────────────────────────────
+// ─── TestContractCall_APIKey_RequiresApproval ─────────────────────────────────
 
-func TestContractCall_MethodNotAllowed(t *testing.T) {
+func TestContractCall_APIKey_RequiresApproval(t *testing.T) {
 	db := testDB(t)
-	// Contract is whitelisted but only allows "transfer".
-	user, wallet, _ := seedWalletWithContract(t, db, "transfer", true)
-
-	r := contractCallRouter(db, user.ID, "passkey", "")
-	body := jsonBody(map[string]interface{}{
-		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-		"func_sig": "approve(address,uint256)",
-		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
-	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for disallowed method, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["error"] == nil {
-		t.Error("expected error message in response")
-	}
-}
-
-// ─── TestContractCall_HighRiskForceApproval_APIKey ────────────────────────────
-
-func TestContractCall_HighRiskForceApproval_APIKey(t *testing.T) {
-	db := testDB(t)
-	// AutoApprove=true but method is high-risk → must still require approval via API Key.
-	user, wallet, _ := seedWalletWithContract(t, db, "", true /* autoApprove */)
+	// All contract operations require approval via API Key.
+	user, wallet, _ := seedWalletWithContract(t, db)
 
 	// Start a mock RPC so BuildETHContractCallTx can complete.
 	rpc := mockETHRPCServer(t)
@@ -202,7 +172,7 @@ func TestContractCall_HighRiskForceApproval_APIKey(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 pending approval for high-risk method via API Key, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 202 pending approval for contract call via API Key, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
@@ -245,8 +215,8 @@ func TestContractCall_ApprovalStoresETHTxParams(t *testing.T) {
 	// (with "to", "gas_price", "nonce" fields), not a custom format.
 	// This ensures approval.go can rebuild the tx on approve.
 	db := testDB(t)
-	// AutoApprove=false so every API Key call triggers approval path.
-	user, wallet, _ := seedWalletWithContract(t, db, "", false /* autoApprove */)
+	// All API Key calls trigger approval path.
+	user, wallet, _ := seedWalletWithContract(t, db)
 
 	rpc := mockETHRPCServer(t)
 
@@ -293,36 +263,6 @@ func TestContractCall_ApprovalStoresETHTxParams(t *testing.T) {
 	// Verify TxParams contains "data" field (calldata).
 	if ethParams["data"] == nil {
 		t.Error("TxParams missing 'data' field — calldata not stored")
-	}
-}
-
-// ─── TestContractCall_AutoApproveFalse_APIKey ─────────────────────────────────
-
-func TestContractCall_AutoApproveFalse_APIKey(t *testing.T) {
-	db := testDB(t)
-	// Non-high-risk method but AutoApprove=false → API Key should get 202.
-	user, wallet, _ := seedWalletWithContract(t, db, "", false /* autoApprove */)
-
-	rpc := mockETHRPCServer(t)
-
-	r := contractCallRouter(db, user.ID, "apikey", rpc.URL)
-	body := jsonBody(map[string]interface{}{
-		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-		"func_sig": "transfer(address,uint256)",
-		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000"},
-	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 pending approval when AutoApprove=false via API Key, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["status"] != "pending_approval" {
-		t.Errorf("expected status=pending_approval, got %v", resp["status"])
 	}
 }
 
@@ -396,50 +336,6 @@ func TestContractCall_SolanaNotWhitelisted(t *testing.T) {
 	}
 }
 
-// ─── TestContractCall_SolanaDiscriminatorNotAllowed ────────────────────────────
-
-func TestContractCall_SolanaDiscriminatorNotAllowed(t *testing.T) {
-	db := testDB(t)
-	n := dbCounter
-	_ = n
-	user := model.User{Username: "soluser-cc-disc"}
-	db.Create(&user)
-	wallet := model.Wallet{
-		UserID:  user.ID,
-		Chain:   "solana",
-		KeyName: fmt.Sprintf("k-sol-cc-disc-%d", n),
-		Status:  "ready",
-	}
-	db.Create(&wallet)
-
-	programID := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-	contract := model.AllowedContract{
-		WalletID:        wallet.ID,
-		ContractAddress: programID,
-		AllowedMethods:  "03", // only allow Transfer (discriminator 03)
-		AutoApprove:     true,
-	}
-	db.Create(&contract)
-
-	r := contractCallRouter(db, user.ID, "passkey", "")
-	// Discriminator 04 (Approve) is not in the allowed list.
-	body := jsonBody(map[string]interface{}{
-		"contract": programID,
-		"accounts": []map[string]interface{}{
-			{"pubkey": "11111111111111111111111111111111", "is_signer": true, "is_writable": true},
-		},
-		"data": "0400000000",
-	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for disallowed discriminator, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
 // ─── TestContractCall_SolanaNoAccounts ─────────────────────────────────────────
 
 func TestContractCall_SolanaNoAccounts(t *testing.T) {
@@ -460,7 +356,6 @@ func TestContractCall_SolanaNoAccounts(t *testing.T) {
 	contract := model.AllowedContract{
 		WalletID:        wallet.ID,
 		ContractAddress: programID,
-		AutoApprove:     true,
 	}
 	db.Create(&contract)
 
@@ -480,9 +375,9 @@ func TestContractCall_SolanaNoAccounts(t *testing.T) {
 	}
 }
 
-// ─── TestContractCall_SolanaHighRisk_APIKey ────────────────────────────────────
+// ─── TestContractCall_Solana_APIKey_RequiresApproval ───────────────────────────
 
-func TestContractCall_SolanaHighRisk_APIKey(t *testing.T) {
+func TestContractCall_Solana_APIKey_RequiresApproval(t *testing.T) {
 	db := testDB(t)
 	n := dbCounter
 	_ = n
@@ -501,7 +396,6 @@ func TestContractCall_SolanaHighRisk_APIKey(t *testing.T) {
 	contract := model.AllowedContract{
 		WalletID:        wallet.ID,
 		ContractAddress: programID,
-		AutoApprove:     true, // auto-approve is on, but discriminator 04 is high-risk
 	}
 	db.Create(&contract)
 
@@ -513,7 +407,7 @@ func TestContractCall_SolanaHighRisk_APIKey(t *testing.T) {
 	}
 
 	r := contractCallRouter(db, user.ID, "apikey", "")
-	// Discriminator 04 = Approve — high risk.
+	// Any Solana contract call via API Key requires approval.
 	body := jsonBody(map[string]interface{}{
 		"contract": programID,
 		"accounts": []map[string]interface{}{
@@ -527,7 +421,7 @@ func TestContractCall_SolanaHighRisk_APIKey(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 pending approval for high-risk Solana discriminator via API Key, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 202 pending approval for Solana contract call via API Key, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
@@ -550,7 +444,7 @@ func TestContractCall_SolanaHighRisk_APIKey(t *testing.T) {
 
 func TestContractCall_EVMRequiresFuncSig(t *testing.T) {
 	db := testDB(t)
-	user, wallet, _ := seedWalletWithContract(t, db, "", true)
+	user, wallet, _ := seedWalletWithContract(t, db)
 
 	r := contractCallRouter(db, user.ID, "passkey", "")
 	// Missing func_sig — should fail for EVM.
@@ -624,8 +518,8 @@ func TestApproveToken_NotWhitelisted(t *testing.T) {
 
 func TestApproveToken_APIKey_PendingApproval(t *testing.T) {
 	db := testDB(t)
-	// AutoApprove=true but approve is always high-risk → must still require approval via API Key.
-	user, wallet, _ := seedWalletWithContract(t, db, "", true /* autoApprove */)
+	// All contract operations require approval via API Key.
+	user, wallet, _ := seedWalletWithContract(t, db)
 
 	rpc := mockETHRPCServer(t)
 
@@ -686,7 +580,7 @@ func TestApproveToken_MissingFields(t *testing.T) {
 
 func TestRevokeApproval_APIKey_PendingApproval(t *testing.T) {
 	db := testDB(t)
-	user, wallet, _ := seedWalletWithContract(t, db, "", true /* autoApprove */)
+	user, wallet, _ := seedWalletWithContract(t, db)
 
 	rpc := mockETHRPCServer(t)
 
@@ -746,7 +640,7 @@ func TestRevokeApproval_MissingFields(t *testing.T) {
 func TestContractCall_InvalidFuncSig(t *testing.T) {
 	db := testDB(t)
 	// Whitelist the contract first so we pass layer 1.
-	user, wallet, _ := seedWalletWithContract(t, db, "", true)
+	user, wallet, _ := seedWalletWithContract(t, db)
 
 	r := contractCallRouter(db, user.ID, "passkey", "")
 	body := jsonBody(map[string]interface{}{
@@ -761,5 +655,69 @@ func TestContractCall_InvalidFuncSig(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid func_sig, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── TestContractCall_PasskeyAuth_DirectExecution ─────────────────────────────
+
+func TestContractCall_PasskeyAuth_DirectExecution(t *testing.T) {
+	db := testDB(t)
+	user, wallet, _ := seedWalletWithContract(t, db)
+	rpc := mockETHRPCServer(t)
+	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	body := jsonBody(map[string]interface{}{
+		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		"func_sig": "approve(address,uint256)",
+		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000000"},
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code == http.StatusAccepted {
+		t.Fatalf("Passkey should skip approval, got 202: %s", w.Body.String())
+	}
+}
+
+// ─── TestApproveToken_PasskeyAuth_DirectExecution ─────────────────────────────
+
+func TestApproveToken_PasskeyAuth_DirectExecution(t *testing.T) {
+	db := testDB(t)
+	user, wallet, _ := seedWalletWithContract(t, db)
+	rpc := mockETHRPCServer(t)
+	// Passkey auth — should bypass approval even for approve-token
+	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	body := jsonBody(map[string]interface{}{
+		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		"spender":  "0x1234567890123456789012345678901234567890",
+		"amount":   "1000000",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/approve-token", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	// Passkey goes to signing directly. SDK nil → 502, NOT 202.
+	if w.Code == http.StatusAccepted {
+		t.Fatalf("Passkey approve-token should skip approval, got 202: %s", w.Body.String())
+	}
+}
+
+// ─── TestRevokeApproval_PasskeyAuth_DirectExecution ───────────────────────────
+
+func TestRevokeApproval_PasskeyAuth_DirectExecution(t *testing.T) {
+	db := testDB(t)
+	user, wallet, _ := seedWalletWithContract(t, db)
+	rpc := mockETHRPCServer(t)
+	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	body := jsonBody(map[string]interface{}{
+		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		"spender":  "0x1234567890123456789012345678901234567890",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/revoke-approval", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code == http.StatusAccepted {
+		t.Fatalf("Passkey revoke-approval should skip approval, got 202: %s", w.Body.String())
 	}
 }

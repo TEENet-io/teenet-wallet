@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,8 +13,60 @@ import (
 
 // coinGeckoIDs maps uppercase currency symbols to CoinGecko API identifiers.
 var coinGeckoIDs = map[string]string{
-	"ETH": "ethereum",
-	"SOL": "solana",
+	"ETH":  "ethereum",
+	"SOL":  "solana",
+	"BNB":  "binancecoin",
+	"POL":  "matic-network",
+	"AVAX": "avalanche-2",
+}
+
+// coinGeckoPlatformIDs maps chain names (lowercase) to CoinGecko asset platform IDs
+// used by the /simple/token_price/{platform} endpoint.
+// coinGeckoPlatformIDs maps chain names (lowercase) to CoinGecko asset platform IDs.
+// Used by GetTokenUSDPrice for the /simple/token_price/{platform} endpoint.
+// Testnets are intentionally omitted — fail-closed (unknown token → approval).
+// Full list: https://api.coingecko.com/api/v3/asset_platforms
+var coinGeckoPlatformIDs = map[string]string{
+	"ethereum":  "ethereum",
+	"optimism":  "optimistic-ethereum",
+	"arbitrum":  "arbitrum-one",
+	"base":      "base",
+	"polygon":   "polygon-pos",
+	"bsc":       "binance-smart-chain",
+	"avalanche": "avalanche",
+	"fantom":    "fantom",
+	"linea":     "linea",
+	"zksync":    "zksync",
+	"scroll":    "scroll",
+	"mantle":    "mantle",
+	"celo":      "celo",
+	"gnosis":    "xdai",
+	"cronos":    "cronos",
+	"moonbeam":  "moonbeam",
+	"blast":     "blast",
+	"solana":    "solana",
+}
+
+// evmPlatforms tracks which CoinGecko platform IDs use hex addresses (case-insensitive).
+// Non-EVM platforms (e.g. Solana) use case-sensitive addresses (base58).
+var evmPlatforms = map[string]bool{
+	"ethereum":            true,
+	"optimistic-ethereum": true,
+	"arbitrum-one":        true,
+	"base":                true,
+	"polygon-pos":         true,
+	"binance-smart-chain": true,
+	"avalanche":           true,
+	"fantom":              true,
+	"linea":               true,
+	"zksync":              true,
+	"scroll":              true,
+	"mantle":              true,
+	"celo":                true,
+	"xdai":                true,
+	"cronos":              true,
+	"moonbeam":            true,
+	"blast":               true,
 }
 
 // stablecoins are pegged 1:1 to USD — no price lookup needed.
@@ -26,13 +79,18 @@ var stablecoins = map[string]bool{
 
 // PriceService fetches and caches USD prices for supported cryptocurrencies.
 // USDT/USDC are hardcoded to $1. ETH/SOL are fetched from CoinGecko with a TTL cache.
+// ERC-20 tokens are priced via CoinGecko Token Price API.
+// Solana SPL tokens fall back to Jupiter Price API when CoinGecko has no data.
 type PriceService struct {
-	mu         sync.RWMutex
-	prices     map[string]float64 // "ETH" -> 3500.0
-	lastUpdate time.Time
-	ttl        time.Duration
-	client     *http.Client
-	baseURL    string // CoinGecko API base URL (overridable for testing)
+	mu             sync.RWMutex
+	prices         map[string]float64 // "ETH" -> 3500.0
+	lastUpdate     time.Time
+	ttl            time.Duration
+	client         *http.Client
+	baseURL        string             // CoinGecko API base URL (overridable for testing)
+	jupiterBaseURL string             // Jupiter Price API base URL (overridable for testing)
+	tokenPrices    map[string]float64 // "ethereum:0xabc..." or "jupiter:MintAddr" -> price
+	tokenExpiry    map[string]time.Time
 }
 
 // NewPriceService creates a PriceService with the given cache TTL.
@@ -43,14 +101,20 @@ func NewPriceService(ttl time.Duration) *PriceService {
 // NewPriceServiceWithBaseURL creates a PriceService with a custom API base URL (for testing).
 func NewPriceServiceWithBaseURL(ttl time.Duration, baseURL string) *PriceService {
 	ps := &PriceService{
-		prices:  make(map[string]float64),
-		ttl:     ttl,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		baseURL: baseURL,
+		prices:         make(map[string]float64),
+		ttl:            ttl,
+		client:         &http.Client{Timeout: 10 * time.Second},
+		baseURL:        baseURL,
+		jupiterBaseURL: "https://api.jup.ag",
+		tokenPrices:    make(map[string]float64),
+		tokenExpiry:    make(map[string]time.Time),
 	}
 	ps.refresh()
 	return ps
 }
+
+// SetJupiterBaseURL overrides the Jupiter API base URL (for testing).
+func (ps *PriceService) SetJupiterBaseURL(url string) { ps.jupiterBaseURL = url }
 
 // GetUSDPrice returns the USD price for a currency symbol (e.g. "ETH", "SOL", "USDC").
 // Stablecoins return 1.0. Unknown currencies return an error.
@@ -98,6 +162,117 @@ func (ps *PriceService) GetAllPrices() map[string]float64 {
 		out[k] = 1.0
 	}
 	return out
+}
+
+// GetTokenUSDPrice fetches the USD price for a token identified by its
+// contract/mint address on the given chain. Results are cached for the service TTL.
+// Supported chains: "ethereum", "optimism", "solana".
+// EVM addresses are lowercased; Solana mint addresses preserve original case (base58).
+func (ps *PriceService) GetTokenUSDPrice(chainName, contractAddress string) (float64, error) {
+	platform, ok := coinGeckoPlatformIDs[strings.ToLower(chainName)]
+	if !ok {
+		return 0, fmt.Errorf("no token price support for chain %q", chainName)
+	}
+	addr := strings.TrimSpace(contractAddress)
+	if evmPlatforms[platform] {
+		addr = strings.ToLower(addr)
+	}
+	cacheKey := platform + ":" + addr
+
+	ps.mu.RLock()
+	if price, ok := ps.tokenPrices[cacheKey]; ok {
+		if time.Now().Before(ps.tokenExpiry[cacheKey]) {
+			ps.mu.RUnlock()
+			return price, nil
+		}
+	}
+	ps.mu.RUnlock()
+
+	url := fmt.Sprintf("%s/api/v3/simple/token_price/%s?contract_addresses=%s&vs_currencies=usd", ps.baseURL, platform, addr)
+	resp, err := ps.client.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("token price fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("token price API returned %d", resp.StatusCode)
+	}
+
+	var result map[string]map[string]float64
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("token price parse failed: %w", err)
+	}
+
+	data, exists := result[addr]
+	if !exists {
+		return 0, fmt.Errorf("no price data for token %s on %s", addr, platform)
+	}
+	usd, ok := data["usd"]
+	if !ok || usd <= 0 {
+		return 0, fmt.Errorf("invalid USD price for token %s", addr)
+	}
+
+	ps.mu.Lock()
+	ps.tokenPrices[cacheKey] = usd
+	ps.tokenExpiry[cacheKey] = time.Now().Add(ps.ttl)
+	ps.mu.Unlock()
+
+	return usd, nil
+}
+
+// GetJupiterPrice fetches the USD price of a Solana SPL token via the Jupiter Price API.
+// Uses the same per-entry TTL cache as GetTokenUSDPrice (keyed as "jupiter:{mintAddr}").
+// Jupiter covers virtually all SPL tokens with liquidity on Solana DEXes.
+func (ps *PriceService) GetJupiterPrice(mintAddress string) (float64, error) {
+	addr := strings.TrimSpace(mintAddress)
+	cacheKey := "jupiter:" + addr
+
+	ps.mu.RLock()
+	if price, ok := ps.tokenPrices[cacheKey]; ok {
+		if time.Now().Before(ps.tokenExpiry[cacheKey]) {
+			ps.mu.RUnlock()
+			return price, nil
+		}
+	}
+	ps.mu.RUnlock()
+
+	url := ps.jupiterBaseURL + "/price/v2?ids=" + addr
+	resp, err := ps.client.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("jupiter price fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("jupiter price API returned %d", resp.StatusCode)
+	}
+
+	// Response: {"data":{"MintAddr":{"id":"MintAddr","price":"1.23"}}}
+	var result struct {
+		Data map[string]struct {
+			Price string `json:"price"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("jupiter price parse failed: %w", err)
+	}
+
+	entry, exists := result.Data[addr]
+	if !exists || entry.Price == "" {
+		return 0, fmt.Errorf("no jupiter price data for %s", addr)
+	}
+	usd, err := strconv.ParseFloat(entry.Price, 64)
+	if err != nil || usd <= 0 {
+		return 0, fmt.Errorf("invalid jupiter price for %s: %q", addr, entry.Price)
+	}
+
+	ps.mu.Lock()
+	ps.tokenPrices[cacheKey] = usd
+	ps.tokenExpiry[cacheKey] = time.Now().Add(ps.ttl)
+	ps.mu.Unlock()
+
+	return usd, nil
 }
 
 // refresh fetches fresh prices from CoinGecko.

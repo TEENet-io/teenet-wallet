@@ -70,5 +70,50 @@
     "currency": "ETH",
     "family": "evm",
     "rpc_url": "https://base-sepolia-rpc.publicnode.com"
+  },
+  {
+    "name": "arbitrum",
+    "label": "Arbitrum One",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://arbitrum-one-rpc.publicnode.com"
+  },
+  {
+    "name": "base",
+    "label": "Base Mainnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://base-rpc.publicnode.com"
+  },
+  {
+    "name": "polygon",
+    "label": "Polygon PoS",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "POL",
+    "family": "evm",
+    "rpc_url": "https://polygon-bor-rpc.publicnode.com"
+  },
+  {
+    "name": "bsc",
+    "label": "BNB Smart Chain",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "BNB",
+    "family": "evm",
+    "rpc_url": "https://bsc-rpc.publicnode.com"
+  },
+  {
+    "name": "avalanche",
+    "label": "Avalanche C-Chain",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "AVAX",
+    "family": "evm",
+    "rpc_url": "https://avalanche-c-chain-rpc.publicnode.com"
   }
 ]

@@ -47,8 +47,6 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 		Label           string      `json:"label"`
 		Symbol          string      `json:"symbol"`
 		Decimals        int         `json:"decimals"`
-		AllowedMethods  string      `json:"allowed_methods"`
-		AutoApprove     bool        `json:"auto_approve"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		jsonError(c, http.StatusBadRequest, err.Error())
@@ -89,8 +87,6 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 		Label:           req.Label,
 		Symbol:          strings.ToUpper(strings.TrimSpace(req.Symbol)),
 		Decimals:        req.Decimals,
-		AllowedMethods:  strings.ToLower(strings.TrimSpace(req.AllowedMethods)),
-		AutoApprove:     req.AutoApprove,
 	}
 
 	// API key path: create approval request.
@@ -174,8 +170,6 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 		Label          *string     `json:"label"`
 		Symbol         *string     `json:"symbol"`
 		Decimals       *int        `json:"decimals"`
-		AllowedMethods *string     `json:"allowed_methods"`
-		AutoApprove    *bool       `json:"auto_approve"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		jsonError(c, http.StatusBadRequest, err.Error())
@@ -197,12 +191,6 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 	if req.Decimals != nil {
 		proposed.Decimals = *req.Decimals
-	}
-	if req.AllowedMethods != nil {
-		proposed.AllowedMethods = strings.ToLower(strings.TrimSpace(*req.AllowedMethods))
-	}
-	if req.AutoApprove != nil {
-		proposed.AutoApprove = *req.AutoApprove
 	}
 
 	// API key path: create approval request.
@@ -237,12 +225,6 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 	if req.Decimals != nil {
 		updates["decimals"] = proposed.Decimals
-	}
-	if req.AllowedMethods != nil {
-		updates["allowed_methods"] = proposed.AllowedMethods
-	}
-	if req.AutoApprove != nil {
-		updates["auto_approve"] = proposed.AutoApprove
 	}
 
 	if len(updates) == 0 {

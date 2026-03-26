@@ -434,6 +434,58 @@ func (h *WalletHandler) DeletePolicy(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// DailySpent returns the current day's USD spend and limit info.
+// GET /api/wallets/:id/daily-spent
+func (h *WalletHandler) DailySpent(c *gin.Context) {
+	wallet, ok := loadUserWallet(c, h.db)
+	if !ok {
+		return
+	}
+
+	var policy model.ApprovalPolicy
+	if err := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"daily_spent_usd": "0",
+			"daily_limit_usd": "",
+			"remaining_usd":   "",
+			"reset_at":        "",
+		})
+		return
+	}
+
+	startOfDay := utcStartOfDay()
+	spent := policy.DailySpentUSD
+	if policy.DailyResetAt.Before(startOfDay) {
+		spent = "0"
+	}
+
+	var remaining string
+	if policy.DailyLimitUSD != "" {
+		limit, _ := new(big.Float).SetString(policy.DailyLimitUSD)
+		spentF, _ := new(big.Float).SetString(spent)
+		if limit != nil && spentF != nil {
+			rem := new(big.Float).Sub(limit, spentF)
+			if rem.Sign() < 0 {
+				rem = new(big.Float)
+			}
+			remaining = rem.Text('f', 2)
+		}
+	}
+
+	resetAt := ""
+	if policy.DailyLimitUSD != "" {
+		nextReset := startOfDay.Add(24 * time.Hour)
+		resetAt = nextReset.Format(time.RFC3339)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"daily_spent_usd": spent,
+		"daily_limit_usd": policy.DailyLimitUSD,
+		"remaining_usd":   remaining,
+		"reset_at":        resetAt,
+	})
+}
+
 // createApprovalRequest creates a pending ApprovalRequest and returns a 202 response.
 // txParams is optional: when set (non-empty), the approval handler will broadcast the tx after signing.
 func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Wallet, req SignRequest, msgBytes []byte, policy *model.ApprovalPolicy, txParams string) {
@@ -698,13 +750,40 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 
 	// Convert amount to USD for threshold/limit checks.
 	var amountUSD float64
-	if policyFound {
+	if policyFound && h.prices != nil {
 		if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
 			if a, ok := new(big.Float).SetString(req.Amount); ok {
 				f, _ := a.Float64()
 				amountUSD = f * usdPrice
 			}
+		} else if tokenContractAddr != "" {
+			// Fallback 1: CoinGecko token price by contract address.
+			if usdPrice, priceErr := h.prices.GetTokenUSDPrice(chainCfg.Name, tokenContractAddr); priceErr == nil && usdPrice > 0 {
+				if a, ok := new(big.Float).SetString(req.Amount); ok {
+					f, _ := a.Float64()
+					amountUSD = f * usdPrice
+				}
+			} else if chainCfg.Family == "solana" {
+				// Fallback 2: Jupiter Price API for Solana SPL tokens.
+				if usdPrice, priceErr := h.prices.GetJupiterPrice(tokenContractAddr); priceErr == nil && usdPrice > 0 {
+					if a, ok := new(big.Float).SetString(req.Amount); ok {
+						f, _ := a.Float64()
+						amountUSD = f * usdPrice
+					}
+				}
+			}
 		}
+	}
+
+	// Unknown token price with active policy → require approval (fail-closed).
+	if policyFound && amountUSD == 0 && tokenContractAddr != "" && !isPasskeyAuth(c) {
+		signReq := SignRequest{
+			Message:   hex.EncodeToString(signingMsg),
+			Encoding:  "hex",
+			TxContext: txContext,
+		}
+		h.createApprovalRequest(c, wallet, signReq, signingMsg, &policy, txParamsJSON)
+		return
 	}
 
 	// Check daily spend limit in USD atomically (pre-deduct, rollback on failure).

@@ -21,12 +21,10 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 - **Native and token balance queries**
 - **Custom chain management** -- add or remove EVM chains at runtime via API (persisted in DB across restarts)
 
-### Smart Contract Security (3-Layer Model)
+### Smart Contract Security (2-Layer Model)
 
 1. **Contract whitelist** -- only pre-approved contract addresses (EVM), token mints (SPL), or program IDs (Solana) can be called
-2. **Per-contract method restrictions** -- optional `allowed_methods` list limits which functions can be invoked (EVM)
-3. **High-risk method force-approval** -- `approve`, `transferFrom`, `increaseAllowance`, `setApprovalForAll`, and `safeTransferFrom` always require Passkey approval, even with auto-approve enabled (EVM)
-4. **Auto-approve mode** -- whitelisted contracts/programs with `auto_approve: true` allow API keys to execute without Passkey confirmation
+2. **Passkey approval for all contract operations** -- every contract call, token approval, or revocation initiated via API Key requires Passkey confirmation; Passkey sessions execute directly
 
 ### ABI Encoder
 
@@ -39,8 +37,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
   - **API Keys** (`ocw_` prefix) -- up to 10 per user with optional labels, for AI agent and programmatic automation
   - **Passkey sessions** (`ps_` prefix) -- for sensitive operations requiring human presence
 - **Passkey (WebAuthn)** hardware approval for high-value transactions and destructive operations
-- **Auto-approve mode** -- trusted contracts can be flagged so API keys execute without Passkey, except for high-risk methods
-- **USD-denominated approval thresholds** with configurable daily spend limits (ETH/SOL prices via CoinGecko, stablecoins pegged to $1)
+- **USD-denominated approval thresholds** with configurable daily spend limits (ETH/SOL/ERC-20 prices via CoinGecko, stablecoins pegged to $1)
 - **CSRF protection** via `X-CSRF-Token` header for Passkey sessions
 - **Rate limiting** -- per-API-key for general requests, per-IP for registration endpoints
 - **Invite-based and open registration** flows
@@ -65,7 +62,7 @@ AI Agent / App                       User (Browser)
 +--------------------------------------------------+
 |  TEENet Wallet  (:8080)                           |
 |  - Builds transactions                            |
-|  - Enforces contract whitelist + method gates     |
+|  - Enforces contract whitelist                     |
 |  - Manages approval policies + daily limits       |
 |  - Routes to approval queue or direct signing     |
 +--------------------------------------------------+
@@ -85,8 +82,8 @@ AI Agent / App                       User (Browser)
 ```
 
 1. An application or AI agent sends a request to TEENet Wallet, authenticated with an API key or Passkey session.
-2. TEENet Wallet validates the request against the contract whitelist, method restrictions, and approval policies.
-3. If the amount exceeds the threshold, a high-risk method is called, or auto-approve is not enabled, the transaction enters a pending state requiring Passkey approval through the web UI.
+2. TEENet Wallet validates the request against the contract whitelist and approval policies.
+3. For transfers, if the amount exceeds the threshold the transaction enters a pending state requiring Passkey approval through the web UI. For all contract operations via API Key, Passkey approval is always required.
 4. TEENet Wallet requests a threshold signature from the local app-comm-consensus node via the TEENet SDK.
 5. The TEE-DAO cluster performs distributed signing -- the private key is never reconstructed on any single machine.
 6. TEENet Wallet broadcasts the signed transaction to the blockchain.
@@ -193,6 +190,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | POST | `/api/wallets/:id/unwrap-sol` | Dual | Unwrap all wSOL back to native SOL (Solana only) |
 | GET | `/api/wallets/:id/balance` | Dual | Get native token balance |
 | GET | `/api/wallets/:id/pubkey` | Dual | Get wallet public key |
+| GET | `/api/wallets/:id/daily-spent` | Dual | Get daily USD spend, limit, and remaining budget |
 
 ### Contract Whitelist
 
@@ -200,16 +198,16 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 |--------|----------|------|-------------|
 | GET | `/api/wallets/:id/contracts` | Dual | List whitelisted contracts |
 | POST | `/api/wallets/:id/contracts` | Dual | Add contract (API key creates pending approval) |
-| PUT | `/api/wallets/:id/contracts/:cid` | Dual | Update contract config (API key creates pending approval) |
+| PUT | `/api/wallets/:id/contracts/:cid` | Dual | Update contract config (label, symbol, decimals; API key creates pending approval) |
 | DELETE | `/api/wallets/:id/contracts/:cid` | Passkey | Remove a whitelisted contract |
 
 ### Contract Calls
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (EVM: ABI-encoded; Solana: program instruction). Optional `amount_usd` field for threshold/daily-limit enforcement |
-| POST | `/api/wallets/:id/approve-token` | Dual | Approve ERC-20 token spending (always high-risk) |
-| POST | `/api/wallets/:id/revoke-approval` | Dual | Revoke ERC-20 token approval (always high-risk) |
+| POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (API Key: requires approval; Passkey: direct) |
+| POST | `/api/wallets/:id/approve-token` | Dual | Approve ERC-20 token spending (API Key: requires approval; Passkey: direct) |
+| POST | `/api/wallets/:id/revoke-approval` | Dual | Revoke ERC-20 token approval (API Key: requires approval; Passkey: direct) |
 | POST | `/api/wallets/:id/call-read` | Dual | Read-only contract call (no signing, EVM only) |
 
 ### Approval Policies
@@ -239,12 +237,11 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 
 - **Distributed Key Generation (DKG):** Private keys are generated across a cluster of TEE nodes using threshold cryptography (FROST for Ed25519/Schnorr, GG20 for ECDSA). No single node ever holds the full private key.
 - **Threshold Signing:** Transaction signing requires cooperation of M-of-N TEE nodes.
-- **Passkey Hardware Approval:** High-value transfers, high-risk contract methods, and destructive operations (key deletion, policy changes) require fresh WebAuthn hardware authentication.
-- **Contract Whitelist with Method Gates:** Contract interactions are restricted to pre-approved addresses. Per-contract `allowed_methods` lists restrict callable functions. High-risk methods (`approve`, `transferFrom`, `increaseAllowance`, `setApprovalForAll`, `safeTransferFrom`) always require Passkey approval regardless of auto-approve settings.
-- **Auto-Approve Mode:** Trusted contracts can be flagged with `auto_approve: true`, allowing API keys to execute non-high-risk methods without Passkey confirmation.
+- **Passkey Hardware Approval:** High-value transfers, all contract operations via API Key, and destructive operations (key deletion, policy changes) require fresh WebAuthn hardware authentication.
+- **Contract Whitelist:** Contract interactions are restricted to pre-approved addresses. All contract operations (calls, token approvals, revocations) initiated via API Key require Passkey approval. Passkey sessions execute directly.
 - **CSRF Protection:** All state-changing API requests from Passkey sessions require a `X-CSRF-Token` header.
 - **Rate Limiting:** Per-API-key and per-IP rate limits protect against abuse and prevent TEE DKG resource exhaustion.
-- **Daily Spend Limits:** Optional USD-denominated daily limits that hard-block transfers when exceeded. Uses pre-deduction with rollback on signing/broadcast failure (auth/capture pattern) to prevent phantom spend from failed transactions.
+- **Daily Spend Limits:** Optional USD-denominated daily limits that hard-block transfers when exceeded. Unknown token transfers (tokens without a CoinGecko price) require Passkey approval (fail-closed). Uses pre-deduction with rollback on signing/broadcast failure (auth/capture pattern) to prevent phantom spend from failed transactions.
 - **Content Security Policy:** The web UI is served with a restrictive CSP header. Additional security headers include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: strict-origin-when-cross-origin`.
 
 ## Supported Chains
@@ -253,14 +250,31 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 |-------|----------|----------|-------|--------|
 | Ethereum Mainnet | ETH | ECDSA | secp256k1 | EVM |
 | Optimism Mainnet | ETH | ECDSA | secp256k1 | EVM |
+| Arbitrum One | ETH | ECDSA | secp256k1 | EVM |
+| Base Mainnet | ETH | ECDSA | secp256k1 | EVM |
+| Polygon PoS | POL | ECDSA | secp256k1 | EVM |
+| BNB Smart Chain | BNB | ECDSA | secp256k1 | EVM |
+| Avalanche C-Chain | AVAX | ECDSA | secp256k1 | EVM |
+| Solana Mainnet | SOL | Schnorr | ed25519 | Solana |
 | Sepolia Testnet | ETH | ECDSA | secp256k1 | EVM |
 | Holesky Testnet | ETH | ECDSA | secp256k1 | EVM |
 | Base Sepolia Testnet | ETH | ECDSA | secp256k1 | EVM |
 | BSC Testnet | tBNB | ECDSA | secp256k1 | EVM |
-| Solana Mainnet | SOL | Schnorr | ed25519 | Solana |
 | Solana Devnet | SOL | Schnorr | ed25519 | Solana |
 
 Add or modify chains by editing `chains.json`, or add custom EVM chains at runtime via `POST /api/chains` (persisted in the database). Any EVM-compatible chain can be added by providing a name, RPC URL, and currency.
+
+### Token Pricing
+
+Transfer limits use real-time USD pricing with multi-source fallback:
+
+| Source | Coverage |
+|--------|----------|
+| Built-in | ETH, SOL, BNB, POL, AVAX + stablecoins (USDC/USDT/DAI/BUSD = $1) |
+| CoinGecko Token Price API | ERC-20 tokens on 17 EVM chains + Solana (by contract/mint address) |
+| Jupiter Price API | Solana SPL tokens with DEX liquidity (fallback when CoinGecko has no data) |
+
+Tokens without a known price trigger approval (fail-closed).
 
 ## Development
 
@@ -295,7 +309,7 @@ model/
   user.go                User model
   apikey.go              APIKey model (multi-key per user, max 10)
   wallet.go              Wallet, CustomChain models and chain config loader
-  contract.go            AllowedContract model (whitelist + method restrictions)
+  contract.go            AllowedContract model (whitelist)
   policy.go              ApprovalPolicy and ApprovalRequest models
   audit.go               AuditLog model
   idempotency.go         IdempotencyRecord model

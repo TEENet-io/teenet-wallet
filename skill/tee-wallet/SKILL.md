@@ -277,9 +277,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
     "contract_address": "<0x...>",
     "symbol": "<e.g. USDC>",
     "decimals": <e.g. 6>,
-    "label": "<optional label>",
-    "allowed_methods": "<optional: comma-separated method names, e.g. transfer,approve>",
-    "auto_approve": false
+    "label": "<optional label>"
   }'
 ```
 
@@ -310,11 +308,12 @@ curl -s -X PUT "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts/<cid>" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "auto_approve": false,
-    "allowed_methods": "transfer,balanceOf"
+    "label": "Updated label",
+    "symbol": "USDC",
+    "decimals": 6
   }'
 ```
-Only include the fields you want to change. A 202 response means the update is pending approval — follow the Approval Polling Flow (Section 12, `contract_update` type).
+Only include the fields you want to change (`label`, `symbol`, `decimals`). A 202 response means the update is pending approval — follow the Approval Polling Flow (Section 12, `contract_update` type).
 
 **Why removing requires Passkey but adding/updating can be proposed by API key**: An API key can only *propose* changes — the human wallet owner with hardware security must still approve. Removal is always Passkey-only since it's a more sensitive operation (accidentally removing could block legitimate transfers).
 
@@ -326,20 +325,14 @@ Only include the fields you want to change. A 202 response means the update is p
 | `symbol` | No | Token symbol (e.g. USDC) |
 | `decimals` | No | Token decimals (e.g. 6 for USDC, 18 for WETH, 9 for most SPL tokens) |
 | `label` | No | Human-readable label |
-| `allowed_methods` | No | Comma-separated method names (EVM: e.g. `transfer,approve`; Solana programs: leave empty to allow all instructions). Empty = all methods allowed |
-| `auto_approve` | No | If `true`, API key can execute calls to this contract/program without Passkey approval (except high-risk methods). Default: `false`. Also applies to Solana program calls |
 
-**High-risk methods** (always require Passkey approval regardless of `auto_approve`):
-`approve`, `increaseAllowance`, `setApprovalForAll`, `transferFrom`, `safeTransferFrom`
-
-> Note: For Solana programs, `auto_approve: true` enables API-key-initiated program calls without Passkey approval (except when the instruction itself triggers the wallet's transfer approval policy).
+All contract operations initiated via API Key require Passkey approval. Passkey sessions execute directly.
 
 ### 7.2. General Contract Call
 
-Use when the user wants to call any smart contract function (EVM) or invoke a Solana program instruction. This endpoint has **three-layer security**:
+Use when the user wants to call any smart contract function (EVM) or invoke a Solana program instruction. Security model:
 1. Contract/program must be whitelisted
-2. Method must be in `allowed_methods` (if configured; Solana programs typically leave this empty)
-3. High-risk EVM methods always require Passkey approval; `auto_approve` applies to Solana programs too
+2. All contract operations via API Key require Passkey approval; Passkey sessions execute directly
 
 **EVM (Ethereum) — use `func_sig` and `args`:**
 ```bash
@@ -351,12 +344,9 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
     "func_sig": "<function signature, e.g. transfer(address,uint256)>",
     "args": ["<arg1>", "<arg2>"],
     "value": "<optional: ETH to send, e.g. 0.1>",
-    "amount_usd": "<optional: USD value of this call for threshold/daily-limit, e.g. 150.00>",
     "memo": "<optional>"
   }'
 ```
-
-**`amount_usd` field:** When the contract call involves transferring value (e.g. a DeFi swap, token transfer via contract), report the approximate USD value so the wallet can enforce threshold and daily limit policies. If `value` (native ETH) is also present, the wallet uses whichever is larger. If omitted and no `value` is sent, threshold/daily-limit checks are skipped for this call.
 
 **Function signature format:** Use Solidity-style signatures like `transfer(address,uint256)`, `approve(address,uint256)`, `balanceOf(address)`.
 
@@ -374,7 +364,6 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
       {"pubkey": "<account2_base58>", "is_signer": false, "is_writable": false}
     ],
     "data": "<hex-encoded instruction data>",
-    "amount_usd": "<optional: USD value for threshold/daily-limit>",
     "memo": "<optional>"
   }'
 ```
@@ -383,7 +372,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
 - `accounts`: array of account metas in instruction order; the wallet's own address is added automatically as a signer if required
 - `data`: hex-encoded instruction data (discriminator + encoded arguments)
 
-The program must be added to the whitelist before calling (same API as Section 7). `auto_approve: true` on the whitelist entry allows API-key calls without Passkey.
+The program must be added to the whitelist before calling (same API as Section 7). All contract/program operations via API Key require Passkey approval.
 
 **Response:** Same as transfer — either `"status":"completed"` with `tx_hash`, or `"status":"pending_approval"` with approval link.
 
@@ -403,7 +392,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/approve-token" \
   }'
 ```
 
-> ⚠️ `approve` is a **high-risk method** — always requires Passkey approval, even if `auto_approve` is enabled on the contract.
+> ⚠️ All contract operations via API Key require Passkey approval. Passkey sessions execute directly.
 
 ### 7.4. Revoke Token Approval (Convenience)
 
@@ -419,7 +408,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/revoke-approval" \
   }'
 ```
 
-> ⚠️ Also a high-risk method — requires Passkey approval.
+> ⚠️ Requires Passkey approval when called via API Key.
 
 ### 7.5. Wrap SOL (Solana)
 
@@ -621,7 +610,7 @@ Public Sepolia fallbacks: `https://ethereum-sepolia-rpc.publicnode.com`, `https:
 
 ### 10. Set Approval Policy
 
-Each wallet has a single USD-denominated approval policy. Token amounts are converted to USD at request time using real-time prices (ETH/SOL via CoinGecko, stablecoins pegged to $1). You can check current prices via `GET /api/prices`.
+Each wallet has a single USD-denominated approval policy. Token amounts are converted to USD at request time using real-time prices: native coins (ETH, SOL, BNB, POL, AVAX) via CoinGecko, stablecoins (USDC/USDT/DAI/BUSD) pegged to $1, ERC-20 tokens via CoinGecko Token Price API (17 EVM chains), and Solana SPL tokens via Jupiter Price API as fallback. Check native/stablecoin prices via `GET /api/prices`.
 
 ```bash
 curl -s -X PUT "${TEE_WALLET_API_URL}/api/wallets/<id>/policy" \
@@ -637,8 +626,6 @@ curl -s -X PUT "${TEE_WALLET_API_URL}/api/wallets/<id>/policy" \
 - `threshold_usd`: single transaction above this USD value requires Passkey approval
 - `daily_limit_usd` (optional): cumulative USD spend per UTC calendar day; if exceeded the transfer is **hard-blocked** (no approval path)
 - One policy per wallet — covers all currencies (ETH, SOL, tokens)
-
-For contract calls, include `amount_usd` in the request body so the wallet can enforce threshold/daily-limit (see Section 7.2).
 
 Ask user for the threshold amount if not specified. If they also want a daily cap, ask for `daily_limit_usd`.
 
@@ -661,6 +648,34 @@ Then poll `GET /api/approvals/{approval_id}` every 15 seconds until `status` is 
 - `rejected` → "🚫 Policy change rejected. No changes were made."
 
 **When called with a Passkey session** (Web UI), the policy is applied immediately and returns HTTP 200.
+
+### 10.1. Check Daily Spend
+
+Query how much USD has been spent today (UTC) against the wallet's daily limit:
+
+```bash
+curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/daily-spent" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "wallet_id": "<uuid>",
+  "spent_usd": 150.00,
+  "daily_limit_usd": 5000.00,
+  "remaining_usd": 4850.00,
+  "resets_at": "2026-03-26T00:00:00Z"
+}
+```
+
+- `spent_usd`: total USD spent today (UTC)
+- `daily_limit_usd`: the configured daily limit (0 if no policy set)
+- `remaining_usd`: how much budget remains today
+- `resets_at`: when the daily counter resets (next UTC midnight)
+
+Use this to proactively check remaining budget before large transfers.
 
 ### 11. View Pending Approvals
 
@@ -814,13 +829,13 @@ Map common API errors to user-friendly messages:
 20. **Audit log available**: users can check their operation history via `GET /api/audit/logs` (Section 13).
 21. **Global token list for balances**: when checking balances, always collect the union of whitelisted contracts across all wallets on the same chain. Apply this global list when querying any wallet — the whitelist gates sending, not holding. Never skip token queries because a specific wallet's whitelist is empty.
 22. **Contract calls**: use `/contract-call` for general smart contract interactions. The contract must be whitelisted first. Use `/call-read` for read-only queries (no approval needed).
-23. **High-risk methods always need Passkey**: `approve`, `increaseAllowance`, `setApprovalForAll`, `transferFrom`, `safeTransferFrom` — even if the contract has `auto_approve: true`.
+23. **All contract operations via API Key require Passkey approval**: contract calls, token approvals, and revocations initiated via API Key always require Passkey confirmation. Passkey sessions execute directly.
 24. **Use convenience endpoints**: prefer `/approve-token` and `/revoke-approval` over raw `/contract-call` for token approvals — they handle ABI encoding automatically.
-25. **Method restrictions**: if a contract's `allowed_methods` is set (e.g. `transfer,approve`), only those methods can be called. Empty = all methods allowed.
+25. **Contract whitelist is address-only**: the whitelist controls which contract addresses can be called. All callable methods on a whitelisted contract are available.
 26. **SPL token transfer**: use `/transfer` with the `token` field (same as ERC-20). The token mint must be whitelisted. The backend creates the recipient's ATA automatically if needed.
-27. **Solana program calls**: use `/contract-call` with `accounts` (array of `{pubkey, is_signer, is_writable}`) and `data` (hex-encoded instruction data) instead of `func_sig`/`args`. The program ID must be whitelisted. `auto_approve` on the whitelist entry controls whether API-key calls require Passkey.
+27. **Solana program calls**: use `/contract-call` with `accounts` (array of `{pubkey, is_signer, is_writable}`) and `data` (hex-encoded instruction data) instead of `func_sig`/`args`. The program ID must be whitelisted. All program calls via API Key require Passkey approval.
 28. **Wrap/Unwrap SOL**: use `/wrap-sol` (with `amount`) to convert native SOL to wSOL, and `/unwrap-sol` (no body params) to close the wSOL ATA and recover all SOL. Both endpoints follow the same approval/polling flow as transfers.
 29. **Solana explorer links**: use `https://solscan.io/tx/{hash}` for mainnet and `https://solscan.io/tx/{hash}?cluster=devnet` for devnet.
 30. **Dynamic chain list**: never hardcode chain names. Always call `GET /api/chains` to discover available chains (including user-added custom EVM chains). Custom chains have `"custom": true` in the response.
-31. **Report `amount_usd` on contract calls**: when calling `/contract-call` for operations that transfer value (swaps, DeFi deposits, token transfers via contract), always include `"amount_usd"` with the approximate USD value. This enables the wallet's threshold and daily-limit policies. For read-only or config-only calls (no value transferred), omit it.
-32. **USD prices**: call `GET /api/prices` to get current ETH/SOL/stablecoin USD prices. Use these to compute `amount_usd` when reporting contract call values.
+31. **All contract ops need Passkey via API Key**: contract calls, token approvals, and revocations via API Key always require Passkey approval — there is no auto-approve bypass. Use `GET /api/wallets/:id/daily-spent` to check remaining daily budget before large transfers.
+32. **USD prices**: call `GET /api/prices` to get current native coin (ETH/SOL/BNB/POL/AVAX) and stablecoin prices. For ERC-20 token transfers, the wallet automatically looks up prices via CoinGecko Token Price API (17 EVM chains) by contract address. For Solana SPL tokens, it falls back to Jupiter Price API. Unknown tokens (no price from any source) require Passkey approval for transfers (fail-closed).

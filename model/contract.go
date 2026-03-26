@@ -12,7 +12,5 @@ type AllowedContract struct {
 	Label           string    `json:"label"`    // e.g. "USDC on Ethereum"
 	Symbol          string    `json:"symbol"`   // e.g. "USDC"
 	Decimals        int       `json:"decimals"` // e.g. 6
-	AllowedMethods  string    `json:"allowed_methods"`                   // comma-separated method names, empty = all allowed
-	AutoApprove     bool      `json:"auto_approve" gorm:"default:false"` // true = API Key can execute without Passkey approval
 	CreatedAt       time.Time `json:"created_at"`
 }

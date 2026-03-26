@@ -113,17 +113,38 @@ POST /api/wallets/:id/contract-call
 
 ## 三、安全保障
 
-无需 ABI 不代表无门槛，三层安全机制确保资产安全：
+### 转账：限额控制
+
+`/transfer` 端点的转账按 USD 限额自动判断：
+
+| 场景 | API Key 行为 |
+|------|-------------|
+| 转 0.01 ETH（阈值 $100，ETH=$3500 → $35） | 自动执行 |
+| 转 1 ETH（阈值 $100 → $3500） | 需要 Passkey 审批 |
+| 转 100 USDC（阈值 $500 → $100） | 自动执行 |
+| 转 10 UNI（CoinGecko 查到 $10 → $100，阈值 $500） | 自动执行 |
+| 转 SPL token（Jupiter 查到价格，低于阈值） | 自动执行 |
+| 转未知 token（所有来源查不到价格） | 需要 Passkey 审批 |
+
+定价来源（按优先级）：内置原生币（ETH/SOL/BNB/POL/AVAX）→ 稳定币（$1）→ CoinGecko Token Price API（17 条 EVM 链 + Solana）→ Jupiter Price API（Solana SPL fallback）→ 审批
+
+### 合约操作：全部审批
+
+所有合约操作通过 API Key 调用时需要 Passkey 审批：
 
 | 层级 | 机制 | 说明 |
 |:-----|:-----|:-----|
-| **第一层：合约白名单** | 合约地址/程序 ID 须经 Passkey（硬件认证）批准后才能调用 | 未白名单合约返回 403 |
-| **第二层：方法限制** | 可为每个合约配置 `allowed_methods`，精确控制可调用的函数 | EVM 按函数名，Solana 按指令 discriminator |
-| **第三层：高风险审批** | `approve`、`transferFrom`、`setApprovalForAll` 等敏感操作，API Key 调用强制要求 Passkey 二次确认 | 即使开启 auto_approve 也不跳过 |
+| **第一层：合约白名单** | 合约地址须经 Passkey 批准后加入白名单 | 只控准入，未白名单返回 403 |
+| **第二层：操作审批** | `/contract-call`、`/approve-token`、`/revoke-approval` 全部需要 Passkey 审批 | 审批者看到方法和参数，自行判断 |
+
+白名单不控制方法（无 `allowed_methods`），也不存在自动通过（无 `auto_approve`）。每次合约操作都经过人工审批，审批者能看到完整的调用上下文。
+
+### 为什么合约操作不走限额
+
+合约调用的金额无法可靠自动定价（ABI 只描述数据类型，不描述数据语义），详见 [审批与限额设计](approval-threshold-design.md)。
 
 补充安全机制：
-- **金额阈值审批** — 超过设定 USD 金额的交易需 Passkey 确认
-- **每日限额** — 可配置 USD 计价的每日支出上限
+- **每日限额** — 可配置 USD 计价的每日支出上限（针对转账）
 - **幂等性保护** — 通过 `Idempotency-Key` 防止重复交易
 
 ---
@@ -134,5 +155,6 @@ POST /api/wallets/:id/contract-call
 |:-----|:-----|
 | **EVM 合约** | 内置完整 ABI 编码器，100% 覆盖实用类型，函数签名即调用 |
 | **Solana 程序** | 链本身无 ABI 概念，直接传原始指令数据 |
-| **安全性** | 三层防护（白名单 → 方法限制 → 高风险审批），不因易用而降低安全 |
+| **转账安全** | 多级定价（CoinGecko + Jupiter），查不到价格走审批 |
+| **合约安全** | 白名单控准入 + 每次操作 Passkey 审批 |
 | **AI Agent 适配** | 纯文本接口，无需管理 ABI 文件，LLM 可直接生成调用参数 |

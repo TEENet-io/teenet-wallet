@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -17,24 +16,6 @@ import (
 	"github.com/TEENet-io/teenet-wallet/chain"
 	"github.com/TEENet-io/teenet-wallet/model"
 )
-
-// highRiskMethods always require Passkey approval, even when AutoApprove=true on the contract.
-var highRiskMethods = map[string]bool{
-	"approve":           true,
-	"increaseallowance": true,
-	"setapprovalforall": true,
-	"transferfrom":      true,
-	"safetransferfrom":  true,
-}
-
-// highRiskSOLDiscriminators maps first-byte hex discriminators for Solana
-// SPL Token instructions that are always high-risk (require passkey approval).
-var highRiskSOLDiscriminators = map[string]bool{
-	"04": true, // Approve
-	"06": true, // SetAuthority
-	"07": true, // MintTo
-	"09": true, // CloseAccount
-}
 
 // ContractCallHandler handles general-purpose smart contract calls.
 type ContractCallHandler struct {
@@ -63,16 +44,14 @@ type ContractCallRequest struct {
 	FuncSig   string                 `json:"func_sig"`                    // EVM only
 	Args      []interface{}          `json:"args"`                        // EVM only
 	Value     string                 `json:"value"`                       // EVM only: ETH to send (optional, in ETH units)
-	AmountUSD string                 `json:"amount_usd"`                  // optional: caller-reported USD value for threshold/daily-limit
 	Memo      string                 `json:"memo"`
 	Accounts  []chain.SOLAccountMeta `json:"accounts"`                    // Solana only
 	Data      string                 `json:"data"`                        // Solana only: hex instruction data
 }
 
-// ContractCall executes a smart contract call with three-layer security:
+// ContractCall executes a smart contract call with two-layer security:
 //  1. Contract address whitelist
-//  2. Per-contract method restriction
-//  3. Approval policy / high-risk method gate
+//  2. Approval — API Key auth always requires Passkey approval; Passkey auth executes directly
 //
 // POST /api/wallets/:id/contract-call
 func (h *ContractCallHandler) ContractCall(c *gin.Context) {
@@ -134,22 +113,6 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		jsonError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	methodNameLower := strings.ToLower(methodName)
-
-	// Layer 2: Method restriction — if AllowedMethods is set, method must be in the list.
-	if allowed.AllowedMethods != "" {
-		methodAllowed := false
-		for _, m := range strings.Split(allowed.AllowedMethods, ",") {
-			if strings.TrimSpace(strings.ToLower(m)) == methodNameLower {
-				methodAllowed = true
-				break
-			}
-		}
-		if !methodAllowed {
-			jsonError(c, http.StatusForbidden, fmt.Sprintf("method %q is not in the allowed methods list for this contract", methodName))
-			return
-		}
-	}
 
 	// Encode calldata (validation only — no RPC yet).
 	calldata, encErr := chain.EncodeCall(req.FuncSig, req.Args)
@@ -191,71 +154,25 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 
 	signingMsg := txData.SigningHash
 
-	// Layer 3: Security decision.
+	// Layer 2: Security decision.
 	// Passkey auth: human is already present — proceed directly.
-	// API Key auth: check high-risk methods and AutoApprove flag.
+	// API Key auth: contract operations always require passkey approval.
 	needsApproval := false
 	var approvalReason string
-
 	if !isPasskeyAuth(c) {
-		// API Key path.
-		if highRiskMethods[methodNameLower] {
-			needsApproval = true
-			approvalReason = fmt.Sprintf("method %q is high-risk and requires passkey approval", methodName)
-		} else if !allowed.AutoApprove {
-			needsApproval = true
-			approvalReason = "contract does not have auto-approve enabled; passkey approval required"
-		}
+		needsApproval = true
+		approvalReason = "contract operations require passkey approval"
 	}
 
-	// Compute effective USD amount for threshold / daily limit checks.
-	// Sources: (1) native value × price, (2) caller-reported amount_usd. Use the larger value.
+	// Compute effective USD amount for display context (payable ETH value only).
 	var effectiveUSD float64
-	if h.prices != nil {
-		if valueWei != nil && valueWei.Sign() > 0 && req.Value != "" {
-			currency := chainCfg.Currency
-			if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
-				if a, ok := new(big.Float).SetString(req.Value); ok {
-					f, _ := a.Float64()
-					effectiveUSD = f * usdPrice
-				}
+	if h.prices != nil && valueWei != nil && valueWei.Sign() > 0 && req.Value != "" {
+		currency := chainCfg.Currency
+		if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
+			if a, ok := new(big.Float).SetString(req.Value); ok {
+				f, _ := a.Float64()
+				effectiveUSD = f * usdPrice
 			}
-		}
-		if req.AmountUSD != "" {
-			if reported, ok := new(big.Float).SetString(req.AmountUSD); ok && reported.Sign() > 0 {
-				f, _ := reported.Float64()
-				if f > effectiveUSD {
-					effectiveUSD = f
-				}
-			}
-		}
-	}
-
-	// Check USD approval policy (threshold + daily limit).
-	var policy model.ApprovalPolicy
-	policyFound := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil
-
-	var deductedUSDStr string // non-empty if we pre-deducted from daily limit
-	if !needsApproval && policyFound && effectiveUSD > 0 {
-		// Daily limit check (pre-deduct, rollback on failure).
-		if policy.DailyLimitUSD != "" {
-			deductedUSDStr = new(big.Float).SetFloat64(effectiveUSD).Text('f', 2)
-			exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
-			if err != nil {
-				slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
-				jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
-				return
-			}
-			if exceeded {
-				deductedUSDStr = ""
-				jsonError(c, http.StatusBadRequest, msg)
-				return
-			}
-		}
-		// Threshold check.
-		if exceedsUSDThreshold(effectiveUSD, policy.ThresholdUSD) {
-			needsApproval = true
-			approvalReason = fmt.Sprintf("amount ~$%.2f USD exceeds approval threshold $%s USD", effectiveUSD, policy.ThresholdUSD)
 		}
 	}
 
@@ -277,10 +194,6 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	}
 
 	if needsApproval {
-		// Approval path: rollback pre-deduction — addDailySpentUSD handles it on approve+broadcast.
-		if deductedUSDStr != "" {
-			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
-		}
 		txContextJSON, _ := json.Marshal(txContext)
 
 		userID := mustUserID(c)
@@ -318,9 +231,6 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 
 	result, signErr := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
 	if signErr != nil || !result.Success {
-		if deductedUSDStr != "" {
-			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
-		}
 		errMsg := "signing failed"
 		if signErr != nil {
 			errMsg = signErr.Error()
@@ -333,9 +243,6 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 
 	txHash, broadcastErr := broadcastSigned(wallet, string(txParamsJSON), result.Signature)
 	if broadcastErr != nil {
-		if deductedUSDStr != "" {
-			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
-		}
 		respondBroadcastError(c, broadcastErr)
 		return
 	}
@@ -382,25 +289,6 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		return
 	}
 
-	// Layer 2: Discriminator restriction (first byte for SPL Token instructions)
-	discriminator := ""
-	if len(instrData) >= 1 {
-		discriminator = hex.EncodeToString(instrData[:1])
-	}
-	if allowed.AllowedMethods != "" && discriminator != "" {
-		methodAllowed := false
-		for _, m := range strings.Split(allowed.AllowedMethods, ",") {
-			if strings.TrimSpace(strings.ToLower(m)) == strings.ToLower(discriminator) {
-				methodAllowed = true
-				break
-			}
-		}
-		if !methodAllowed {
-			jsonError(c, http.StatusForbidden, fmt.Sprintf("instruction discriminator %q not in allowed list", discriminator))
-			return
-		}
-	}
-
 	// Validate accounts
 	if len(req.Accounts) == 0 {
 		jsonError(c, http.StatusBadRequest, "accounts: at least one account is required")
@@ -422,50 +310,14 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 	txParamsJSON, _ := json.Marshal(txData.Params)
 	signingMsg := txData.MessageBytes
 
-	// Layer 3: Security decision
+	// Layer 2: Security decision.
+	// Passkey auth: human is already present — proceed directly.
+	// API Key auth: contract operations always require passkey approval.
 	needsApproval := false
 	var approvalReason string
 	if !isPasskeyAuth(c) {
-		if highRiskSOLDiscriminators[discriminator] {
-			needsApproval = true
-			approvalReason = fmt.Sprintf("instruction discriminator %q is high-risk", discriminator)
-		} else if !allowed.AutoApprove {
-			needsApproval = true
-			approvalReason = "program does not have auto-approve enabled"
-		}
-	}
-
-	// Caller-reported USD amount for threshold / daily limit.
-	var effectiveUSD float64
-	if h.prices != nil && req.AmountUSD != "" {
-		if reported, ok := new(big.Float).SetString(req.AmountUSD); ok && reported.Sign() > 0 {
-			effectiveUSD, _ = reported.Float64()
-		}
-	}
-
-	var policy model.ApprovalPolicy
-	policyFound := h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil
-
-	var deductedUSDStr string
-	if !needsApproval && policyFound && effectiveUSD > 0 {
-		if policy.DailyLimitUSD != "" {
-			deductedUSDStr = new(big.Float).SetFloat64(effectiveUSD).Text('f', 2)
-			exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
-			if err != nil {
-				slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
-				jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
-				return
-			}
-			if exceeded {
-				deductedUSDStr = ""
-				jsonError(c, http.StatusBadRequest, msg)
-				return
-			}
-		}
-		if exceedsUSDThreshold(effectiveUSD, policy.ThresholdUSD) {
-			needsApproval = true
-			approvalReason = fmt.Sprintf("amount ~$%.2f USD exceeds approval threshold $%s USD", effectiveUSD, policy.ThresholdUSD)
-		}
+		needsApproval = true
+		approvalReason = "contract operations require passkey approval"
 	}
 
 	txContext := map[string]interface{}{
@@ -477,14 +329,8 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		"memo":       req.Memo,
 		"chain":      wallet.Chain,
 	}
-	if effectiveUSD > 0 {
-		txContext["amount_usd"] = fmt.Sprintf("%.2f", effectiveUSD)
-	}
 
 	if needsApproval {
-		if deductedUSDStr != "" {
-			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
-		}
 		txContextJSON, _ := json.Marshal(txContext)
 		userID := mustUserID(c)
 		if c.IsAborted() {
@@ -521,9 +367,6 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 
 	result, signErr := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
 	if signErr != nil || !result.Success {
-		if deductedUSDStr != "" {
-			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
-		}
 		errMsg := "signing failed"
 		if signErr != nil {
 			errMsg = signErr.Error()
@@ -536,9 +379,6 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 
 	txHash, broadcastErr := chain.AssembleAndBroadcastSOLProgram(chainCfg.RPCURL, txData.Params, result.Signature)
 	if broadcastErr != nil {
-		if deductedUSDStr != "" {
-			releaseDailySpentUSD(h.db, wallet.ID, deductedUSDStr)
-		}
 		jsonError(c, http.StatusBadGateway, "broadcast failed: "+broadcastErr.Error())
 		return
 	}
@@ -570,7 +410,7 @@ type RevokeApprovalRequest struct {
 }
 
 // ApproveToken is a convenience endpoint that calls ERC-20 approve(spender, amount).
-// Approve is always treated as high-risk — API Key auth always gets a 202 pending approval.
+// API Key auth: always requires Passkey approval. Passkey auth: executes directly.
 //
 // POST /api/wallets/:id/approve-token
 func (h *ContractCallHandler) ApproveToken(c *gin.Context) {
@@ -584,7 +424,7 @@ func (h *ContractCallHandler) ApproveToken(c *gin.Context) {
 
 // RevokeApproval is a convenience endpoint that calls ERC-20 approve(spender, 0),
 // effectively revoking a previously granted token allowance.
-// Always treated as high-risk — API Key auth always gets a 202 pending approval.
+// API Key auth: always requires Passkey approval. Passkey auth: executes directly.
 //
 // POST /api/wallets/:id/revoke-approval
 func (h *ContractCallHandler) RevokeApproval(c *gin.Context) {
@@ -685,7 +525,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		"action":   auditAction,
 	}
 
-	// Approve is ALWAYS high-risk for API Key — no AutoApprove check needed.
+	// API Key auth: always requires Passkey approval. Passkey auth: executes directly.
 	if !isPasskeyAuth(c) {
 		txContextJSON, _ := json.Marshal(txContext)
 		userID := mustUserID(c)

@@ -329,6 +329,7 @@ func main() {
 	auth.GET("/wallets/:id/policy", walletH.GetPolicy)        // read: API Key or Passkey
 	auth.PUT("/wallets/:id/policy", walletH.SetPolicy)        // passkey: apply directly; API key: creates approval
 	passkeyOnly.DELETE("/wallets/:id/policy", walletH.DeletePolicy) // irreversible: Passkey only
+	auth.GET("/wallets/:id/daily-spent", walletH.DailySpent)
 
 	// Balance (API Key or Passkey).
 	balanceH := handler.NewBalanceHandler(db)

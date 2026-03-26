@@ -734,15 +734,48 @@ async function generateAPIKey() {
   const res = await api('/api/auth/apikey/generate', { method: 'POST', body: JSON.stringify(passkeyBody) });
   const el = document.getElementById('apikey-result');
   if (res.success) {
-    safeSetResultHTML(el, 'success', [
-      {tag: 'strong', text: 'API Key (save \u2014 shown once):'},
-      {tag: 'br'},
-      {tag: 'span', text: res.api_key, className: 'mono', style: 'font-size:0.78rem;word-break:break-all'},
-      ...(res.label ? [{tag: 'br'}, {tag: 'span', text: 'Label: ' + res.label, style: 'font-size:0.75rem;color:#64748b'}] : []),
-    ]);
+    // Show key in a persistent box with copy button — key list refreshes below it.
+    el.textContent = '';
+    const keyBox = document.createElement('div');
+    keyBox.style.cssText = 'background:#0c2d1f;border:1px solid #166534;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.75rem;';
+    keyBox.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem">
+        <strong style="color:#4ade80;font-size:0.8rem">API Key (save — shown once)</strong>
+        <button class="btn btn-ghost btn-sm" style="font-size:0.7rem;padding:0.15rem 0.5rem;color:#4ade80;border:1px solid #166534" id="copy-apikey-btn">Copy</button>
+      </div>
+      <code style="font-size:0.78rem;word-break:break-all;color:#e2e8f0;display:block">${res.api_key.replace(/</g,'&lt;')}</code>
+      ${res.label ? `<span style="font-size:0.75rem;color:#64748b">Label: ${res.label.replace(/</g,'&lt;')}</span>` : ''}
+    `;
+    el.appendChild(keyBox);
+    document.getElementById('copy-apikey-btn').onclick = function() {
+      navigator.clipboard.writeText(res.api_key).then(() => {
+        this.textContent = 'Copied!';
+        this.style.color = '#86efac';
+        setTimeout(() => { this.textContent = 'Copy'; this.style.color = '#4ade80'; }, 2000);
+      });
+    };
+    // Show key list below the key box.
+    const listContainer = document.createElement('div');
+    listContainer.id = 'apikey-list-below';
+    el.appendChild(listContainer);
     document.getElementById('apikey-label').value = '';
-    // Refresh key list after a short delay.
-    setTimeout(listAPIKeys, 500);
+    // Refresh key list into the sub-container (not replacing the key box).
+    setTimeout(async function() {
+      const listRes = await api('/api/auth/apikey/list');
+      const lc = document.getElementById('apikey-list-below');
+      if (!lc) return;
+      if (listRes.success && listRes.keys?.length) {
+        listRes.keys.forEach(function(k) {
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.5rem;background:#111120;border:1px solid #2a2a45;border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.35rem;';
+          var info = document.createElement('span');
+          info.style.cssText = 'font-size:0.78rem;color:#94a3b8';
+          info.textContent = k.prefix + '...' + (k.label ? ' (' + k.label + ')' : '');
+          row.appendChild(info);
+          lc.appendChild(row);
+        });
+      }
+    }, 500);
   } else { safeSetResult(el, res.error, 'error'); }
 }
 
@@ -1581,12 +1614,10 @@ async function loadContracts(walletId) {
   walletContracts[walletId] = contracts;
 
   const isSol = walletChainFamily[walletId] === 'solana';
-  const methodsLabel = isSol ? 'discriminators' : 'methods';
   const emptyMsg = isSol ? 'No whitelisted programs yet.' : 'No whitelisted contracts yet.';
 
   el.innerHTML = contracts.length
     ? contracts.map(c => {
-        const methods = Array.isArray(c.allowed_methods) ? c.allowed_methods : (c.allowed_methods ? c.allowed_methods.split(',') : []);
         return `
         <div style="display:flex;align-items:center;gap:0.5rem;padding:0.6rem 0.75rem;margin-bottom:0.4rem;background:#0a0a18;border:1px solid #1e1e35;border-radius:8px;">
           <div style="flex:1;min-width:0;">
@@ -1594,13 +1625,11 @@ async function loadContracts(walletId) {
               ${c.symbol ? `<span class="badge badge-blue">${c.symbol}</span>` : ''}
               ${c.label ? `<span style="font-size:0.75rem;color:#94a3b8">${c.label}</span>` : ''}
               ${c.decimals ? `<span style="font-size:0.7rem;color:#475569">dec: ${c.decimals}</span>` : ''}
-              ${c.auto_approve ? `<span class="badge badge-green" style="font-size:0.65rem">auto-approve</span>` : ''}
             </div>
             <div style="font-size:0.72rem;color:#64748b;margin-top:0.2rem;word-break:break-all;">
               ${c.contract_address}
               <button class="copy-btn" onclick="copyText('${c.contract_address}')" title="Copy">copy</button>
             </div>
-            ${methods.length ? `<div style="font-size:0.7rem;color:#475569;margin-top:0.2rem;">${methodsLabel}: ${methods.map(m => `<code style="background:#1e1e35;padding:0.05rem 0.3rem;border-radius:3px">${m}</code>`).join(' ')}</div>` : ''}
           </div>
           <div style="flex-shrink:0">
             <button class="btn btn-danger btn-sm btn-icon" onclick="deleteContract('${walletId}',${c.id})" title="Remove from whitelist">\u2715</button>
@@ -1620,8 +1649,6 @@ function addContractForm(walletId) {
   const symPlaceholder = isSol ? 'e.g. SOL, USDC' : 'USDC';
   const decDefault = isSol ? '9' : '18';
   const lblPlaceholder = isSol ? 'SPL Token Program' : 'Circle USD Coin';
-  const methodsLabel = isSol ? 'Allowed Discriminators' : 'Allowed Methods';
-  const methodsPlaceholder = isSol ? '03,04 (hex instruction discriminators)' : 'transfer,approve,swap';
   const titleLabel = isSol ? 'Whitelist Program' : 'Whitelist Contract';
 
   return `<div class="add-contract-form">
@@ -1646,18 +1673,6 @@ function addContractForm(walletId) {
         <input id="cadd-lbl-${walletId}" placeholder="${lblPlaceholder}" />
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>${methodsLabel} <span style="color:#475569;font-weight:400">(optional)</span></label>
-        <input id="cadd-methods-${walletId}" placeholder="${methodsPlaceholder}" />
-      </div>
-      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:0.75rem">
-        <label style="display:flex;align-items:center;gap:0.5rem;text-transform:none;letter-spacing:0;font-size:0.82rem;cursor:pointer">
-          <input id="cadd-autoapprove-${walletId}" type="checkbox" style="width:auto;padding:0;margin:0" />
-          Auto Approve
-        </label>
-      </div>
-    </div>
     <button class="btn btn-primary btn-sm" onclick="addContract('${walletId}')">Add to Whitelist</button>
   </div>`;
 }
@@ -1667,17 +1682,12 @@ async function addContract(walletId) {
   const sym         = document.getElementById(`cadd-sym-${walletId}`).value.trim().toUpperCase();
   const dec         = parseInt(document.getElementById(`cadd-dec-${walletId}`).value) || 18;
   const lbl         = document.getElementById(`cadd-lbl-${walletId}`).value.trim();
-  const methodsRaw  = document.getElementById(`cadd-methods-${walletId}`)?.value.trim() || '';
-  const autoApprove = document.getElementById(`cadd-autoapprove-${walletId}`)?.checked || false;
-
   if (!addr) { toast('Contract address required', 'error'); return; }
 
   const passkeyBody = await getFreshPasskeyCredential();
   if (!passkeyBody) return;
 
   const payload = { ...passkeyBody, contract_address: addr, symbol: sym, decimals: dec, label: lbl };
-  if (methodsRaw) payload.allowed_methods = methodsRaw.split(',').map(s => s.trim()).filter(Boolean);
-  if (autoApprove) payload.auto_approve = true;
 
   const res = await api(`/api/wallets/${walletId}/contracts`, {
     method: 'POST',
@@ -1691,8 +1701,7 @@ async function addContract(walletId) {
     document.getElementById(`cadd-addr-${walletId}`).value = '';
     document.getElementById(`cadd-sym-${walletId}`).value = '';
     document.getElementById(`cadd-lbl-${walletId}`).value = '';
-    document.getElementById(`cadd-methods-${walletId}`).value = '';
-    if (document.getElementById(`cadd-autoapprove-${walletId}`)) document.getElementById(`cadd-autoapprove-${walletId}`).checked = false;
+
   } else {
     toast(res.error || 'Add failed', 'error');
   }
@@ -1721,17 +1730,12 @@ async function saveEditContract(walletId, contractId) {
   const sym     = document.getElementById(`cedit-sym-${contractId}`).value.trim().toUpperCase();
   const dec     = document.getElementById(`cedit-dec-${contractId}`).value.trim();
   const lbl     = document.getElementById(`cedit-lbl-${contractId}`).value.trim();
-  const methods = document.getElementById(`cedit-methods-${contractId}`).value.trim();
-  const auto    = document.getElementById(`cedit-auto-${contractId}`).checked;
-
   const passkeyBody = await getFreshPasskeyCredential();
   if (!passkeyBody) return;
 
   const payload = { ...passkeyBody };
   payload.symbol = sym;
   payload.label = lbl;
-  payload.allowed_methods = methods;
-  payload.auto_approve = auto;
   if (dec !== '') payload.decimals = parseInt(dec);
 
   const res = await api(`/api/wallets/${walletId}/contracts/${contractId}`, {
@@ -1755,12 +1759,16 @@ async function saveEditContract(walletId, contractId) {
 async function loadPolicy(walletId) {
   const el = document.getElementById(`policy-content-${walletId}`);
   if (!el) return;
-  const [res, priceRes] = await Promise.all([api(`/api/wallets/${walletId}/policy`), api('/api/prices')]);
+  const [res, priceRes, spentRes] = await Promise.all([
+    api(`/api/wallets/${walletId}/policy`),
+    api('/api/prices'),
+    api(`/api/wallets/${walletId}/daily-spent`),
+  ]);
   const p = res.policy;
   const prices = priceRes.prices || {};
 
   // Price reference line
-  const priceRef = Object.entries(prices).filter(([k]) => k === 'ETH' || k === 'SOL').map(([k,v]) => `${k} ≈ $${v.toLocaleString()}`).join(' · ');
+  const priceRef = Object.entries(prices).filter(([k]) => k === 'ETH' || k === 'SOL' || k === 'BNB' || k === 'AVAX').map(([k,v]) => `${k} ≈ $${v.toLocaleString()}`).join(' · ');
 
   let policyHtml;
   if (!p) {
@@ -1768,13 +1776,12 @@ async function loadPolicy(walletId) {
   } else {
     const enabled = p.enabled !== false;
     const hasDaily = p.daily_limit_usd && p.daily_limit_usd !== '';
-    const todaySpent = p.daily_spent_usd && p.daily_spent_usd !== '0' ? p.daily_spent_usd : null;
     policyHtml = `
     <div style="background:#111120;border:1px solid ${enabled?'#2a2a45':'#1a1a2a'};border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
       <span style="font-size:0.8rem;font-weight:600;color:#a78bfa">USD</span>
       <span style="font-size:0.8rem;color:#94a3b8">
         ${enabled ? '✓' : '✗'} approve &gt; <strong>$${p.threshold_usd}</strong>
-        ${hasDaily ? `&nbsp;·&nbsp; daily cap <strong>$${p.daily_limit_usd}</strong>${todaySpent ? ` <span style="color:#64748b">(spent today: $${todaySpent})</span>` : ''}` : ''}
+        ${hasDaily ? `&nbsp;·&nbsp; daily cap <strong>$${p.daily_limit_usd}</strong>` : ''}
       </span>
       <span style="margin-left:auto;display:flex;gap:0.4rem;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem"
@@ -1786,9 +1793,38 @@ async function loadPolicy(walletId) {
     </div>`;
   }
 
+  // Daily spend display
+  let dailySpendHtml = '';
+  if (spentRes && spentRes.daily_limit_usd) {
+    const spent = spentRes.daily_spent_usd || '0';
+    const limit = spentRes.daily_limit_usd;
+    const remaining = spentRes.remaining_usd || '0';
+    const resetAt = spentRes.reset_at ? new Date(spentRes.reset_at).toLocaleTimeString() : '';
+    const spentNum = parseFloat(spent) || 0;
+    const limitNum = parseFloat(limit) || 1;
+    const pct = Math.min(100, (spentNum / limitNum) * 100);
+    const barColor = pct > 80 ? '#f87171' : pct > 50 ? '#f59e0b' : '#34d399';
+    dailySpendHtml = `
+    <div style="background:#111120;border:1px solid #2a2a45;border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
+        <span style="font-size:0.75rem;color:#94a3b8">Today's Spend</span>
+        <span style="font-size:0.75rem;color:#64748b">${resetAt ? 'resets ' + resetAt : ''}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:0.3rem;margin-bottom:0.4rem">
+        <span style="font-size:1.1rem;font-weight:700;color:#e2e8f0">$${spent}</span>
+        <span style="font-size:0.75rem;color:#64748b">/ $${limit}</span>
+        <span style="font-size:0.72rem;color:${barColor};margin-left:auto">$${remaining} remaining</span>
+      </div>
+      <div style="background:#1e1e35;border-radius:4px;height:6px;overflow:hidden">
+        <div style="background:${barColor};height:100%;width:${pct}%;border-radius:4px;transition:width 0.3s"></div>
+      </div>
+    </div>`;
+  }
+
   el.innerHTML = `
     ${priceRef ? `<p style="font-size:0.72rem;color:#475569;margin-bottom:0.6rem">${priceRef}</p>` : ''}
     ${policyHtml}
+    ${dailySpendHtml}
     <div style="border-top:1px solid #1e1e35;margin-top:0.75rem;padding-top:0.75rem">
       <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.6rem">${p ? 'Update' : 'Set'} USD approval policy:</p>
       <div class="form-row" style="margin-bottom:0.5rem">
@@ -2034,8 +2070,6 @@ function renderApprovalCard(a, wMap) {
           ${ct.symbol   ? `<span class="tx-k">Symbol</span><span class="tx-v">${ct.symbol}</span>` : ''}
           ${ct.label    ? `<span class="tx-k">Label</span><span class="tx-v">${ct.label}</span>` : ''}
           ${ct.decimals !== undefined ? `<span class="tx-k">Decimals</span><span class="tx-v">${ct.decimals}</span>` : ''}
-          <span class="tx-k">Allowed Methods</span><span class="tx-v">${ct.allowed_methods || 'all (unrestricted)'}</span>
-          <span class="tx-k">Auto-Approve</span><span class="tx-v">${ct.auto_approve ? '⚠️ Yes — API key can execute without Passkey' : 'No — requires Passkey approval'}</span>
           <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
         </div>
         <div class="btn-group">
@@ -2125,7 +2159,7 @@ function renderApprovalCard(a, wMap) {
             ${ctx.spender  ? `<span class="tx-k">Spender</span><span class="tx-v" style="word-break:break-all">${ctx.spender}</span>` : ''}
             ${ctx.amount   ? `<span class="tx-k">Allowance</span><span class="tx-v">${ctx.amount}${ctx.symbol ? ' ' + ctx.symbol : ''}</span>` : ''}
             ${ctx.decimals ? `<span class="tx-k">Decimals</span><span class="tx-v">${ctx.decimals}</span>` : ''}
-            <span class="tx-k">⚠️ Risk</span><span class="tx-v" style="color:#f59e0b">High-risk: grants spending permission to spender</span>
+            <span class="tx-k">Note</span><span class="tx-v" style="color:#94a3b8">Token approval: grants spending permission to spender</span>
             <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
           </div>
           <div class="btn-group">

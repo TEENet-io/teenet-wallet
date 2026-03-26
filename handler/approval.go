@@ -135,11 +135,9 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		// Update the existing record by ID.
 		if err := h.db.Model(&model.AllowedContract{}).Where("id = ? AND wallet_id = ?", proposed.ID, approval.WalletID).
 			Updates(map[string]interface{}{
-				"label":           proposed.Label,
-				"symbol":          proposed.Symbol,
-				"decimals":        proposed.Decimals,
-				"allowed_methods": proposed.AllowedMethods,
-				"auto_approve":    proposed.AutoApprove,
+				"label":    proposed.Label,
+				"symbol":   proposed.Symbol,
+				"decimals": proposed.Decimals,
 			}).Error; err != nil {
 			jsonError(c, http.StatusInternalServerError, "failed to update contract")
 			return
