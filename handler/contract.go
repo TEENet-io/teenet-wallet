@@ -96,7 +96,7 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 			return
 		}
 		writeAuditCtx(h.db, c, "contract_add", "pending", &wallet.ID, map[string]interface{}{
-			"contract": addr, "symbol": proposed.Symbol, "approval_id": approval.ID,
+			"contract": addr, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label, "approval_id": approval.ID,
 		})
 		c.JSON(http.StatusAccepted, gin.H{
 			"success":     true,
@@ -121,7 +121,7 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 		return
 	}
 	writeAuditCtx(h.db, c, "contract_add", "success", &wallet.ID, map[string]interface{}{
-		"contract": addr, "symbol": proposed.Symbol,
+		"contract": addr, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label,
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true, "contract": proposed})
 }
@@ -200,7 +200,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 			return
 		}
 		writeAuditCtx(h.db, c, "contract_update", "pending", &wallet.ID, map[string]interface{}{
-			"contract_id": cid, "contract": existing.ContractAddress, "approval_id": approval.ID,
+			"contract_id": cid, "contract": existing.ContractAddress, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label, "approval_id": approval.ID,
 		})
 		c.JSON(http.StatusAccepted, gin.H{
 			"success":     true,
@@ -237,7 +237,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 		return
 	}
 	writeAuditCtx(h.db, c, "contract_update", "success", &wallet.ID, map[string]interface{}{
-		"contract_id": cid, "contract": existing.ContractAddress,
+		"contract_id": cid, "contract": existing.ContractAddress, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label,
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true, "contract": proposed})
 }
