@@ -499,15 +499,18 @@ func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Walle
 		jsonError(c, http.StatusInternalServerError, "marshal tx_context failed")
 		return
 	}
+	am, akl := authInfo(c)
 	approval := model.ApprovalRequest{
-		WalletID:  wallet.ID,
-		UserID:    userID,
-		Message:   req.Message,
-		TxContext: string(txContextJSON),
-		TxParams:  txParams,
-		Status:    "pending",
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(h.approvalExpiry),
+		WalletID:    wallet.ID,
+		UserID:      userID,
+		Message:     req.Message,
+		TxContext:   string(txContextJSON),
+		TxParams:    txParams,
+		Status:      "pending",
+		AuthMode:    am,
+		APIKeyPrefix: akl,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(h.approvalExpiry),
 	}
 	if err := h.db.Create(&approval).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "create approval request failed")

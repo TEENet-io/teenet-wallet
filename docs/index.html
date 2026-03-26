@@ -74,10 +74,14 @@
 
     // Map EN page paths to ZH equivalents and vice versa
     var pageMap = {
-      'en/user-guide': 'zh/user-guide',
       'en/introduction': 'zh/introduction',
+      'en/whitepaper': 'zh/whitepaper',
+      'en/user-getting-started': 'zh/user-getting-started',
+      'en/user-commands': 'zh/user-commands',
+      'en/user-approvals': 'zh/user-approvals',
+      'en/user-faq': 'zh/user-faq',
+      'en/user-guide': 'zh/user-guide',
       'en/quick-start': 'zh/quick-start',
-      'en/configuration': 'zh/configuration',
       'en/authentication': 'zh/authentication',
       'en/wallets': 'zh/wallets',
       'en/transfers': 'zh/transfers',
@@ -85,7 +89,7 @@
       'en/approvals': 'zh/approvals',
       'en/agent-integration': 'zh/agent-integration',
       'en/api-overview': 'zh/api-overview',
-      'en/whitepaper': 'zh/whitepaper',
+      'en/configuration': 'zh/configuration',
     };
     // Build reverse map
     var reverseMap = {};
@@ -123,6 +127,11 @@
       alias: {
         '/zh/.*/_sidebar.md': '/zh/_sidebar.md',
         '/_sidebar.md': '/_sidebar.md',
+        // Old URLs redirect to new user doc pages
+        '/en/user-guide.md': '/en/user-getting-started.md',
+        '/zh/user-guide.md': '/zh/user-getting-started.md',
+        '/en/product-guide.md': '/en/introduction.md',
+        '/zh/product-guide.md': '/zh/introduction.md',
       },
       coverpage: false,
       formatUpdated: '{MM}/{DD}/{YYYY}',

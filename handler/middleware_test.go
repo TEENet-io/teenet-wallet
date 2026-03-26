@@ -384,16 +384,16 @@ func TestAuditLog_WritesAPIKeyLabel(t *testing.T) {
 		// We write a manual audit entry to verify the label.
 		userID, _ := c.Get("userID")
 		authMode, _ := c.Get("authMode")
-		apiKeyLabelVal, _ := c.Get("apiKeyLabel")
+		apiKeyPrefixVal, _ := c.Get("apiKeyPrefix")
 		uid, _ := userID.(uint)
 		am, _ := authMode.(string)
-		lbl, _ := apiKeyLabelVal.(string)
+		pfx, _ := apiKeyPrefixVal.(string)
 		entry := model.AuditLog{
-			UserID:      uid,
-			Action:      "test_action",
-			Status:      "success",
-			AuthMode:    am,
-			APIKeyLabel: lbl,
+			UserID:       uid,
+			Action:       "test_action",
+			Status:       "success",
+			AuthMode:     am,
+			APIKeyPrefix: pfx,
 			IP:          c.ClientIP(),
 		}
 		db.Create(&entry)
@@ -414,8 +414,9 @@ func TestAuditLog_WritesAPIKeyLabel(t *testing.T) {
 	if err := db.Where("user_id = ? AND action = ?", user.ID, "test_action").First(&log).Error; err != nil {
 		t.Fatalf("audit log not found: %v", err)
 	}
-	if log.APIKeyLabel != "prod-bot" {
-		t.Fatalf("expected api_key_label 'prod-bot', got '%s'", log.APIKeyLabel)
+	expectedPrefix := rawKey[:12]
+	if log.APIKeyPrefix != expectedPrefix {
+		t.Fatalf("expected api_key_prefix '%s', got '%s'", expectedPrefix, log.APIKeyPrefix)
 	}
 	if log.AuthMode != "apikey" {
 		t.Fatalf("expected auth_mode 'apikey', got '%s'", log.AuthMode)

@@ -200,6 +200,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		if c.IsAborted() {
 			return
 		}
+		ccAM, ccAKL := authInfo(c)
 		approval := model.ApprovalRequest{
 			WalletID:     wallet.ID,
 			UserID:       userID,
@@ -208,8 +209,10 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			TxContext:    string(txContextJSON),
 			TxParams:     string(txParamsJSON),
 			Status:       "pending",
-			CreatedAt:    time.Now(),
-			ExpiresAt:    time.Now().Add(h.approvalExpiry),
+			AuthMode:     ccAM,
+			APIKeyPrefix: ccAKL,
+			CreatedAt:   time.Now(),
+			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
 			jsonError(c, http.StatusInternalServerError, "create approval request failed")
@@ -336,6 +339,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		if c.IsAborted() {
 			return
 		}
+		ccAM, ccAKL := authInfo(c)
 		approval := model.ApprovalRequest{
 			WalletID:     wallet.ID,
 			UserID:       userID,
@@ -344,8 +348,10 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 			TxContext:    string(txContextJSON),
 			TxParams:     string(txParamsJSON),
 			Status:       "pending",
-			CreatedAt:    time.Now(),
-			ExpiresAt:    time.Now().Add(h.approvalExpiry),
+			AuthMode:     ccAM,
+			APIKeyPrefix: ccAKL,
+			CreatedAt:   time.Now(),
+			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
 			jsonError(c, http.StatusInternalServerError, "create approval request failed")
@@ -532,6 +538,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		if c.IsAborted() {
 			return
 		}
+		ccAM, ccAKL := authInfo(c)
 		approval := model.ApprovalRequest{
 			WalletID:     wallet.ID,
 			UserID:       userID,
@@ -540,8 +547,10 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 			TxContext:    string(txContextJSON),
 			TxParams:     string(txParamsJSON),
 			Status:       "pending",
-			CreatedAt:    time.Now(),
-			ExpiresAt:    time.Now().Add(h.approvalExpiry),
+			AuthMode:     ccAM,
+			APIKeyPrefix: ccAKL,
+			CreatedAt:   time.Now(),
+			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
 			jsonError(c, http.StatusInternalServerError, "create approval request failed")

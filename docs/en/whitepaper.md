@@ -139,7 +139,7 @@ AI Agent / Application              Human Operator (Browser)
 2. TEENet Wallet builds the unsigned transaction server-side (EIP-1559 for EVM,
    Solana transaction message for Solana).
 3. The approval policy engine evaluates whether the transaction requires human
-   approval (based on USD amount, method risk level, auto-approve settings).
+   approval (based on USD amount and authentication type).
 4. If approved (or below threshold), the signing hash is sent to
    app-comm-consensus via the TEENet SDK.
 5. app-comm-consensus coordinates M-of-N threshold signing across the TEE-DAO
@@ -246,10 +246,10 @@ TEENet Wallet is designed to resist the following threats:
 
 | Threat | Mitigation |
 |--------|------------|
-| Stolen API key | API keys cannot delete wallets, remove contracts, change policies, or approve high-risk transactions. All such operations require Passkey. |
+| Stolen API key | API keys cannot delete wallets, remove contracts, change policies, or approve contract calls or sensitive operations. All such operations require Passkey. |
 | Stolen Passkey session token | Approvals, deletions, and API key generation require a *fresh* WebAuthn assertion (hardware key interaction), not just the session token. |
 | Compromised single TEE node | M-of-N threshold signing ensures that fewer than M compromised nodes cannot produce signatures. |
-| Malicious contract interaction | Three-layer contract security: whitelist, method restriction, high-risk method gate. |
+| Malicious contract interaction | Address whitelist + mandatory Passkey approval for all contract calls via API key. |
 | Price manipulation for threshold bypass | Stablecoins are hardcoded to $1; volatile asset prices use CoinGecko with 10-second caching. The `amount_usd` field for DeFi calls provides an additional caller-reported value, and the system uses the larger of computed and reported values. |
 | Replay attacks (duplicate transactions) | Idempotency-Key header prevents duplicate transfers. EVM nonce management prevents on-chain replay. |
 | CSRF attacks on browser sessions | All state-changing Passkey session requests require an X-CSRF-Token header. |
@@ -291,31 +291,16 @@ called. Any interaction with a non-whitelisted address is rejected with HTTP
 403. Adding a contract to the whitelist requires Passkey authentication (or
 creates a pending approval if initiated by an API key).
 
-**Layer 2 -- Method Restriction:**
-Each whitelisted contract can optionally specify an `allowed_methods` list
-(comma-separated function names for EVM, or instruction discriminator bytes for
-Solana). If set, only the listed methods can be invoked. This prevents an
-attacker who gains API key access from calling dangerous functions on an
-otherwise-trusted contract.
+**Layer 2 -- Mandatory Approval for API Key Auth:**
+All contract calls initiated via API key require Passkey approval. This is a
+deliberate design choice: contract interactions carry higher risk than simple
+transfers, and the wallet enforces human-in-the-loop confirmation for every
+contract call initiated by an agent. Contract calls made via a Passkey session
+(where the human is already authenticated) execute immediately.
 
-**Layer 3 -- High-Risk Method Gate:**
-Certain methods are inherently dangerous and are always gated behind Passkey
-approval, regardless of auto-approve settings:
-
-- EVM: `approve`, `transferFrom`, `increaseAllowance`, `setApprovalForAll`,
-  `safeTransferFrom`
-- Solana SPL Token: `Approve` (0x04), `SetAuthority` (0x06), `MintTo` (0x07),
-  `CloseAccount` (0x09)
-
-These methods can grant third parties control over tokens, making them prime
-targets for social engineering attacks. The Passkey gate ensures a human
-explicitly authorizes each invocation.
-
-**Auto-Approve Mode:**
-Contracts flagged with `auto_approve: true` allow API keys to execute
-non-high-risk methods without Passkey confirmation. This enables AI agents to
-perform routine DeFi operations (swaps, liquidity provision) on trusted
-protocols while maintaining the safety net for dangerous operations.
+The convenience endpoints `approve-token` and `revoke-approval` also always
+require Passkey approval because they grant or revoke third-party spending
+access.
 
 ### 4.4 Approval Policies
 
@@ -433,8 +418,7 @@ TEENet Wallet's authentication model is specifically designed for the emerging
 pattern of AI agents managing cryptocurrency:
 
 1. **API keys grant operational access** -- an AI agent can create wallets,
-   check balances, transfer tokens below the threshold, and interact with
-   auto-approved contracts.
+   check balances, and transfer tokens below the threshold.
 
 2. **Passkeys gate irreversible actions** -- the human owner retains exclusive
    control over wallet deletion, contract whitelist management, policy changes,

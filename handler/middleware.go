@@ -146,6 +146,7 @@ func AuthMiddleware(db *gorm.DB, sessions *SessionStore) gin.HandlerFunc {
 		}
 		c.Set("userID", apiKey.UserID)
 		c.Set("authMode", "apikey")
+		c.Set("apiKeyPrefix", apiKey.Prefix)
 		c.Set("apiKeyLabel", apiKey.Label)
 		c.Next()
 	}

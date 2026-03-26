@@ -184,6 +184,7 @@ func main() {
 	passkeyOnly.POST("/auth/apikey/generate", authH.GenerateAPIKey)
 	passkeyOnly.GET("/auth/apikey/list", authH.ListAPIKeys)
 	passkeyOnly.DELETE("/auth/apikey", authH.RevokeAPIKey)
+	passkeyOnly.PATCH("/auth/apikey", authH.RenameAPIKey)
 
 	// Custom chain management (Passkey only — structural change to the wallet service).
 	passkeyOnly.POST("/chains", func(c *gin.Context) {

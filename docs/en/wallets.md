@@ -3,8 +3,8 @@
 ### Create a Wallet
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"chain": "ethereum", "label": "Main Wallet"}'
 ```
@@ -16,8 +16,8 @@ Each user can create up to `MAX_WALLETS_PER_USER` wallets (default: 10).
 ### List Wallets
 
 ```bash
-curl -s http://localhost:8080/api/wallets \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY"
+curl -s ${TEE_WALLET_URL}/api/wallets \
+  -H "Authorization: Bearer ${API_KEY}"
 ```
 
 Returns all wallets for the authenticated user, including `id`, `chain`, `address`, `label`, and `status` (`creating`, `ready`, or `error`).
@@ -25,15 +25,15 @@ Returns all wallets for the authenticated user, including `id`, `chain`, `addres
 ### Get Wallet Details
 
 ```bash
-curl -s http://localhost:8080/api/wallets/WALLET_ID \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY"
+curl -s ${TEE_WALLET_URL}/api/wallets/WALLET_ID \
+  -H "Authorization: Bearer ${API_KEY}"
 ```
 
 ### Rename a Wallet
 
 ```bash
-curl -s -X PATCH http://localhost:8080/api/wallets/WALLET_ID \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X PATCH ${TEE_WALLET_URL}/api/wallets/WALLET_ID \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"label": "Updated Label"}'
 ```
@@ -43,8 +43,8 @@ curl -s -X PATCH http://localhost:8080/api/wallets/WALLET_ID \
 Wallet deletion is irreversible and requires a Passkey session:
 
 ```bash
-curl -s -X DELETE http://localhost:8080/api/wallets/WALLET_ID \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck"
 ```
 
@@ -53,7 +53,7 @@ curl -s -X DELETE http://localhost:8080/api/wallets/WALLET_ID \
 Query the available chains before creating a wallet:
 
 ```bash
-curl -s http://localhost:8080/api/chains
+curl -s ${TEE_WALLET_URL}/api/chains
 ```
 
 Response:
@@ -72,8 +72,8 @@ Response:
 Custom EVM chains can be added at runtime (Passkey required):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/chains \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s -X POST ${TEE_WALLET_URL}/api/chains \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck" \
   -H "Content-Type: application/json" \
   -d '{

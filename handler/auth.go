@@ -363,6 +363,41 @@ func (h *AuthHandler) ListAPIKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "keys": keys})
 }
 
+// RenameAPIKey changes the label of an API key.
+// PATCH /api/auth/apikey  (Passkey only)
+func (h *AuthHandler) RenameAPIKey(c *gin.Context) {
+	userID := mustUserID(c)
+	if c.IsAborted() {
+		return
+	}
+	var req struct {
+		Prefix string `json:"prefix" binding:"required"`
+		Label  string `json:"label" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		jsonError(c, http.StatusBadRequest, "prefix and label are required")
+		return
+	}
+
+	var apiKey model.APIKey
+	if err := h.db.Where("user_id = ? AND prefix = ?", userID, req.Prefix).First(&apiKey).Error; err != nil {
+		jsonError(c, http.StatusNotFound, "API key not found")
+		return
+	}
+
+	oldLabel := apiKey.Label
+	if err := h.db.Model(&apiKey).Update("label", req.Label).Error; err != nil {
+		jsonError(c, http.StatusInternalServerError, "rename failed")
+		return
+	}
+	writeAuditCtx(h.db, c, "apikey_rename", "success", nil, map[string]interface{}{
+		"prefix":    req.Prefix,
+		"old_label": oldLabel,
+		"new_label": req.Label,
+	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "label": req.Label})
+}
+
 // Logout invalidates the current passkey session immediately.
 // DELETE /api/auth/session  (Passkey only)
 func (h *AuthHandler) Logout(c *gin.Context) {

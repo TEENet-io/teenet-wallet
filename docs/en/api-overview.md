@@ -56,7 +56,7 @@ Base Sepolia Testnet:
 | `insufficient funds` | Wallet balance too low for the transfer plus gas | Check balance with `GET /api/wallets/:id/balance`. For ETH transfers, allow approximately 0.0005 ETH for gas. |
 | `daily spend limit exceeded` | Cumulative USD spend for the day has reached the daily limit | Wait until UTC midnight for the limit to reset, or adjust the policy via Passkey. |
 | `contract not whitelisted` | The contract address, token mint, or program ID is not in the wallet's whitelist | Add it via `POST /api/wallets/:id/contracts` (API key creates a pending approval) or through the web UI for instant approval. |
-| `method not allowed` | The contract's `allowed_methods` list does not include the requested function | Update the contract's `allowed_methods` via `PUT /api/wallets/:id/contracts/:cid`. |
+| `contract operations require passkey approval` | Contract call via API key requires human confirmation | The wallet owner must approve the pending request via Passkey in the web UI. |
 | `wallet is not ready` | The wallet is still in the `creating` state (DKG in progress) | Wait 1-2 minutes for ECDSA key generation to complete, then retry. |
 | `invalid API key` | The provided API key is not valid or has been revoked | Verify the `Authorization` header value. Generate a new key if needed. |
 | `approval has expired` | The pending approval was not acted on within the expiry window (default: 24 hours) | Initiate the operation again to create a new approval request. |
@@ -89,8 +89,8 @@ Base Sepolia Testnet:
 All wallet operations are recorded in an audit log. Query it with:
 
 ```bash
-curl -s "http://localhost:8080/api/audit/logs?page=1&limit=20" \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY"
+curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
+  -H "Authorization: Bearer ${API_KEY}"
 ```
 
 **Query parameters:**
@@ -129,7 +129,7 @@ curl -s "http://localhost:8080/api/audit/logs?page=1&limit=20" \
 | Key storage | Private keys split across 3-5 TEE nodes via threshold cryptography (FROST/GG20). No single node holds the full key. |
 | Signing | M-of-N threshold signing. The private key is never reconstructed. |
 | Human approval | High-value transactions and sensitive operations require fresh WebAuthn/Passkey hardware assertion. |
-| Contract security | 3-layer gate: whitelist, method restrictions, high-risk method force-approval. |
+| Contract security | Address whitelist + mandatory Passkey approval for all contract calls via API key. |
 | Spend control | USD-denominated thresholds and daily limits with auth/capture pattern. |
 | API protection | Per-key rate limiting, CSRF protection for browser sessions, invite-based registration. |
 | Transport | Mutual TLS between wallet service and TEE-DAO cluster. |

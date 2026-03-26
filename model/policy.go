@@ -37,7 +37,9 @@ type ApprovalRequest struct {
 	TxHash       string    `json:"tx_hash" gorm:"type:text"`            // filled after approval + broadcast
 	Status       string    `json:"status" gorm:"default:'pending'"`
 	Signature    string    `json:"signature" gorm:"type:text"` // filled after sign/transfer approval
-	ApprovedBy   *uint     `json:"approved_by"`                // PasskeyUserID of approver
+	ApprovedBy   *uint     `json:"approved_by"`                         // PasskeyUserID of approver
+	AuthMode      string    `json:"auth_mode" gorm:"size:16"`                  // "passkey" | "apikey"
+	APIKeyPrefix  string    `json:"api_key_prefix,omitempty" gorm:"size:16"` // prefix of the API key that created this request
 	CreatedAt    time.Time `json:"created_at"`
 	ExpiresAt    time.Time `json:"expires_at"`
 }

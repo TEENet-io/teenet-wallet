@@ -54,7 +54,7 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/chains/arbitrum" \
 | `insufficient funds` | 钱包余额不足以支付转账金额和 Gas 费 | 检查余额，确保预留足够的 Gas 费（ETH 约 0.0005 ETH） |
 | `daily spend limit exceeded` | 当日 USD 累计支出已超过日限额 | 等待 UTC 午夜自动重置，或通过 Passkey 调整日限额策略 |
 | `contract not whitelisted` | 目标合约/铸造地址/程序 ID 未在白名单中 | 通过 API Key 提交白名单添加请求或在 Web UI 中直接添加 |
-| `method not allowed` | 调用的方法不在合约的 `allowed_methods` 列表中 | 更新白名单条目，将所需方法加入 `allowed_methods` |
+| `contract operations require passkey approval` | 通过 API Key 发起的合约调用需要人工确认 | 钱包所有者需在 Web UI 中通过 Passkey 审批待处理的请求 |
 | `wallet is not ready` | 钱包仍在创建中（DKG 进行中） | 等待 1-2 分钟后重试 |
 | `invalid API key` | API Key 无效或已被撤销 | 检查 API Key 是否正确，或重新生成 |
 | `approval has expired` | 审批请求已超时（默认 24 小时） | 重新发起转账或操作 |
@@ -79,6 +79,62 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/chains/arbitrum" \
 | `409` | 资源冲突（如重复的链名称、链上仍有钱包） |
 | `429` | 请求频率超限 |
 | `500` | 服务端内部错误 |
+
+---
+
+## 审计日志
+
+所有钱包操作都记录在审计日志中：
+
+```bash
+curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
+  -H "Authorization: Bearer ${API_KEY}"
+```
+
+**查询参数：**
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `page` | `1` | 页码 |
+| `limit` | `20` | 每页条数（最大 100） |
+| `action` | （全部） | 按操作类型筛选 |
+| `wallet_id` | （全部） | 按钱包筛选 |
+
+**操作类型：**
+
+| 类型 | 说明 |
+|------|------|
+| `login` | Passkey 登录 |
+| `wallet_create` | 创建钱包 |
+| `wallet_delete` | 删除钱包 |
+| `transfer` | 转账（成功或待审批） |
+| `sign` | 签名（成功或待审批） |
+| `policy_update` | 设置审批策略 |
+| `approval_approve` | 审批通过 |
+| `approval_reject` | 审批拒绝 |
+| `contract_add` | 添加合约白名单 |
+| `contract_call` | 合约调用 |
+| `wrap_sol` | SOL 打包为 wSOL |
+| `unwrap_sol` | wSOL 解包为 SOL |
+| `apikey_generate` | 生成 API 密钥 |
+| `apikey_revoke` | 撤销 API 密钥 |
+
+---
+
+## 安全概览
+
+| 层级 | 机制 |
+|------|------|
+| 密钥存储 | 私钥通过门限密码学（FROST/GG20）分片存储在 3-5 个 TEE 节点 |
+| 签名 | M-of-N 门限签名，完整私钥永不还原 |
+| 人工审批 | 大额交易和所有合约操作需要 Passkey 硬件认证 |
+| 合约安全 | 地址白名单 + API Key 合约调用强制审批 |
+| 消费控制 | USD 计价阈值和日限额，预扣/回退模式 |
+| API 防护 | 按 Key 速率限制、CSRF 保护、邀请制注册 |
+| 传输 | 钱包服务与 TEE-DAO 集群之间使用 mTLS |
+| 数据 | SQLite WAL 模式、结构化审计日志、CSP 头 |
+
+---
 
 ### 调试建议
 

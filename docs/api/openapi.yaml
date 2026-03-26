@@ -245,14 +245,6 @@ components:
         decimals:
           type: integer
           example: 6
-        allowed_methods:
-          type: string
-          description: Comma-separated method names. Empty = all allowed.
-          example: "transfer,transferFrom"
-        auto_approve:
-          type: boolean
-          description: If true, API key can execute non-high-risk methods without Passkey
-          example: false
         created_at:
           type: string
           format: date-time
@@ -301,7 +293,7 @@ components:
           type: integer
         approval_type:
           type: string
-          enum: [sign, transfer, contract_call, contract_add, contract_update, policy_change]
+          enum: [sign, transfer, contract_call, contract_add, contract_update, policy_change, wrap_sol, unwrap_sol]
           example: "transfer"
         message:
           type: string
@@ -1934,14 +1926,6 @@ paths:
                   minimum: 0
                   maximum: 77
                   example: 6
-                allowed_methods:
-                  type: string
-                  description: Comma-separated method names (empty = all allowed)
-                  example: "transfer,approve"
-                auto_approve:
-                  type: boolean
-                  description: Allow API key execution without Passkey for non-high-risk methods
-                  example: false
       responses:
         "200":
           description: Contract added (Passkey path)
@@ -2028,10 +2012,6 @@ paths:
                   type: integer
                   minimum: 0
                   maximum: 77
-                allowed_methods:
-                  type: string
-                auto_approve:
-                  type: boolean
       responses:
         "200":
           description: Contract updated (Passkey path)
@@ -2136,11 +2116,10 @@ paths:
       tags: [Contract Calls]
       summary: Execute a contract call
       description: |
-        Executes a smart contract call with three-layer security:
+        Executes a smart contract call with two-layer security:
         1. **Contract whitelist** -- contract must be pre-approved.
-        2. **Method restriction** -- if `allowed_methods` is set, the method must be in the list.
-        3. **Approval gate** -- high-risk methods (approve, transferFrom, etc.) always
-           require Passkey; non-high-risk methods on auto-approve contracts proceed directly.
+        2. **Approval gate** -- all contract calls via API key require Passkey approval;
+           calls via Passkey session execute immediately.
 
         Works on both EVM (ABI-encoded function calls) and Solana (program instructions).
 
@@ -2665,6 +2644,54 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/wallets/{id}/daily-spent:
+    get:
+      tags: [Approval Policies]
+      summary: Get daily spend status
+      description: Returns the current daily USD spend, limit, remaining budget, and next reset time for a wallet.
+      operationId: getDailySpent
+      security:
+        - APIKey: []
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      responses:
+        "200":
+          description: Daily spend status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  daily_spent_usd:
+                    type: string
+                    example: "235.50"
+                  daily_limit_usd:
+                    type: string
+                    example: "5000"
+                    description: Empty string if no policy is set
+                  remaining_usd:
+                    type: string
+                    example: "4764.50"
+                    description: Empty string if no daily limit
+                  reset_at:
+                    type: string
+                    format: date-time
+                    example: "2026-03-27T00:00:00Z"
+                    description: Empty string if no daily limit
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
           content:
             application/json:
               schema:

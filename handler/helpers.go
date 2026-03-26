@@ -39,6 +39,17 @@ func utcStartOfDay() time.Time {
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
+// authInfo extracts authMode and apiKeyPrefix from the gin context.
+func authInfo(c *gin.Context) (authMode, apiKeyPrefix string) {
+	if am, ok := c.Get("authMode"); ok {
+		authMode, _ = am.(string)
+	}
+	if p, ok := c.Get("apiKeyPrefix"); ok {
+		apiKeyPrefix, _ = p.(string)
+	}
+	return
+}
+
 // createPendingApproval inserts a pending ApprovalRequest into the DB.
 // On success it returns the created record and true.
 // On failure it writes a 500 error response and returns nil, false — the caller must return immediately.
@@ -52,12 +63,15 @@ func createPendingApproval(db *gorm.DB, c *gin.Context, walletID string, approva
 	if len(expiry) > 0 && expiry[0] > 0 {
 		expiryDur = expiry[0]
 	}
+	authMode, apiKeyPrefix := authInfo(c)
 	approval := model.ApprovalRequest{
 		WalletID:     walletID,
 		UserID:       userID,
 		ApprovalType: approvalType,
 		PolicyData:   string(policyJSON),
 		Status:       "pending",
+		AuthMode:     authMode,
+		APIKeyPrefix: apiKeyPrefix,
 		ExpiresAt:    time.Now().Add(expiryDur),
 	}
 	if err := db.Create(&approval).Error; err != nil {

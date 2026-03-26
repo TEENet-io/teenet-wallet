@@ -9,8 +9,8 @@ API keys are intended for AI agents, bots, and automated pipelines. They are pre
 **Generating a key** (requires Passkey session):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/auth/apikey/generate \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s -X POST ${TEE_WALLET_URL}/api/auth/apikey/generate \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck" \
   -H "Content-Type: application/json" \
   -d '{"label": "production-agent"}'
@@ -19,23 +19,23 @@ curl -s -X POST http://localhost:8080/api/auth/apikey/generate \
 **Using a key:**
 
 ```bash
-curl -s http://localhost:8080/api/wallets \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY"
+curl -s ${TEE_WALLET_URL}/api/wallets \
+  -H "Authorization: Bearer ${API_KEY}"
 ```
 
 **Listing keys:**
 
 ```bash
-curl -s http://localhost:8080/api/auth/apikey/list \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s ${TEE_WALLET_URL}/api/auth/apikey/list \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck"
 ```
 
 **Revoking a key:**
 
 ```bash
-curl -s -X DELETE http://localhost:8080/api/auth/apikey \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s -X DELETE ${TEE_WALLET_URL}/api/auth/apikey \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck" \
   -H "Content-Type: application/json" \
   -d '{"key_id": "KEY_ID_HERE"}'
@@ -75,8 +75,8 @@ Passkey sessions are required for:
 All state-changing requests made with a Passkey session must include the `X-CSRF-Token` header. Any non-empty value is accepted (e.g., `nocheck`). This prevents cross-site request forgery attacks against browser-based sessions.
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck" \
   -H "Content-Type: application/json" \
   -d '{"chain": "ethereum", "label": "My Wallet"}'

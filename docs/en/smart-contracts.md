@@ -7,23 +7,21 @@ Before calling any smart contract, the contract address (EVM), token mint (SPL),
 **List whitelisted contracts:**
 
 ```bash
-curl -s http://localhost:8080/api/wallets/WALLET_ID/contracts \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY"
+curl -s ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts \
+  -H "Authorization: Bearer ${API_KEY}"
 ```
 
 **Add a contract via API key** (creates a pending approval):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/contracts \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     "symbol": "USDC",
     "decimals": 6,
-    "label": "USD Coin",
-    "allowed_methods": "transfer,balanceOf",
-    "auto_approve": false
+    "label": "USD Coin"
   }'
 ```
 
@@ -45,17 +43,17 @@ The same endpoint returns `201` when called with a Passkey session, and the cont
 **Update a contract configuration:**
 
 ```bash
-curl -s -X PUT http://localhost:8080/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X PUT ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"auto_approve": true, "allowed_methods": "transfer,approve,balanceOf"}'
+  -d '{"label": "USDC v2", "symbol": "USDC", "decimals": 6}'
 ```
 
 **Remove a contract** (Passkey only):
 
 ```bash
-curl -s -X DELETE http://localhost:8080/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
-  -H "Authorization: Bearer ps_YOUR_SESSION_TOKEN" \
+curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: nocheck"
 ```
 
@@ -67,16 +65,14 @@ curl -s -X DELETE http://localhost:8080/api/wallets/WALLET_ID/contracts/CONTRACT
 | `symbol` | No | Token symbol (e.g., USDC) |
 | `decimals` | No | Token decimals (6 for USDC, 18 for WETH, 9 for most SPL tokens) |
 | `label` | No | Human-readable label |
-| `allowed_methods` | No | Comma-separated method names (e.g., `transfer,approve`). Empty = all methods allowed |
-| `auto_approve` | No | If `true`, API keys can execute non-high-risk calls without Passkey. Default: `false` |
 
 ### Contract Calls (EVM)
 
 Call any whitelisted smart contract function using the `/contract-call` endpoint with `func_sig` and `args`:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/contract-call \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contract-call \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "0xContractAddress...",
@@ -102,8 +98,8 @@ curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/contract-call \
 For Solana programs, use `accounts` and `data` instead of `func_sig`/`args`:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/contract-call \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contract-call \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "ProgramIdBase58...",
@@ -124,8 +120,8 @@ The program ID must be whitelisted. The wallet's own address is added as a signe
 Query contract state without signing or sending a transaction. No gas fees, no approval needed:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/call-read \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/call-read \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
@@ -166,11 +162,11 @@ You can check current prices via `GET /api/prices` to help compute the USD value
 
 ### Convenience Endpoints
 
-**Approve ERC-20 token spending** (always requires Passkey -- high-risk method):
+**Approve ERC-20 token spending** (always requires Passkey approval):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/approve-token \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/approve-token \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "0xTokenAddress...",
@@ -180,11 +176,11 @@ curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/approve-token \
   }'
 ```
 
-**Revoke ERC-20 token approval** (always requires Passkey -- high-risk method):
+**Revoke ERC-20 token approval** (always requires Passkey approval):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/revoke-approval \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/revoke-approval \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "0xTokenAddress...",

@@ -5,8 +5,8 @@
 Send native currency by calling the `/transfer` endpoint without a `token` field:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "0xRecipientAddress...",
@@ -18,8 +18,8 @@ curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
 For Solana wallets, use a base58 recipient address:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "RecipientBase58Address...",
@@ -34,8 +34,8 @@ The backend builds the transaction (EIP-1559 for EVM, native transfer instructio
 Include the `token` field to send ERC-20 tokens. The token contract must be whitelisted first (see [Contract Whitelist](smart-contracts.md#contract-whitelist)).
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "0xRecipientAddress...",
@@ -57,8 +57,8 @@ The `amount` is in human-readable token units (e.g., `100` for 100 USDC). The ba
 SPL token transfers use the same `/transfer` endpoint with the `token` field. The token mint must be whitelisted.
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "RecipientBase58Address...",
@@ -78,8 +78,8 @@ If the recipient does not have an Associated Token Account (ATA) for the token m
 Convert native SOL to wSOL (Wrapped SOL SPL token):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/wrap-sol \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/wrap-sol \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"amount": "0.5"}'
 ```
@@ -87,8 +87,8 @@ curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/wrap-sol \
 Unwrap all wSOL back to native SOL (closes the wSOL ATA):
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/unwrap-sol \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/unwrap-sol \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -98,8 +98,8 @@ curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/unwrap-sol \
 To prevent duplicate transactions when retrying after network errors, include the `Idempotency-Key` header:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
-  -H "Authorization: Bearer ocw_YOUR_API_KEY" \
+curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer \
+  -H "Authorization: Bearer ${API_KEY}" \
   -H "Idempotency-Key: unique-request-id-12345" \
   -H "Content-Type: application/json" \
   -d '{
@@ -108,7 +108,11 @@ curl -s -X POST http://localhost:8080/api/wallets/WALLET_ID/transfer \
   }'
 ```
 
-If a request with the same idempotency key has already been processed, the wallet returns the original response without executing the transfer again. Keys are scoped to the authenticated user.
+If a request with the same idempotency key has already been processed, the wallet returns the original cached response without executing the transfer again.
+
+- **Scope:** Per-user -- two different API keys for the same user share the same idempotency namespace.
+- **TTL:** 24 hours -- after that, the same key can be reused.
+- **Applies to:** `/transfer`, `/contract-call`, `/wrap-sol`, `/unwrap-sol`.
 
 ---
 [Previous: Wallet Management](wallets.md) | [Next: Smart Contracts](smart-contracts.md)

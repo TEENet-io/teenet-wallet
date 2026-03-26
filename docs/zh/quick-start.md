@@ -50,7 +50,7 @@ docker run -p 8080:8080 \
 
 ```bash
 # 开始注册（获取 WebAuthn 挑战）
-curl -s -X POST http://localhost:8080/api/auth/passkey/register/begin \
+curl -s -X POST ${TEE_WALLET_URL}/api/auth/passkey/register/begin \
   -H "Content-Type: application/json" \
   -d '{"display_name": "my-account"}'
 

@@ -811,12 +811,24 @@ async function listAPIKeys() {
 
       row.appendChild(info);
 
+      var btnGroup = document.createElement('div');
+      btnGroup.style.cssText = 'display:flex;gap:0.3rem;flex-shrink:0;';
+
+      var renameBtn = document.createElement('button');
+      renameBtn.className = 'btn btn-ghost btn-sm';
+      renameBtn.textContent = 'Rename';
+      renameBtn.style.cssText = 'font-size:0.7rem;padding:0.2rem 0.5rem;';
+      renameBtn.onclick = function() { renameAPIKey(k.prefix, k.label); };
+      btnGroup.appendChild(renameBtn);
+
       var revokeBtn = document.createElement('button');
       revokeBtn.className = 'btn btn-danger btn-sm';
       revokeBtn.textContent = 'Revoke';
-      revokeBtn.style.cssText = 'font-size:0.7rem;padding:0.2rem 0.5rem;flex-shrink:0;';
+      revokeBtn.style.cssText = 'font-size:0.7rem;padding:0.2rem 0.5rem;';
       revokeBtn.onclick = function() { revokeAPIKey(k.prefix, k.label); };
-      row.appendChild(revokeBtn);
+      btnGroup.appendChild(revokeBtn);
+
+      row.appendChild(btnGroup);
 
       el.appendChild(row);
     });
@@ -828,6 +840,17 @@ async function listAPIKeys() {
     noDiv.textContent = 'No API keys found';
     el.appendChild(noDiv);
   }
+}
+
+async function renameAPIKey(prefix, currentLabel) {
+  var newLabel = prompt('New label for ' + prefix + '\u2026', currentLabel || '');
+  if (newLabel === null || newLabel === currentLabel) return;
+  const res = await api('/api/auth/apikey', {
+    method: 'PATCH',
+    body: JSON.stringify({ prefix: prefix, label: newLabel })
+  });
+  toast(res.success ? 'API key renamed' : (res.error || 'Rename failed'), res.success ? 'success' : 'error');
+  if (res.success) listAPIKeys();
 }
 
 async function revokeAPIKey(prefix, label) {
@@ -2001,13 +2024,29 @@ async function loadSingleApproval(approvalId) {
   el.innerHTML = viewAllLink + renderApprovalCard(a, wMap);
 }
 
+// Global prefix→label map, refreshed before rendering approvals/audit.
+var _apiKeyMap = {};
+async function refreshApiKeyMap() {
+  try {
+    const res = await api('/api/auth/apikey/list');
+    if (res.success && res.keys) {
+      _apiKeyMap = {};
+      res.keys.forEach(function(k) { _apiKeyMap[k.prefix] = k.label || k.prefix + '\u2026'; });
+    }
+  } catch(e) { /* ignore — map stays stale */ }
+}
+function resolveKeyLabel(prefix) {
+  if (!prefix) return '';
+  return _apiKeyMap[prefix] || prefix + '\u2026';
+}
+
 async function loadApprovals() {
   // Check if the URL targets a specific approval: /#/approve/<id>
   const singleMatch = window.location.hash.match(/^#\/approve\/(\d+)$/);
   if (singleMatch) {
     return loadSingleApproval(singleMatch[1]);
   }
-  const [res, wRes] = await Promise.all([api('/api/approvals/pending'), api('/api/wallets')]);
+  const [res, wRes] = await Promise.all([api('/api/approvals/pending'), api('/api/wallets'), refreshApiKeyMap()]);
   const el = document.getElementById('approvals-list');
   if (!res.success) { safeSetResult(el, res.error || 'Load failed', 'error'); return; }
   const approvals = res.approvals || [];
@@ -2024,6 +2063,12 @@ function renderApprovalCard(a, wMap) {
     const aw = wMap[a.wallet_id] || {};
     const isPolicyChange = a.approval_type === 'policy_change';
     const isContractAdd  = a.approval_type === 'contract_add' || a.approval_type === 'contract_update';
+    const keyLabel = a.api_key_prefix ? resolveKeyLabel(a.api_key_prefix) : '';
+    const requestedBy = (a.auth_mode === 'apikey' && keyLabel)
+      ? `<span class="tx-k">Requested by</span><span class="tx-v"><span class="badge badge-blue" style="font-size:0.65rem">API Key: ${keyLabel.replace(/</g, '&lt;')}</span></span>`
+      : a.auth_mode === 'apikey'
+        ? `<span class="tx-k">Requested by</span><span class="tx-v"><span class="badge badge-blue" style="font-size:0.65rem">API Key</span></span>`
+        : '';
 
     // ── Policy change card ──
     if (isPolicyChange) {
@@ -2041,6 +2086,7 @@ function renderApprovalCard(a, wMap) {
           <span class="tx-k">Threshold</span><span class="tx-v">$${pol.threshold_usd || pol.threshold_amount || '—'} USD</span>
           ${pol.daily_limit_usd ? `<span class="tx-k">Daily Limit</span><span class="tx-v">$${pol.daily_limit_usd} USD</span>` : ''}
           <span class="tx-k">Enabled</span><span class="tx-v">${pol.enabled !== false ? 'Yes' : 'No'}</span>
+          ${requestedBy}
           <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
         </div>
         <div class="btn-group">
@@ -2070,6 +2116,7 @@ function renderApprovalCard(a, wMap) {
           ${ct.symbol   ? `<span class="tx-k">Symbol</span><span class="tx-v">${ct.symbol}</span>` : ''}
           ${ct.label    ? `<span class="tx-k">Label</span><span class="tx-v">${ct.label}</span>` : ''}
           ${ct.decimals !== undefined ? `<span class="tx-k">Decimals</span><span class="tx-v">${ct.decimals}</span>` : ''}
+          ${requestedBy}
           <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
         </div>
         <div class="btn-group">
@@ -2103,6 +2150,7 @@ function renderApprovalCard(a, wMap) {
             ${ctx.mint     ? `<span class="tx-k">Token Mint</span><span class="tx-v" style="word-break:break-all">${ctx.mint}</span>` : ''}
             ${ctx.symbol   ? `<span class="tx-k">Token</span><span class="tx-v">${ctx.symbol}</span>` : ''}
             ${ctx.chain    ? `<span class="tx-k">Chain</span><span class="tx-v">${ctx.chain}</span>` : ''}
+            ${requestedBy}
             <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
           </div>
           <div class="btn-group">
@@ -2131,6 +2179,7 @@ function renderApprovalCard(a, wMap) {
             ${ctx.accounts   ? `<span class="tx-k">Accounts</span><span class="tx-v">${Array.isArray(ctx.accounts) ? ctx.accounts.length + ' account(s)' : ctx.accounts}</span>` : ''}
             ${ctx.memo       ? `<span class="tx-k">Memo</span><span class="tx-v">${ctx.memo}</span>` : ''}
             ${ctx.chain      ? `<span class="tx-k">Chain</span><span class="tx-v">${ctx.chain}</span>` : ''}
+            ${requestedBy}
             <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
           </div>
           <div class="btn-group">
@@ -2160,6 +2209,7 @@ function renderApprovalCard(a, wMap) {
             ${ctx.amount   ? `<span class="tx-k">Allowance</span><span class="tx-v">${ctx.amount}${ctx.symbol ? ' ' + ctx.symbol : ''}</span>` : ''}
             ${ctx.decimals ? `<span class="tx-k">Decimals</span><span class="tx-v">${ctx.decimals}</span>` : ''}
             <span class="tx-k">Note</span><span class="tx-v" style="color:#94a3b8">Token approval: grants spending permission to spender</span>
+            ${requestedBy}
             <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
           </div>
           <div class="btn-group">
@@ -2185,6 +2235,7 @@ function renderApprovalCard(a, wMap) {
             ${ctx.spender  ? `<span class="tx-k">Spender</span><span class="tx-v" style="word-break:break-all">${ctx.spender}</span>` : ''}
             ${ctx.symbol   ? `<span class="tx-k">Symbol</span><span class="tx-v">${ctx.symbol}</span>` : ''}
             <span class="tx-k">Action</span><span class="tx-v">Set allowance to 0 (revoke)</span>
+            ${requestedBy}
             <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
           </div>
           <div class="btn-group">
@@ -2213,6 +2264,7 @@ function renderApprovalCard(a, wMap) {
           ${ctx.value_eth ? `<span class="tx-k">ETH Value</span><span class="tx-v">${ctx.value_eth} ETH</span>` : ''}
           ${ctx.memo     ? `<span class="tx-k">Memo</span><span class="tx-v">${ctx.memo}</span>` : ''}
           ${ctx.approval_reason ? `<span class="tx-k">Reason</span><span class="tx-v" style="color:#f59e0b">${ctx.approval_reason}</span>` : ''}
+          ${requestedBy}
           <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
         </div>
         <div class="btn-group">
@@ -2247,6 +2299,7 @@ function renderApprovalCard(a, wMap) {
         ${(isERC20 || isSPL) && ctx.symbol ? `<span class="tx-k">Token</span><span class="tx-v">${ctx.symbol}</span>` : ''}
         ${ctx.chain ? `<span class="tx-k">Chain</span><span class="tx-v">${ctx.chain}</span>` : ''}
         ${ctx.memo ? `<span class="tx-k">Memo</span><span class="tx-v">${ctx.memo}</span>` : ''}
+        ${requestedBy}
         <span class="tx-k">Expires</span><span class="tx-v">${new Date(a.expires_at).toLocaleTimeString()}</span>
       </div>
       <div class="btn-group">
@@ -2821,7 +2874,7 @@ async function loadAuditLogs(page) {
   const params = new URLSearchParams({ page: auditPage, limit: 20 });
   if (action) params.set('action', action);
 
-  const res = await api(`/api/audit/logs?${params}`);
+  const [res] = await Promise.all([api(`/api/audit/logs?${params}`), refreshApiKeyMap()]);
   const el = document.getElementById('audit-list');
   const pgEl = document.getElementById('audit-pagination');
   if (!res.success) {
@@ -2849,8 +2902,9 @@ async function loadAuditLogs(page) {
     const d = new Date(log.created_at);
     const ts = d.toLocaleDateString([], {month:'short', day:'numeric'})
              + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    const apiKeyLabelBadge = (log.auth_mode === 'apikey' && log.api_key_label)
-      ? '<span class="badge badge-blue" style="font-size:0.62rem">key: ' + log.api_key_label.replace(/</g, '&lt;') + '</span>'
+    const auditKeyLabel = log.api_key_prefix ? resolveKeyLabel(log.api_key_prefix) : '';
+    const apiKeyLabelBadge = (log.auth_mode === 'apikey' && auditKeyLabel)
+      ? '<span class="badge badge-blue" style="font-size:0.62rem">key: ' + auditKeyLabel.replace(/</g, '&lt;') + '</span>'
       : '';
     const authBadge = log.auth_mode === 'passkey'
       ? '<span class="badge badge-purple" style="font-size:0.62rem">passkey</span>'

@@ -10,8 +10,8 @@ type AuditLog struct {
 	WalletID *string `json:"wallet_id,omitempty" gorm:"size:36;index"`
 	// Details stores optional JSON context (to, amount, tx_hash, etc.).
 	Details  string `json:"details" gorm:"type:text"`
-	AuthMode    string `json:"auth_mode" gorm:"size:16"` // "passkey" | "apikey" | ""
-	APIKeyLabel string `json:"api_key_label,omitempty" gorm:"size:100"`
+	AuthMode     string `json:"auth_mode" gorm:"size:16"`                  // "passkey" | "apikey" | ""
+	APIKeyPrefix string `json:"api_key_prefix,omitempty" gorm:"size:16"` // immutable key prefix for lookup
 	IP       string `json:"ip" gorm:"size:64"`
 	// Status: "success" | "pending" | "failed"
 	Status    string    `json:"status" gorm:"size:16;not null;default:'success'"`

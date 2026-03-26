@@ -136,7 +136,11 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
   }'
 ```
 
-相同的 `Idempotency-Key` 在有效期内会返回首次请求的结果，不会重复执行交易。
+相同的 `Idempotency-Key` 在有效期内会返回首次请求的缓存结果，不会重复执行交易。
+
+- **作用域：** Per-user -- 同一用户的不同 API Key 共享幂等键命名空间。
+- **有效期：** 24 小时 -- 过期后同一键可重新使用。
+- **适用端点：** `/transfer`、`/contract-call`、`/wrap-sol`、`/unwrap-sol`。
 
 ---
 [上一页: 钱包管理](wallets.md) | [下一页: 智能合约交互](smart-contracts.md)

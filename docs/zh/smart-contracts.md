@@ -22,9 +22,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
     "contract_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     "symbol": "USDC",
     "decimals": 6,
-    "label": "USDC Stablecoin",
-    "allowed_methods": "transfer,balanceOf",
-    "auto_approve": false
+    "label": "USDC Stablecoin"
   }'
 ```
 
@@ -48,8 +46,9 @@ curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts/${CONTRACT_
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "auto_approve": true,
-    "allowed_methods": "transfer,balanceOf,approve"
+    "label": "USDC v2",
+    "symbol": "USDC",
+    "decimals": 6
   }'
 ```
 
@@ -69,8 +68,6 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts/${CONTRA
 | `symbol` | 否 | 代币符号（如 USDC） |
 | `decimals` | 否 | 代币精度（如 USDC 为 6，WETH 为 18，大多数 SPL 为 9） |
 | `label` | 否 | 人类可读标签 |
-| `allowed_methods` | 否 | 逗号分隔的允许方法名（EVM）；为空表示允许所有方法 |
-| `auto_approve` | 否 | 设为 `true` 则 API Key 可直接调用（高危方法除外）。默认 `false` |
 
 ### 合约调用（EVM）
 

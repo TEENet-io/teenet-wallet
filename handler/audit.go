@@ -69,15 +69,15 @@ func (h *AuditHandler) ListLogs(c *gin.Context) {
 // ─── Audit helpers ─────────────────────────────────────────────────────────────
 
 // writeAuditLog writes a best-effort audit entry. Errors are logged to stdout but not returned.
-func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *string, details interface{}, apiKeyLabel string) {
+func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *string, details interface{}, apiKeyPrefix string) {
 	entry := model.AuditLog{
-		UserID:      userID,
-		Action:      action,
-		Status:      status,
-		AuthMode:    authMode,
-		IP:          ip,
-		WalletID:    walletID,
-		APIKeyLabel: apiKeyLabel,
+		UserID:       userID,
+		Action:       action,
+		Status:       status,
+		AuthMode:     authMode,
+		IP:           ip,
+		WalletID:     walletID,
+		APIKeyPrefix: apiKeyPrefix,
 		CreatedAt:   time.Now(),
 	}
 	if details != nil {
@@ -95,13 +95,6 @@ func writeAuditCtx(db *gorm.DB, c *gin.Context, action, status string, walletID 
 	if c.IsAborted() {
 		return
 	}
-	authMode := ""
-	if am, ok := c.Get("authMode"); ok {
-		authMode, _ = am.(string)
-	}
-	apiKeyLabel := ""
-	if label, ok := c.Get("apiKeyLabel"); ok {
-		apiKeyLabel, _ = label.(string)
-	}
-	writeAuditLog(db, userID, action, status, authMode, c.ClientIP(), walletID, details, apiKeyLabel)
+	authMode, apiKeyPrefix := authInfo(c)
+	writeAuditLog(db, userID, action, status, authMode, c.ClientIP(), walletID, details, apiKeyPrefix)
 }
