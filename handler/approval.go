@@ -82,7 +82,7 @@ func (h *ApprovalHandler) GetApproval(c *gin.Context) {
 // POST /api/approvals/:id/approve
 func (h *ApprovalHandler) Approve(c *gin.Context) {
 	// Verify a fresh passkey credential before doing anything sensitive.
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 
@@ -357,7 +357,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 // Also requires a fresh WebAuthn assertion to prevent session-token-only attacks.
 // POST /api/approvals/:id/reject
 func (h *ApprovalHandler) Reject(c *gin.Context) {
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 
@@ -402,11 +402,12 @@ func (h *ApprovalHandler) loadUserApproval(c *gin.Context) (model.ApprovalReques
 }
 
 // verifyFreshPasskey reads {login_session_id, credential} from the request body and
-// calls PasskeyLoginVerify to confirm a live hardware key assertion.
+// calls PasskeyLoginVerifyAs to confirm both a live hardware key assertion AND that the
+// verified PasskeyUserID matches the currently logged-in user.
 // Returns true if verification passes (c is NOT written to). Returns false and writes a
 // 401/400 response if verification fails (caller must return immediately).
 // When sdkClient is nil the check is skipped (test / offline mode only).
-func verifyFreshPasskey(sdkClient *sdk.Client, c *gin.Context) bool {
+func verifyFreshPasskey(sdkClient *sdk.Client, c *gin.Context, db *gorm.DB) bool {
 	if sdkClient == nil {
 		if gin.Mode() == gin.TestMode {
 			return true // allow nil SDK in tests
@@ -423,18 +424,20 @@ func verifyFreshPasskey(sdkClient *sdk.Client, c *gin.Context) bool {
 		jsonError(c, http.StatusBadRequest, "login_session_id and credential are required for this action")
 		return false
 	}
-	return verifyFreshPasskeyParsed(sdkClient, c, body.LoginSessionID, body.Credential)
+	return verifyFreshPasskeyParsed(sdkClient, c, body.LoginSessionID, body.Credential, db)
 }
 
-// verifyFreshPasskeyParsed verifies an already-parsed credential.
+// verifyFreshPasskeyParsed verifies an already-parsed credential and confirms that the
+// verified PasskeyUserID matches the currently logged-in user's PasskeyUserID.
+// Uses SDK's PasskeyLoginVerifyAs for identity-bound verification when db is provided.
 // Used by endpoints that carry both business fields and credential in a single JSON body.
 // When sdkClient is nil the check is skipped (test / offline mode only).
-func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessionID uint64, credential interface{}) bool {
-	if sdkClient == nil {
+func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessionID uint64, credential interface{}, db *gorm.DB) bool {
+	if sdkClient == nil || db == nil {
 		if gin.Mode() == gin.TestMode {
-			return true // allow nil SDK in tests
+			return true // allow nil SDK/db in tests
 		}
-		slog.Error("SECURITY: SDK client is nil, cannot verify passkey, rejecting")
+		slog.Error("SECURITY: SDK or db is nil, cannot verify passkey, rejecting")
 		jsonError(c, http.StatusServiceUnavailable, "passkey verification unavailable")
 		return false
 	}
@@ -447,9 +450,26 @@ func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessio
 		jsonError(c, http.StatusBadRequest, "invalid credential")
 		return false
 	}
-	res, err := sdkClient.PasskeyLoginVerify(c.Request.Context(), loginSessionID, credBytes)
+
+	// Identity-bound verification: confirms the passkey assertion is valid AND
+	// the PasskeyUserID matches the currently logged-in user.
+	sessionUserID := mustUserID(c)
+	if c.IsAborted() {
+		return false
+	}
+	var user model.User
+	if err := db.First(&user, sessionUserID).Error; err != nil {
+		slog.Error("SECURITY: failed to load user for passkey verification", "user_id", sessionUserID, "error", err)
+		jsonError(c, http.StatusInternalServerError, "failed to verify user identity")
+		return false
+	}
+	res, err := sdkClient.PasskeyLoginVerifyAs(c.Request.Context(), loginSessionID, credBytes, user.PasskeyUserID)
 	if err != nil || !res.Success {
-		jsonError(c, http.StatusUnauthorized, "passkey verification failed — please authenticate with your hardware key")
+		errMsg := "passkey verification failed"
+		if res != nil && res.Error != "" {
+			errMsg = res.Error
+		}
+		jsonError(c, http.StatusUnauthorized, errMsg)
 		return false
 	}
 	return true

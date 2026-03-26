@@ -108,7 +108,7 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 	}
 
 	// Passkey path: require a fresh hardware assertion before applying.
-	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential) {
+	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential, h.db) {
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 
 	// Passkey path: require a fresh hardware assertion before applying.
-	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential) {
+	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential, h.db) {
 		return
 	}
 
@@ -245,7 +245,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 // DeleteContract removes a whitelisted contract.
 // DELETE /api/wallets/:id/contracts/:cid  (Passkey only)
 func (h *ContractHandler) DeleteContract(c *gin.Context) {
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 	wallet, ok := loadUserWallet(c, h.db)

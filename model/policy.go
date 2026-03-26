@@ -3,6 +3,7 @@ package model
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -42,14 +43,23 @@ type ApprovalRequest struct {
 }
 
 // BeforeCreate generates a random ID for ApprovalRequest so IDs are not sequential.
-func (a *ApprovalRequest) BeforeCreate(tx *gorm.DB) error {
-	if a.ID == 0 {
+// Uses 8 digits (10000000–99999999) for ~90M possible values. Retries on collision.
+func (a *ApprovalRequest) BeforeCreate(db *gorm.DB) error {
+	if a.ID != 0 {
+		return nil
+	}
+	for range 10 {
 		var buf [4]byte
 		if _, err := rand.Read(buf[:]); err != nil {
 			return err
 		}
-		// Use 6 digits (100000–999999) for a compact, user-friendly ID.
-		a.ID = uint(binary.BigEndian.Uint32(buf[:]))%900000 + 100000
+		id := uint(binary.BigEndian.Uint32(buf[:]))%90000000 + 10000000
+		var count int64
+		db.Model(&ApprovalRequest{}).Where("id = ?", id).Count(&count)
+		if count == 0 {
+			a.ID = id
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("failed to generate unique approval ID after 10 attempts")
 }

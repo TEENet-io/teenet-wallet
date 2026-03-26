@@ -206,7 +206,7 @@ func (h *WalletHandler) RenameWallet(c *gin.Context) {
 // DeleteWallet deletes a wallet record.
 // DELETE /api/wallets/:id
 func (h *WalletHandler) DeleteWallet(c *gin.Context) {
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 	wallet, ok := loadUserWallet(c, h.db)
@@ -372,7 +372,7 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 	}
 
 	// Passkey path: require a fresh hardware assertion before applying.
-	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential) {
+	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential, h.db) {
 		return
 	}
 
@@ -412,7 +412,7 @@ func (h *WalletHandler) GetPolicy(c *gin.Context) {
 // DeletePolicy deletes the approval policy for a wallet (Passkey only).
 // DELETE /api/wallets/:id/policy
 func (h *WalletHandler) DeletePolicy(c *gin.Context) {
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 	wallet, ok := loadUserWallet(c, h.db)

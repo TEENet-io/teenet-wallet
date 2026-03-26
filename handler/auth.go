@@ -292,7 +292,7 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 		Label          string      `json:"label"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential) {
+	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential, h.db) {
 		return
 	}
 	userID := mustUserID(c)
@@ -376,7 +376,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // DeleteAccount permanently deletes the user, all their wallets, and all TEE keys.
 // DELETE /api/auth/account
 func (h *AuthHandler) DeleteAccount(c *gin.Context) {
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 	userID := mustUserID(c)
@@ -454,7 +454,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 // DELETE /api/auth/apikey?prefix=ocw_xxxx  (query param preferred)
 // Also accepts {"api_key_prefix":"ocw_xxxx"} in the request body for backwards compatibility.
 func (h *AuthHandler) RevokeAPIKey(c *gin.Context) {
-	if !verifyFreshPasskey(h.sdk, c) {
+	if !verifyFreshPasskey(h.sdk, c, h.db) {
 		return
 	}
 	userID := mustUserID(c)

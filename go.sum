@@ -6,6 +6,8 @@ github.com/StackExchange/wmi v1.2.1 h1:VIkavFPXSjcnS+O8yTq7NI32k0R5Aj+v39y29VYDO
 github.com/StackExchange/wmi v1.2.1/go.mod h1:rcmrprowKIVzvc+NUiLncP2uuArMWLCbu9SBzvHz7e8=
 github.com/TEENet-io/teenet-sdk/go v0.0.0-20260320163058-95bf425f2f90 h1:wC4oUkgUoYWIlci9T+EFOh5T/dSzHfhMke5JCSLu7gw=
 github.com/TEENet-io/teenet-sdk/go v0.0.0-20260320163058-95bf425f2f90/go.mod h1:yFU1nxhSv5YOLsDEOXwCUCj4SrW9hwVmhWA7M15SsG8=
+github.com/TEENet-io/teenet-sdk/go v0.0.0-20260326085713-c483f87706b8 h1:X4h9ABB8iWjVEVC7yR73njbNoBnEgbRJQ9f6PEg/bDk=
+github.com/TEENet-io/teenet-sdk/go v0.0.0-20260326085713-c483f87706b8/go.mod h1:yFU1nxhSv5YOLsDEOXwCUCj4SrW9hwVmhWA7M15SsG8=
 github.com/bits-and-blooms/bitset v1.20.0 h1:2F+rfL86jE2d/bmw7OhqUg2Sj/1rURkBn3MdfoPyRVU=
 github.com/bits-and-blooms/bitset v1.20.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/btcsuite/btcd/btcec/v2 v2.3.6 h1:IzlsEr9olcSRKB/n7c4351F3xHKxS2lma+1UFGCYd4E=
