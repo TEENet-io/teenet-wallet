@@ -778,6 +778,16 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		}
 	}
 
+	// Final fallback: look up price by token symbol (handles testnet tokens).
+	if policyFound && amountUSD == 0 && tokenContractAddr != "" && h.prices != nil && currency != "" {
+		if usdPrice, priceErr := h.prices.GetPriceBySymbol(currency); priceErr == nil && usdPrice > 0 {
+			if a, ok := new(big.Float).SetString(req.Amount); ok {
+				f, _ := a.Float64()
+				amountUSD = f * usdPrice
+			}
+		}
+	}
+
 	// Unknown token price with active policy → require approval (fail-closed).
 	if policyFound && amountUSD == 0 && tokenContractAddr != "" && !isPasskeyAuth(c) {
 		signReq := SignRequest{

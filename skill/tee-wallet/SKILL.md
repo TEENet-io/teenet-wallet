@@ -105,6 +105,17 @@ curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
 ```
 
+### 3.1 Rename Wallet
+
+```bash
+curl -s -X PATCH "${TEE_WALLET_API_URL}/api/wallets/<id>" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"<new label>"}'
+```
+
+No approval needed. Works with API Key or Passkey session.
+
 ### 4. Sign Message / Send Transaction
 
 When user asks to sign or send a transaction:

@@ -81,6 +81,7 @@ var stablecoins = map[string]bool{
 // USDT/USDC are hardcoded to $1. ETH/SOL are fetched from CoinGecko with a TTL cache.
 // ERC-20 tokens are priced via CoinGecko Token Price API.
 // Solana SPL tokens fall back to Jupiter Price API when CoinGecko has no data.
+// Unknown tokens fall back to symbol-based lookup via CoinGecko coin list.
 type PriceService struct {
 	mu             sync.RWMutex
 	prices         map[string]float64 // "ETH" -> 3500.0
@@ -91,6 +92,11 @@ type PriceService struct {
 	jupiterBaseURL string             // Jupiter Price API base URL (overridable for testing)
 	tokenPrices    map[string]float64 // "ethereum:0xabc..." or "jupiter:MintAddr" -> price
 	tokenExpiry    map[string]time.Time
+
+	// Symbol-based fallback: symbol (uppercase) → CoinGecko coin ID.
+	// Built from /coins/list, cached for 24 hours.
+	symbolMap       map[string]string // "LINK" -> "chainlink"
+	symbolMapExpiry time.Time
 }
 
 // NewPriceService creates a PriceService with the given cache TTL.
@@ -273,6 +279,123 @@ func (ps *PriceService) GetJupiterPrice(mintAddress string) (float64, error) {
 	ps.mu.Unlock()
 
 	return usd, nil
+}
+
+// GetPriceBySymbol looks up a token's USD price by its symbol (e.g., "LINK", "UNI").
+// This is the last-resort fallback for testnet tokens whose contract addresses aren't
+// recognized by CoinGecko. It uses a cached symbol → CoinGecko coin ID map built from
+// the /coins/list endpoint (refreshed every 24 hours).
+func (ps *PriceService) GetPriceBySymbol(symbol string) (float64, error) {
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+	if symbol == "" {
+		return 0, fmt.Errorf("empty symbol")
+	}
+	if stablecoins[symbol] {
+		return 1.0, nil
+	}
+	// Check native currencies first.
+	if _, native := coinGeckoIDs[symbol]; native {
+		return ps.GetUSDPrice(symbol)
+	}
+
+	// Ensure the symbol map is loaded.
+	ps.ensureSymbolMap()
+
+	ps.mu.RLock()
+	coinID, ok := ps.symbolMap[symbol]
+	ps.mu.RUnlock()
+	if !ok {
+		return 0, fmt.Errorf("no CoinGecko coin ID for symbol %q", symbol)
+	}
+
+	// Check cache.
+	cacheKey := "symbol:" + coinID
+	ps.mu.RLock()
+	if price, cached := ps.tokenPrices[cacheKey]; cached {
+		if time.Now().Before(ps.tokenExpiry[cacheKey]) {
+			ps.mu.RUnlock()
+			return price, nil
+		}
+	}
+	ps.mu.RUnlock()
+
+	// Fetch price by coin ID.
+	url := ps.baseURL + "/api/v3/simple/price?ids=" + coinID + "&vs_currencies=usd"
+	resp, err := ps.client.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("symbol price fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("symbol price API returned %d", resp.StatusCode)
+	}
+	var result map[string]map[string]float64
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("symbol price parse failed: %w", err)
+	}
+	data, exists := result[coinID]
+	if !exists {
+		return 0, fmt.Errorf("no price data for coin %s", coinID)
+	}
+	usd, ok := data["usd"]
+	if !ok || usd <= 0 {
+		return 0, fmt.Errorf("invalid USD price for coin %s", coinID)
+	}
+
+	ps.mu.Lock()
+	ps.tokenPrices[cacheKey] = usd
+	ps.tokenExpiry[cacheKey] = time.Now().Add(ps.ttl)
+	ps.mu.Unlock()
+
+	return usd, nil
+}
+
+// ensureSymbolMap loads the CoinGecko coin list if the cache is expired or empty.
+// The list maps uppercase token symbols to CoinGecko coin IDs (e.g., "LINK" → "chainlink").
+// When multiple coins share a symbol, the first result (typically highest market cap) wins.
+func (ps *PriceService) ensureSymbolMap() {
+	ps.mu.RLock()
+	if ps.symbolMap != nil && time.Now().Before(ps.symbolMapExpiry) {
+		ps.mu.RUnlock()
+		return
+	}
+	ps.mu.RUnlock()
+
+	url := ps.baseURL + "/api/v3/coins/list"
+	resp, err := ps.client.Get(url)
+	if err != nil {
+		slog.Warn("CoinGecko coins/list fetch failed", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		slog.Warn("CoinGecko coins/list returned non-200", "status", resp.StatusCode)
+		return
+	}
+
+	var coins []struct {
+		ID     string `json:"id"`
+		Symbol string `json:"symbol"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&coins); err != nil {
+		slog.Warn("CoinGecko coins/list parse failed", "error", err)
+		return
+	}
+
+	m := make(map[string]string, len(coins))
+	for _, c := range coins {
+		sym := strings.ToUpper(c.Symbol)
+		if _, exists := m[sym]; !exists {
+			m[sym] = c.ID
+		}
+	}
+
+	ps.mu.Lock()
+	ps.symbolMap = m
+	ps.symbolMapExpiry = time.Now().Add(24 * time.Hour)
+	ps.mu.Unlock()
+
+	slog.Info("symbol map loaded", "coins", len(m))
 }
 
 // refresh fetches fresh prices from CoinGecko.
