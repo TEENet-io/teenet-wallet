@@ -286,12 +286,23 @@ A 202 response means the request is pending approval:
 { "success": true, "pending": true, "approval_id": 7, "message": "Contract whitelist request submitted for approval" }
 ```
 
-After receiving a 202 response, tell the user:
+After receiving a 202 response, tell the user and **include a block explorer link** so the approver can verify the contract:
 > 📋 **Contract whitelist request submitted** (Approval ID: {approval_id})
 > **Contract:** `{contract_address}` ({symbol})
+> **Verify on explorer:** {explorer_link}
 >
-> The wallet owner must approve this via the Web UI before it can be used for ERC-20 transfers.
+> The wallet owner must approve this via the Web UI before it can be used.
 > [**→ Approve Request**]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+
+Use the appropriate explorer for the chain:
+- **Ethereum:** `https://etherscan.io/address/{contract_address}`
+- **Optimism:** `https://optimistic.etherscan.io/address/{contract_address}`
+- **Arbitrum:** `https://arbiscan.io/address/{contract_address}`
+- **Base:** `https://basescan.org/address/{contract_address}`
+- **Polygon:** `https://polygonscan.com/address/{contract_address}`
+- **BSC:** `https://bscscan.com/address/{contract_address}`
+- **Avalanche:** `https://snowtrace.io/address/{contract_address}`
+- **Solana:** `https://solscan.io/account/{mint_address}`
 
 Then poll `GET /api/approvals/{approval_id}` every 15 seconds until `status` is `approved` or `rejected` (same as Section 12). Once `approved`, the contract/mint/program is whitelisted and token transfers or program calls can proceed.
 
@@ -789,6 +800,33 @@ Optional query parameters:
 > • …
 
 Show status as ✅ for `success`, ⏳ for `pending`, ❌ for `failed`.
+
+## Quick Commands
+
+Users can type short slash commands for common operations. Parse the intent and route to the appropriate operation.
+
+| Command | Action | Details |
+|---------|--------|---------|
+| `/transfer 0.1 ETH to 0xabc...` | Transfer | Parse amount, currency, recipient. Auto-select wallet by chain. See Section 5/6. |
+| `/balance` | Show all balances | List all wallets with native + token balances. See Section 9. |
+| `/balance eth` | Show one wallet | Filter by chain or label. |
+| `/wallets` | List wallets | Show all wallets with address, chain, status. See Section 2. |
+| `/approve` | List pending approvals | Show all pending approval requests. See Section 12. |
+| `/approve 123456` | Process one approval | Show details for a specific approval ID. Direct user to approve/reject. |
+| `/whitelist` | List whitelisted contracts | Show contracts for all wallets. See Section 7. |
+| `/whitelist 0xabc...` | Add contract to whitelist | Submit whitelist request with contract address. Ask for symbol/decimals if not provided. Include explorer link. |
+| `/policy` | Show current policy | Display threshold, daily limit, and today's spend. See Section 10. |
+| `/policy 100` | Set threshold to $100 | Set single-tx threshold. Ask about daily limit if not specified. |
+| `/spent` | Today's spend | Show daily USD spend, remaining budget, reset time. See Section 10.1. |
+| `/prices` | Current prices | Show ETH, SOL, BNB, POL, AVAX, and stablecoin prices. |
+| `/chains` | Available chains | List all supported chains (built-in + custom). |
+| `/call 0xabc... method(args)` | Contract call | Submit contract call. Contract must be whitelisted. API Key requires approval. See Section 7.2. |
+
+**Parsing rules:**
+- Commands are case-insensitive (`/Transfer` = `/transfer`)
+- Arguments are positional and flexible — natural language also works (e.g., "send 0.1 ETH to 0xabc" = `/transfer 0.1 ETH to 0xabc`)
+- If required info is missing, ask the user (e.g., `/transfer 100` → "Which currency and to what address?")
+- If multiple wallets match, ask user to pick one
 
 ## Error Handling
 
