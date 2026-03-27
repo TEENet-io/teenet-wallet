@@ -1,0 +1,3 @@
+[submodule "frontend-src"]
+	path = frontend-src
+	url = git@github.com:TEENet-io/tee-wallet-fronted.git

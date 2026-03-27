@@ -1,0 +1,7 @@
+.git
+frontend-src/.git
+frontend-src/node_modules
+frontend-src/dist
+frontend/
+*.md
+docs/
