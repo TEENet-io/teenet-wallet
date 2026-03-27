@@ -63,4 +63,4 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}" \
 可通过 `GET /api/chains` 动态获取当前可用链列表，包括内置链和运行时添加的自定义链。
 
 ---
-[上一页: 认证体系](authentication.md) | [下一页: 转账](transfers.md)
+[上一页: 认证体系](/zh/authentication.md) | [下一页: 转账](/zh/transfers.md)

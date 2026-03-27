@@ -55,4 +55,4 @@ The Web UI at [TEENet Wallet][wallet-url] is your dashboard for oversight and ma
 Day-to-day operations like sending crypto and interacting with contracts are handled through OpenClaw. The Web UI is for oversight, approvals, and security configuration.
 
 ---
-[Previous: Talking to OpenClaw](user-commands.md) | [Next: Security & FAQ](user-faq.md)
+[Previous: Talking to OpenClaw](/en/user-commands.md) | [Next: Security & FAQ](/en/user-faq.md)

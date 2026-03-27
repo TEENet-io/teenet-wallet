@@ -136,4 +136,4 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | Data | SQLite with WAL mode, structured audit logging, Content Security Policy headers. |
 
 ---
-[Previous: AI Agent Integration](agent-integration.md)
+[Previous: AI Agent Integration](/en/agent-integration.md) | [Next: Developer Guide](/en/developer-guide.md)

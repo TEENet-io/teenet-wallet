@@ -143,4 +143,4 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
 - **适用端点：** `/transfer`、`/contract-call`、`/wrap-sol`、`/unwrap-sol`。
 
 ---
-[上一页: 钱包管理](wallets.md) | [下一页: 智能合约交互](smart-contracts.md)
+[上一页: 钱包管理](/zh/wallets.md) | [下一页: 智能合约交互](/zh/smart-contracts.md)

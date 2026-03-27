@@ -37,4 +37,4 @@ Web 界面（[TEENet Wallet][wallet-url]）是你管理钱包和监督 OpenClaw 
 日常使用中，你主要通过和 OpenClaw 聊天来操作钱包。Web 界面更多用于审批交易、调整安全设置和查看历史记录。
 
 ---
-[上一页: 和 OpenClaw 对话](user-commands.md) | [下一页: 安全与常见问题](user-faq.md)
+[上一页: 和 OpenClaw 对话](/zh/user-commands.md) | [下一页: 安全与常见问题](/zh/user-faq.md)

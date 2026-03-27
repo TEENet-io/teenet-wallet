@@ -62,4 +62,4 @@ TEENet Wallet 是一款多链加密货币钱包，私钥永远不会完整存在
 6. 钱包广播已签名交易并返回交易哈希
 
 ---
-[我是用户 → 快速上手](user-getting-started.md) | [我要接入 → 快速开始](quick-start.md)
+[我是用户 → 快速上手](/zh/user-getting-started.md) | [我要接入 → 快速开始](/zh/quick-start.md)

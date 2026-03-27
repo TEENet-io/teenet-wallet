@@ -143,4 +143,4 @@ When called with an API key, policy changes require Passkey approval. The respon
 Open the approval link in the web UI and confirm with your Passkey to activate the policy.
 
 ---
-[Previous: Introduction](introduction.md) | [Next: Configuration](configuration.md)
+[Previous: Introduction](/en/introduction.md) | [Next: Configuration](/en/configuration.md)

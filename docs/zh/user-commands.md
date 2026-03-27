@@ -89,4 +89,4 @@
 命令不区分大小写。你也可以用自然语言说同样的事情，OpenClaw 都能理解。
 
 ---
-[上一页: 快速上手](user-getting-started.md) | [下一页: 审批与 Web 界面](user-approvals.md)
+[上一页: 快速上手](/zh/user-getting-started.md) | [下一页: 审批与 Web 界面](/zh/user-approvals.md)

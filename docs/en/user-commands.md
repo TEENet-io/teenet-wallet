@@ -86,4 +86,4 @@ For experienced users, these shortcuts provide fast access to common operations:
 Commands are case-insensitive. You can also just say the same thing in plain language -- OpenClaw understands both.
 
 ---
-[Previous: Getting Started](user-getting-started.md) | [Next: Approvals & Web UI](user-approvals.md)
+[Previous: Getting Started](/en/user-getting-started.md) | [Next: Approvals & Web UI](/en/user-approvals.md)

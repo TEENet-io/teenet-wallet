@@ -209,3 +209,6 @@ handler (approval.go) 审批通过时：
 ```
 
 审批路径在审批时（而非请求时）重新构建交易，确保使用最新的 nonce 和 gas 估算。
+
+---
+[上一页: API 概览](/zh/api-overview.md) | [下一页: 架构与安全](/zh/whitepaper.md)

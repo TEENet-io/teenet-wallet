@@ -634,3 +634,6 @@ guarantees through open, well-studied cryptographic protocols.
 ---
 
 *TEENet Wallet is open-source software released under the MIT license.*
+
+---
+[Previous: Developer Guide](/en/developer-guide.md)

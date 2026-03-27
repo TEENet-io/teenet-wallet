@@ -135,4 +135,4 @@ Contract calls made via a Passkey session execute immediately (the human is alre
 The convenience endpoints `approve-token` and `revoke-approval` also always require Passkey approval because they grant or revoke third-party spending access.
 
 ---
-[Previous: Smart Contracts](smart-contracts.md) | [Next: AI Agent Integration](agent-integration.md)
+[Previous: Smart Contracts](/en/smart-contracts.md) | [Next: AI Agent Integration](/en/agent-integration.md)

@@ -44,4 +44,4 @@ TEENet Wallet includes a built-in web interface served at the root URL (e.g., `h
 The web UI is served with a restrictive Content Security Policy and additional security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`).
 
 ---
-[Previous: Approval System](approvals.md) | [Next: API Reference](api-overview.md)
+[Previous: Approval System](/en/approvals.md) | [Next: API Reference](/en/api-overview.md)

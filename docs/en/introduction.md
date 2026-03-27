@@ -62,4 +62,4 @@ The result is a wallet that is as easy to use as a hosted API, but with security
 6. Wallet broadcasts the signed transaction and returns the hash.
 
 ---
-[I'm a User → Getting Started](user-getting-started.md) | [I'm Integrating → Quick Start](quick-start.md)
+[I'm a User → Getting Started](/en/user-getting-started.md) | [I'm Integrating → Quick Start](/en/quick-start.md)

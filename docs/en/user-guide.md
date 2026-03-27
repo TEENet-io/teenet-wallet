@@ -1,1 +1,1 @@
-[](en/user-getting-started.md ':include')
+[](user-getting-started.md ':include')

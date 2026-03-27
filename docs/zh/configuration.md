@@ -23,4 +23,4 @@
 区块链 RPC URL 在 `chains.json` 文件中定义，不作为独立环境变量。可通过 `CHAINS_FILE` 环境变量指定自定义路径。也可在运行时通过 `POST /api/chains` 动态添加自定义 EVM 链。
 
 ---
-[上一页: 快速开始](quick-start.md) | [下一页: 认证体系](authentication.md)
+[上一页: 快速开始](/zh/quick-start.md) | [下一页: 认证体系](/zh/authentication.md)

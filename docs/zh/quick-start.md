@@ -157,4 +157,4 @@ curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/policy" \
 > 通过 API Key 设置策略会创建一个待审批请求（HTTP 202），钱包所有者需在 Web UI 中通过 Passkey 确认后策略才会生效。通过 Passkey 会话设置则立即生效。
 
 ---
-[上一页: 简介](introduction.md) | [下一页: 配置参考](configuration.md)
+[上一页: 简介](/zh/introduction.md) | [下一页: 配置参考](/zh/configuration.md)

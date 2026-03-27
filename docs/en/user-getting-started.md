@@ -75,4 +75,4 @@ Set an approval policy so large transactions require your fingerprint.
 Policy changes always require your Passkey approval, so a compromised API key can't weaken your protections.
 
 ---
-[Next: Talking to OpenClaw](user-commands.md)
+[Next: Talking to OpenClaw](/en/user-commands.md)

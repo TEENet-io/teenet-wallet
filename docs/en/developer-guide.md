@@ -209,3 +209,6 @@ handler (approval.go) on approve:
 ```
 
 The approval path rebuilds the transaction at approval time (not at request time) to ensure fresh nonce and gas estimates.
+
+---
+[Previous: API Overview](/en/api-overview.md) | [Next: Architecture & Security](/en/whitepaper.md)

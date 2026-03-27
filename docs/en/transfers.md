@@ -115,4 +115,4 @@ If a request with the same idempotency key has already been processed, the walle
 - **Applies to:** `/transfer`, `/contract-call`, `/wrap-sol`, `/unwrap-sol`.
 
 ---
-[Previous: Wallet Management](wallets.md) | [Next: Smart Contracts](smart-contracts.md)
+[Previous: Wallet Management](/en/wallets.md) | [Next: Smart Contracts](/en/smart-contracts.md)

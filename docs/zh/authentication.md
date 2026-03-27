@@ -71,4 +71,4 @@ X-CSRF-Token: <csrf_token_value>
 CSRF 令牌在登录时返回。API Key 请求不受 CSRF 保护约束。
 
 ---
-[上一页: 配置参考](configuration.md) | [下一页: 钱包管理](wallets.md)
+[上一页: 配置参考](/zh/configuration.md) | [下一页: 钱包管理](/zh/wallets.md)

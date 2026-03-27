@@ -115,4 +115,4 @@ curl -s -X POST "${TEE_WALLET_URL}/api/approvals/${APPROVAL_ID}/reject" \
 便捷端点 `approve-token` 和 `revoke-approval` 同样始终需要 Passkey 审批，因为它们涉及授权或撤销第三方支出权限。
 
 ---
-[上一页: 智能合约交互](smart-contracts.md) | [下一页: AI Agent 集成](agent-integration.md)
+[上一页: 智能合约交互](/zh/smart-contracts.md) | [下一页: AI Agent 集成](/zh/agent-integration.md)

@@ -145,4 +145,4 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 5. **结构化日志**：服务以 JSON 格式输出日志（slog），可通过日志聚合工具分析
 
 ---
-[上一页: AI Agent 集成](agent-integration.md)
+[上一页: AI Agent 集成](/zh/agent-integration.md) | [下一页: 开发者指南](/zh/developer-guide.md)

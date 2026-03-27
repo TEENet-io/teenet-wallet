@@ -119,4 +119,4 @@ If you run into any issues not covered here, contact your wallet administrator. 
 - Which browser and device you are using.
 
 ---
-[Previous: Approvals & Web UI](user-approvals.md)
+[Previous: Approvals & Web UI](/en/user-approvals.md)

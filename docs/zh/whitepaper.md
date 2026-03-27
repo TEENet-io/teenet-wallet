@@ -453,3 +453,6 @@ TEENet Wallet 证明了门限密码学和可信执行环境能够为传统加密
 ---
 
 *TEENet Wallet 是基于 MIT 许可证发布的开源软件。*
+
+---
+[上一页: 开发者指南](/zh/developer-guide.md)

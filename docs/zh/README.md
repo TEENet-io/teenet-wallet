@@ -19,26 +19,26 @@ TEENet Wallet 使用门限密码学将每一把私钥分片存储在 **可信执
 
 通过 OpenClaw 使用 TEENet Wallet，无需编程。
 
-- [快速上手](zh/user-getting-started.md) -- 创建账户、连接 OpenClaw、设置第一个钱包
-- [和 OpenClaw 对话](zh/user-commands.md) -- 管理钱包和转账
-- [审批与 Web 界面](zh/user-approvals.md) -- 审批交易和使用控制面板
-- [安全与常见问题](zh/user-faq.md) -- 私钥如何被保护 + 常见问题
+- [快速上手](/zh/user-getting-started.md) -- 创建账户、连接 OpenClaw、设置第一个钱包
+- [和 OpenClaw 对话](/zh/user-commands.md) -- 管理钱包和转账
+- [审批与 Web 界面](/zh/user-approvals.md) -- 审批交易和使用控制面板
+- [安全与常见问题](/zh/user-faq.md) -- 私钥如何被保护 + 常见问题
 
 ## 我要接入
 
 通过 REST API 集成 TEENet Wallet。
 
-- [快速开始](zh/quick-start.md) -- 编译部署，发起第一个 API 调用
-- [认证体系](zh/authentication.md) -- API Key 给 Agent，Passkey 给人类
-- [钱包管理](zh/wallets.md) -- 通过 API 创建、列出和管理钱包
-- [转账](zh/transfers.md) -- 发送原生代币、ERC-20 和 SPL 代币
-- [智能合约交互](zh/smart-contracts.md) -- 合约白名单、ABI 编码、Solana 程序
-- [审批系统](zh/approvals.md) -- USD 阈值、日限额、合约调用审批
-- [AI Agent 集成](zh/agent-integration.md) -- Agent 集成最佳实践
-- [API 概览](zh/api-overview.md) -- 完整接口参考
-- [配置参考](zh/configuration.md) -- 环境变量和部署选项
-- [架构与安全](zh/whitepaper.md) -- 技术深度解析
+- [快速开始](/zh/quick-start.md) -- 编译部署，发起第一个 API 调用
+- [认证体系](/zh/authentication.md) -- API Key 给 Agent，Passkey 给人类
+- [钱包管理](/zh/wallets.md) -- 通过 API 创建、列出和管理钱包
+- [转账](/zh/transfers.md) -- 发送原生代币、ERC-20 和 SPL 代币
+- [智能合约交互](/zh/smart-contracts.md) -- 合约白名单、ABI 编码、Solana 程序
+- [审批系统](/zh/approvals.md) -- USD 阈值、日限额、合约调用审批
+- [AI Agent 集成](/zh/agent-integration.md) -- Agent 集成最佳实践
+- [API 概览](/zh/api-overview.md) -- 完整接口参考
+- [配置参考](/zh/configuration.md) -- 环境变量和部署选项
+- [架构与安全](/zh/whitepaper.md) -- 技术深度解析
 
 ---
 
-**[English Documentation →](en/introduction.md)**
+**[English Documentation →](/en/introduction.md)**
