@@ -92,7 +92,7 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 
 	// API key path: create approval request.
 	if !isPasskeyAuth(c) {
-		approval, created := createPendingApproval(h.db, c, wallet.ID, "contract_add", proposed, h.approvalExpiry)
+		approval, created := createPendingApproval(h.db, c, &wallet.ID, "contract_add", proposed, h.approvalExpiry)
 		if !created {
 			return
 		}
@@ -196,7 +196,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 
 	// API key path: create approval request.
 	if !isPasskeyAuth(c) {
-		approval, created := createPendingApproval(h.db, c, wallet.ID, "contract_update", proposed, h.approvalExpiry)
+		approval, created := createPendingApproval(h.db, c, &wallet.ID, "contract_update", proposed, h.approvalExpiry)
 		if !created {
 			return
 		}

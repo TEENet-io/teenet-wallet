@@ -202,7 +202,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		}
 		ccAM, ccAKL := authInfo(c)
 		approval := model.ApprovalRequest{
-			WalletID:     wallet.ID,
+			WalletID:     &wallet.ID,
 			UserID:       userID,
 			ApprovalType: "contract_call",
 			Message:      hex.EncodeToString(signingMsg),
@@ -341,7 +341,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		}
 		ccAM, ccAKL := authInfo(c)
 		approval := model.ApprovalRequest{
-			WalletID:     wallet.ID,
+			WalletID:     &wallet.ID,
 			UserID:       userID,
 			ApprovalType: "contract_call",
 			Message:      hex.EncodeToString(signingMsg),
@@ -540,7 +540,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		}
 		ccAM, ccAKL := authInfo(c)
 		approval := model.ApprovalRequest{
-			WalletID:     wallet.ID,
+			WalletID:     &wallet.ID,
 			UserID:       userID,
 			ApprovalType: "contract_call",
 			Message:      hex.EncodeToString(signingMsg),

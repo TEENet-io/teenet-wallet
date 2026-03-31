@@ -373,7 +373,7 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 			Enabled:       enabled,
 			DailyLimitUSD: req.DailyLimitUSD,
 		}
-		approval, created := createPendingApproval(h.db, c, wallet.ID, "policy_change", proposed, h.approvalExpiry)
+		approval, created := createPendingApproval(h.db, c, &wallet.ID, "policy_change", proposed, h.approvalExpiry)
 		if !created {
 			return
 		}
@@ -519,7 +519,7 @@ func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Walle
 	}
 	am, akl := authInfo(c)
 	approval := model.ApprovalRequest{
-		WalletID:    wallet.ID,
+		WalletID:    &wallet.ID,
 		UserID:      userID,
 		Message:     req.Message,
 		TxContext:   string(txContextJSON),
@@ -617,6 +617,16 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 
 	chainCfg := model.Chains[wallet.Chain]
 	rpcURL := chainCfg.RPCURL
+
+	// Resolve address book nickname if the input doesn't look like a raw address.
+	if !LooksLikeAddress(req.To, chainCfg.Family) {
+		resolved, resolveErr := ResolveNickname(h.db, userID, req.To, wallet.Chain)
+		if resolveErr != nil {
+			jsonError(c, http.StatusBadRequest, fmt.Sprintf("nickname %q not found in address book for chain %s", req.To, wallet.Chain))
+			return
+		}
+		req.To = resolved
+	}
 
 	switch chainCfg.Family {
 	case "evm":

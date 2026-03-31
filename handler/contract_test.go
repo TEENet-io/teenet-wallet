@@ -50,6 +50,7 @@ func testDB(t *testing.T) *gorm.DB {
 		&model.ApprovalPolicy{},
 		&model.ApprovalRequest{},
 		&model.AuditLog{},
+		&model.AddressBookEntry{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

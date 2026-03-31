@@ -35,7 +35,7 @@ func approvalRouter(db *gorm.DB, userID uint) *gin.Engine {
 func seedApproval(t *testing.T, db *gorm.DB, walletID string, userID uint, status string, expiresAt time.Time) model.ApprovalRequest {
 	t.Helper()
 	a := model.ApprovalRequest{
-		WalletID:  walletID,
+		WalletID:  &walletID,
 		UserID:    userID,
 		Message:   "deadbeef",
 		TxContext: `{"type":"transfer","from":"0x1","to":"0x2","amount":"1","currency":"ETH"}`,

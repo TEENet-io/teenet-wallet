@@ -22,10 +22,195 @@ as a whole outside secure hardware.
 
 ## Configuration
 
-- `TEE_WALLET_API_URL`: The wallet service URL (e.g. `https://wallet.example.com`)
+- `TEE_WALLET_API_URL`: The wallet service URL (default: `https://test.teenet.io/instance/wallet`)
 - `TEE_WALLET_API_KEY`: Your API key (starts with `ocw_`)
 
 RPC URLs are configured in the wallet service's `chains.json` file (or via the `CHAINS_FILE` env var on the server), not as client-side environment variables. The wallet service handles all blockchain RPC communication internally.
+
+## Onboarding Flow
+
+When a user interacts with the wallet skill for the first time (no prior wallet context in the conversation), run through this flow automatically.
+
+### Step 0 — Check environment variables
+
+Before making any API calls, verify both required environment variables are set.
+
+**If `TEE_WALLET_API_URL` is missing**, use the default: `https://test.teenet.io/instance/wallet`
+
+**If `TEE_WALLET_API_KEY` is missing**, guide the user through account setup:
+> 🔑 **API key not configured — let's set one up.**
+>
+> You need a Passkey account and an API key to use this wallet. Here's how:
+>
+> **1. Open the Web UI**
+> Go to [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet) in your browser (Chrome or Edge recommended for Passkey support).
+>
+> **2. Register an account**
+> Click **Register** and follow the Passkey prompts. You'll need a device with biometric or hardware security key support (TouchID, FaceID, YubiKey, etc.). If registration is invite-only, ask an existing user for an invite link.
+>
+> **3. Generate an API key**
+> After logging in, go to **Settings → API Keys**, click **Generate New Key**, and give it a label (e.g. "AI Agent"). **Copy the key immediately** — it starts with `ocw_` and is only shown once.
+>
+> **4. Configure the environment**
+> Set `TEE_WALLET_API_KEY` to the key you just copied, then try again.
+
+Once both variables are set, continue to Step 1.
+
+### Step 1 — Verify connectivity
+
+```bash
+curl -s "${TEE_WALLET_API_URL}/api/health"
+```
+
+Expected response: `{"status":"ok","service":"teenet-wallet","db":true}`
+
+If the request fails or `status` is not `ok`, stop and show:
+> ❌ Cannot reach the wallet service at `${TEE_WALLET_API_URL}`. Check that the URL is correct and the service is running.
+
+If a subsequent authenticated call returns `invalid API key`, show:
+> ❌ API key rejected. Check that `TEE_WALLET_API_KEY` is correct (should start with `ocw_`).
+
+### Step 2 — Check existing wallets
+
+```bash
+curl -s "${TEE_WALLET_API_URL}/api/wallets" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+```
+
+**If the user already has wallets** → show a summary and proceed to their request:
+> 👋 **Welcome back!** You have {N} wallet(s):
+> 1. `0xabcd…1234` — My Main Wallet (Ethereum) ✅
+> 2. `HN7c…Qx9f` — Trading (Solana) ✅
+>
+> What would you like to do?
+
+Then stop onboarding — the user is already set up.
+
+**If no wallets exist** → continue to Step 3.
+
+### Step 3 — Discover available chains
+
+```bash
+curl -s "${TEE_WALLET_API_URL}/api/chains"
+```
+
+Present available chains grouped by family and ask the user to pick one:
+> 🆕 **No wallets yet — let's create your first one!**
+>
+> Available chains:
+> **EVM:** Ethereum (ETH) · Sepolia (ETH) · Base Sepolia (ETH) · …
+> **Solana:** Solana (SOL) · Solana Devnet (SOL)
+>
+> Which chain would you like to start with?
+
+If the user is unsure, recommend a testnet:
+> 💡 **Tip:** Try **Sepolia** (Ethereum testnet) or **Solana Devnet** to experiment with free test tokens before using real funds.
+
+### Step 4 — Create first wallet
+
+Once the user picks a chain, create the wallet per Section 1 (Create Wallet). Remind them:
+- **Ethereum / EVM wallets** take 1–2 minutes (ECDSA key generation across TEE nodes)
+- **Solana wallets** are created instantly
+
+### Step 5 — Recommend next steps
+
+After the wallet is created successfully, suggest:
+> 🛡️ **Your wallet is ready! Recommended next steps:**
+> 1. **Fund your wallet** — send {currency} to `{address}`
+> 2. **Set an approval policy** — protect large transfers with a USD threshold (e.g. `/policy 100`)
+> 3. **Whitelist tokens** — add token contracts you plan to use (see Section 7)
+
+For testnet wallets, include relevant faucet links:
+- **Sepolia ETH:** `https://cloud.google.com/application/web3/faucet/ethereum/sepolia`
+- **Solana Devnet SOL:** `https://faucet.solana.com`
+- **Sepolia / Base Sepolia USDC:** `https://faucet.circle.com`
+
+### Guided Test Flow
+
+When the user runs `/test` or asks to test the wallet, walk them through these steps interactively. Wait for each step to succeed before moving to the next. The user must have at least one wallet on a **testnet** (Sepolia, Base Sepolia, or Solana Devnet) — if not, create one first.
+
+**Step 1 — Check balance**
+
+> Let's start by checking your wallet balance.
+
+Run `/balance` for the testnet wallet. Show the result. If balance is zero, continue to Step 2. If already funded, skip to Step 3.
+
+**Step 2 — Get test tokens**
+
+> Your wallet is empty. Let's get some free test tokens.
+
+Provide the appropriate faucet link based on the wallet's chain:
+- **Sepolia ETH:** [`https://cloud.google.com/application/web3/faucet/ethereum/sepolia`](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
+- **Solana Devnet SOL:** [`https://faucet.solana.com`](https://faucet.solana.com)
+- **Base Sepolia ETH:** [`https://cloud.google.com/application/web3/faucet/ethereum/sepolia`](https://cloud.google.com/application/web3/faucet/ethereum/sepolia) (bridge from Sepolia) or use Base Sepolia faucets
+
+> Paste your wallet address `{address}` into the faucet, then tell me when you're done.
+
+After the user confirms, wait 15 seconds and re-check balance to verify funds arrived.
+
+**Step 3 — Send a small transfer**
+
+> Now let's test a transfer. I'll send a tiny amount to yourself to verify the full signing flow.
+
+Send a transfer of `0.0001 ETH` (or `0.001 SOL`) from the wallet **to its own address**. This tests the complete TEE signing pipeline with zero risk.
+
+Show the transaction hash and explorer link on success.
+
+**Step 4 — Set an approval policy**
+
+> Let's set up an approval policy to protect your wallet.
+
+Set a low USD threshold:
+```
+/policy 10
+```
+
+This creates a pending approval. Guide the user to approve it via the Web UI link. Poll until approved.
+
+> ✅ Policy active. Transfers above $10 now require Passkey approval.
+
+**Step 5 — Trigger Passkey approval**
+
+> Now let's test the approval flow. I'll send a transfer that exceeds your $10 threshold.
+
+Send a transfer of `0.01 ETH` (or `0.1 SOL`) to the wallet's own address. This should trigger `pending_approval`.
+
+Guide the user to the approval link and poll until resolved. On success:
+> ✅ Approval flow works! You approved the transaction with your Passkey hardware.
+
+**Step 6 — Whitelist a test token**
+
+> Last step — let's add a test token to your whitelist.
+
+For Sepolia wallets, propose adding USDC:
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"contract_address":"0x1c7d4b196cb0c7b01d743fbc6116a902379c7238","symbol":"USDC","decimals":6}'
+```
+
+Guide the user to approve the whitelist request. Once approved:
+> ✅ USDC is now whitelisted. You can send and receive USDC on this wallet.
+>
+> Get free test USDC from the [Circle faucet](https://faucet.circle.com).
+
+**Completion:**
+> 🎉 **All tests passed!** Your wallet is fully functional:
+> - ✅ Balance queries
+> - ✅ TEE threshold signing
+> - ✅ Approval policy enforcement
+> - ✅ Passkey hardware approval
+> - ✅ Token whitelist management
+>
+> You're ready to use the wallet for real operations. Type `/wallets` to see your wallets or `/balance` to check balances.
+
+### When to skip onboarding
+
+Skip the full flow and go directly to the requested operation if:
+- The user gives a specific command (e.g. `/balance`, `/transfer 0.1 ETH to 0x...`)
+- The conversation already has wallet context from earlier messages
+- The user explicitly asks to skip setup
 
 ## Smart Wallet Selection
 
@@ -86,17 +271,17 @@ curl -s "${TEE_WALLET_API_URL}/api/wallets" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
 ```
 
-Present wallets in a clear user-facing list with:
-- list index (`1`, `2`, `3`, ...)
-- Label
-- Chain
-- Address
-- Status
+**Always** present wallets as a numbered list so the user can refer to wallets by number. Use this exact format:
 
-Do **not** show the raw wallet `id` (UUID) by default in normal chat responses. Keep it
-internal and use it only for API calls or debugging.
+> **Your Wallets**
+>
+> 1. **My Main Wallet** — Ethereum · `0xabcd…1234` ✅
+> 2. **DeFi Wallet** — Ethereum · `0x5678…9abc` ✅
+> 3. **Test Wallet** — Sepolia · `0xdef0…5678` ⏳ creating…
 
-Mark wallets with status `creating` as ⏳ and `error` as ❌.
+Each line must include: **numbered index**, **label** (bold), **chain**, **abbreviated address**, and **status icon** (✅ ready, ⏳ creating, ❌ error).
+
+Do **not** show the raw wallet `id` (UUID) in normal chat responses. Keep it internal for API calls only.
 
 ### 3. Get Wallet Details
 
@@ -511,7 +696,83 @@ Use this for:
 - Querying allowances (`allowance(address,address)`)
 - Reading contract state (e.g. `totalSupply()`, `name()`, `symbol()`, `decimals()`)
 
-### 8. Delete Wallet
+### 8. Address Book
+
+The address book lets users save frequently used addresses with nicknames. Users can then transfer by nickname instead of pasting raw addresses.
+
+**Nicknames** are case-insensitive, stored lowercase. The same nickname can have different addresses on different chains (e.g. "alice" on Ethereum and "alice" on Solana).
+
+**Security model:**
+- **List / Read**: API Key or Passkey
+- **Add / Update via API Key**: creates a pending approval (HTTP 202) that the Passkey owner must approve
+- **Add / Update via Passkey**: applied immediately (requires fresh credential)
+- **Delete**: Passkey only
+
+**List address book entries:**
+```bash
+curl -s "${TEE_WALLET_API_URL}/api/addressbook" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+```
+
+Optional query params: `?nickname=alice`, `?chain=ethereum`
+
+**Add an entry via API key** (creates pending approval):
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/addressbook" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nickname": "alice",
+    "chain": "ethereum",
+    "address": "0x1234567890123456789012345678901234567890",
+    "memo": "Alice main wallet"
+  }'
+```
+
+A 202 response means the request is pending approval:
+```json
+{ "success": true, "pending": true, "approval_id": 12345678, "message": "Address book entry submitted for approval" }
+```
+
+Follow the **Approval Polling Flow** (Section 12, `addressbook_add` type).
+
+**Update an entry via API key** (creates pending approval):
+```bash
+curl -s -X PUT "${TEE_WALLET_API_URL}/api/addressbook/<id>" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"address": "0xnewaddress...", "memo": "updated memo"}'
+```
+
+Only include the fields you want to change (`nickname`, `address`, `memo`). A 202 response means the update is pending approval.
+
+**Delete an entry** (Passkey only — via Web UI).
+
+**Transfer by nickname:**
+
+The `/transfer` endpoint accepts a nickname in the `to` field. If the value doesn't look like a raw address, the backend resolves it from the address book for the wallet's chain:
+
+```bash
+curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/transfer" \
+  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "alice", "amount": "0.1"}'
+```
+
+If the nickname is not found for the wallet's chain, the API returns 400 with an error message.
+
+> 💡 **Tip:** When a user says "send 0.1 ETH to alice", check the address book first. If "alice" exists for the wallet's chain, use the nickname directly in the `to` field — no need to resolve the address yourself.
+
+### 8.1. Address Book Quick Reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `nickname` | Yes | Contact name (lowercase, alphanumeric with `_` or `-`, max 100 chars) |
+| `chain` | Yes | Chain name (e.g. `ethereum`, `solana`) |
+| `address` | Yes | On-chain address (EVM `0x…` or Solana base58) |
+| `memo` | No | Optional note (max 256 chars) |
+
+### 9. Delete Wallet  
 
 ```bash
 curl -s -X DELETE "${TEE_WALLET_API_URL}/api/wallets/<id>" \
@@ -658,9 +919,7 @@ After receiving a 202 response, tell the user:
 > The wallet owner must approve this change via the Web UI before it takes effect.
 > [**→ Approve Policy Change**]({TEE_WALLET_API_URL}/#/approve/{approval_id})
 
-Then poll `GET /api/approvals/{approval_id}` every 15 seconds until `status` is `approved` or `rejected`:
-- `approved` → "✅ Policy applied. Transactions above ${threshold_usd} USD now require Passkey approval."
-- `rejected` → "🚫 Policy change rejected. No changes were made."
+Then start **background approval polling** (Section 12) and tell the user they can continue working.
 
 **When called with a Passkey session** (Web UI), the policy is applied immediately and returns HTTP 200.
 
@@ -701,16 +960,17 @@ curl -s "${TEE_WALLET_API_URL}/api/approvals/pending" \
 
 Show: wallet, amount, currency, created time, expiry, approval link.
 
-### 12. Approval Polling Flow
+### 12. Approval Polling Flow (Background)
 
 Use this whenever:
 - A `/sign`, `/transfer`, or `/contract-call` response has `"status":"pending_approval"`, **or**
 - A `/approve-token` or `/revoke-approval` response has `"status":"pending_approval"`, **or**
 - A `/wrap-sol` or `/unwrap-sol` response has `"status":"pending_approval"`, **or**
 - A `PUT /policy` response returns HTTP 202 (`"pending": true`), **or**
-- A `POST /contracts` response returns HTTP 202 (`"pending": true`)
+- A `POST /contracts` response returns HTTP 202 (`"pending": true`), **or**
+- A `POST /addressbook` or `PUT /addressbook/:id` response returns HTTP 202 (`"pending": true`)
 
-**1. Immediately show the summary:**
+**Step 1 — Immediately show the summary:**
 
 For transfer/sign:
 > 🔐 **Approval required** (ID: {approval_id})
@@ -726,17 +986,30 @@ For policy change:
 > **Daily limit:** ${daily_limit_usd or "—"} USD
 > [**→ Approve with Passkey**]({TEE_WALLET_API_URL}/#/approve/{approval_id})
 
-**2. Poll every 15 seconds** until resolved or 25 minutes elapsed:
+**Step 2 — Launch background polling script** using Bash with `run_in_background: true`:
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/approvals/<approval_id>" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+APPROVAL_ID=<approval_id>
+for i in $(seq 1 100); do
+  sleep 15
+  RESULT=$(curl -s "${TEE_WALLET_API_URL}/api/approvals/${APPROVAL_ID}" \
+    -H "Authorization: Bearer ${TEE_WALLET_API_KEY}")
+  STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+  if [ "$STATUS" = "approved" ] || [ "$STATUS" = "rejected" ] || [ "$STATUS" = "expired" ]; then
+    echo "$RESULT"
+    exit 0
+  fi
+done
+echo '{"status":"timeout","message":"Polling timed out after 25 minutes"}'
 ```
 
-After each poll, show progress:
-> ⏳ Waiting for approval… (~{N} min remaining)
+**Step 3 — Tell the user polling is running in the background:**
 
-**3. Handle result by `approval_type`:**
+> I'm monitoring this approval in the background. You can continue working — I'll notify you as soon as the approval is resolved.
+
+Do NOT block the conversation. The user can ask other questions, run other commands, etc. while polling runs.
+
+**Step 4 — When the background task completes**, you will be automatically notified. Parse the result and show the appropriate message based on `approval_type`:
 
 Transfer / sign (`approval_type` is `"transfer"` or `"sign"`):
 - `"status":"approved"` with `"tx_hash"` → show success + explorer link (same format as Section 5)
@@ -755,15 +1028,21 @@ Unwrap SOL (`approval_type` is `"unwrap_sol"`):
 - `"status":"approved"` with `"tx_hash"` → show "✅ Unwrapped wSOL — `{tx_hash}`" + Solscan link
 
 Contract whitelist add (`approval_type` is `"contract_add"`):
-- `"status":"approved"` → "✅ Contract `{contract_address}` ({symbol}) has been added to the whitelist. ERC-20 transfers using this contract are now available."
+- `"status":"approved"` → "✅ Contract `{contract_address}` ({symbol}) has been added to the whitelist. Transfers using this contract are now available."
 
 Contract whitelist update (`approval_type` is `"contract_update"`):
 - `"status":"approved"` → "✅ Contract whitelist entry updated."
 
+Address book add (`approval_type` is `"addressbook_add"`):
+- `"status":"approved"` → "✅ Address book entry added: {nickname} on {chain}."
+
+Address book update (`approval_type` is `"addressbook_update"`):
+- `"status":"approved"` → "✅ Address book entry updated."
+
 All types:
 - `"status":"rejected"` → "🚫 Approval rejected. No action was taken."
 - `"status":"expired"` → "⏰ Approval expired. Please try again."
-- After 25 min with no result → stop polling: "⚠️ Approval is taking longer than expected. Please check the Web UI."
+- `"status":"timeout"` → "⚠️ Approval is taking longer than expected. Please check the Web UI."
 
 ### 13. View Operation History (Audit Log)
 
@@ -792,6 +1071,9 @@ Optional query parameters:
 | `approval_approve` | Approval request approved |
 | `approval_reject` | Approval request rejected |
 | `contract_add` | Contract/mint/program added to whitelist or pending approval |
+| `addressbook_add` | Address book entry added or pending approval |
+| `addressbook_update` | Address book entry updated or pending approval |
+| `addressbook_delete` | Address book entry deleted |
 | `wrap_sol` | SOL wrapped into wSOL |
 | `unwrap_sol` | wSOL unwrapped back to SOL |
 | `apikey_generate` | API key generated |
@@ -811,7 +1093,9 @@ Users can type short slash commands for common operations. Parse the intent and 
 
 | Command | Action | Details |
 |---------|--------|---------|
-| `/transfer 0.1 ETH to 0xabc...` | Transfer | Parse amount, currency, recipient. Auto-select wallet by chain. See Section 5/6. |
+| `/start` | Onboarding | Run the full onboarding flow: check config → register account → create first wallet → set up security. See Onboarding Flow. |
+| `/test` | Guided test | Walk through all core features: balance → faucet → transfer → policy → approval → whitelist. See Guided Test Flow. |
+| `/transfer 0.1 ETH to 0xabc...` | Transfer | Parse amount, currency, recipient (address or nickname). Auto-select wallet by chain. See Section 5/6/8. |
 | `/balance` | Show all balances | List all wallets with native + token balances. See Section 9. |
 | `/balance eth` | Show one wallet | Filter by chain or label. |
 | `/wallets` | List wallets | Show all wallets with address, chain, status. See Section 2. |
@@ -819,6 +1103,9 @@ Users can type short slash commands for common operations. Parse the intent and 
 | `/approve 123456` | Process one approval | Show details for a specific approval ID. Direct user to approve/reject. |
 | `/whitelist` | List whitelisted contracts | Show contracts for all wallets. See Section 7. |
 | `/whitelist 0xabc...` | Add contract to whitelist | Submit whitelist request with contract address. Ask for symbol/decimals if not provided. Include explorer link. |
+| `/contacts` | List address book | Show all saved contacts. See Section 8. |
+| `/contacts alice` | Lookup contact | Show address book entries for "alice". |
+| `/contacts add alice 0xabc... ethereum` | Add contact | Save address with nickname, chain auto-detected or specified. |
 | `/policy` | Show current policy | Display threshold, daily limit, and today's spend. See Section 10. |
 | `/policy 100` | Set threshold to $100 | Set single-tx threshold. Ask about daily limit if not specified. |
 | `/spent` | Today's spend | Show daily USD spend, remaining budget, reset time. See Section 10.1. |
@@ -863,7 +1150,7 @@ Map common API errors to user-friendly messages:
 12. **Never confuse native balance with token balance**: `/balance` is for ETH/SOL only; use `eth_call balanceOf` for ERC-20
 13. **Use RPC fallback for token checks**: retry multiple RPC endpoints before reporting unavailable
 14. **Always include explorer link** after a successful transfer
-15. **Poll with countdown**: when waiting for approval, show remaining time on each poll update
+15. **Background approval polling**: always use `run_in_background` for approval polling so the user can continue working. Never block the conversation waiting for approval
 16. **Follow Smart Wallet Selection rules at all times**: refresh `/api/wallets` before account-wide views, never report balances for deleted wallets, hide raw wallet ids in normal UX, and interpret numeric references as list indices unless the user explicitly says `id=...` (see Smart Wallet Selection section for full details).
 17. **Policy changes via API key always need approval**: `PUT /policy` with an API key returns 202 and creates a pending approval — always follow the Approval Polling Flow (Section 12) and share the approval link with the wallet owner. Policies are USD-denominated — one per wallet, covering all currencies.
 18. **Contract whitelist proposals via API key**: `POST /contracts` with an API key returns 202 — follow the Approval Polling Flow (Section 12, `contract_add` type) and share the approval link. The passkey owner must approve before the contract can be used.
@@ -878,6 +1165,8 @@ Map common API errors to user-friendly messages:
 27. **Solana program calls**: use `/contract-call` with `accounts` (array of `{pubkey, is_signer, is_writable}`) and `data` (hex-encoded instruction data) instead of `func_sig`/`args`. The program ID must be whitelisted. All program calls via API Key require Passkey approval.
 28. **Wrap/Unwrap SOL**: use `/wrap-sol` (with `amount`) to convert native SOL to wSOL, and `/unwrap-sol` (no body params) to close the wSOL ATA and recover all SOL. Both endpoints follow the same approval/polling flow as transfers.
 29. **Solana explorer links**: use `https://solscan.io/tx/{hash}` for mainnet and `https://solscan.io/tx/{hash}?cluster=devnet` for devnet.
+30. **Address book nickname transfers**: when the user says "send to alice", pass the nickname directly in the `to` field of `/transfer` — the backend resolves it. If the nickname isn't found for that chain, the API returns 400.
+31. **Address book proposals via API key**: `POST /addressbook` and `PUT /addressbook/:id` with an API key return 202 — follow the Approval Polling Flow (Section 12, `addressbook_add` / `addressbook_update` type).
 30. **Dynamic chain list**: never hardcode chain names. Always call `GET /api/chains` to discover available chains (including user-added custom EVM chains). Custom chains have `"custom": true` in the response.
 31. **All contract ops need Passkey via API Key**: contract calls, token approvals, and revocations via API Key always require Passkey approval — there is no auto-approve bypass. Use `GET /api/wallets/:id/daily-spent` to check remaining daily budget before large transfers.
 32. **USD prices**: call `GET /api/prices` to get current native coin (ETH/SOL/BNB/POL/AVAX) and stablecoin prices. For ERC-20 token transfers, the wallet automatically looks up prices via CoinGecko Token Price API (17 EVM chains) by contract address. For Solana SPL tokens, it falls back to Jupiter Price API. Unknown tokens (no price from any source) require Passkey approval for transfers (fail-closed).

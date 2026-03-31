@@ -27,9 +27,9 @@ type ApprovalPolicy struct {
 // or when an API key requests a policy change that requires passkey confirmation.
 type ApprovalRequest struct {
 	ID           uint      `json:"id" gorm:"primaryKey;autoIncrement:false"`
-	WalletID     string    `json:"wallet_id" gorm:"size:36;not null;index"`
+	WalletID     *string   `json:"wallet_id,omitempty" gorm:"size:36;index"`
 	UserID       uint      `json:"user_id" gorm:"not null"`
-	ApprovalType string    `json:"approval_type" gorm:"default:'sign'"` // "sign", "transfer", "contract_call", "contract_add", "policy_change"
+	ApprovalType string    `json:"approval_type" gorm:"default:'sign'"` // "sign", "transfer", "contract_call", "contract_add", "contract_update", "policy_change", "addressbook_add", "addressbook_update"
 	Message      string    `json:"message" gorm:"type:text"`            // hex signing hash (ETH) or message bytes (SOL); empty for policy_change
 	TxContext    string    `json:"tx_context" gorm:"type:text"`         // JSON display info for sign/transfer
 	TxParams     string    `json:"tx_params" gorm:"type:text"`          // JSON chain params for broadcast (transfer only)

@@ -73,6 +73,7 @@ func main() {
 		&model.AuditLog{},
 		&model.IdempotencyRecord{},
 		&model.CustomChain{},
+		&model.AddressBookEntry{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
@@ -298,6 +299,13 @@ func main() {
 	auth.POST("/wallets/:id/contracts", contractH.AddContract)           // passkey: direct; apikey: pending approval
 	auth.PUT("/wallets/:id/contracts/:cid", contractH.UpdateContract)    // passkey: direct; apikey: pending approval
 	passkeyOnly.DELETE("/wallets/:id/contracts/:cid", contractH.DeleteContract)
+
+	// Address book (dual-auth for read/add/update, Passkey-only for delete).
+	abH := handler.NewAddressBookHandler(db, sdkClient, approvalExpiry)
+	auth.GET("/addressbook", abH.ListEntries)
+	auth.POST("/addressbook", abH.AddEntry)
+	auth.PUT("/addressbook/:id", abH.UpdateEntry)
+	passkeyOnly.DELETE("/addressbook/:id", abH.DeleteEntry)
 
 	// Idempotency store for transfer requests.
 	idempotencyStore := handler.NewIdempotencyStore(db)

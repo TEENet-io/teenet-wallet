@@ -151,6 +151,61 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		return
 	}
 
+	// Address book add approvals.
+	if approval.ApprovalType == "addressbook_add" {
+		var proposed model.AddressBookEntry
+		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
+			jsonError(c, http.StatusInternalServerError, "invalid address book data")
+			return
+		}
+		proposed.ID = 0
+		if err := h.db.Create(&proposed).Error; err != nil {
+			if strings.Contains(err.Error(), "UNIQUE") {
+				// Already exists — treat as success.
+			} else {
+				jsonError(c, http.StatusInternalServerError, "failed to add address book entry")
+				return
+			}
+		}
+		approverPasskeyID := passkeyUserIDFromCtx(c)
+		h.db.Model(&approval).Updates(map[string]interface{}{"status": "approved", "approved_by": approverPasskeyID})
+		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
+			"type": "addressbook_add", "nickname": proposed.Nickname, "chain": proposed.Chain,
+		})
+		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "entry": proposed})
+		return
+	}
+
+	// Address book update approvals.
+	if approval.ApprovalType == "addressbook_update" {
+		var proposed model.AddressBookEntry
+		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
+			jsonError(c, http.StatusInternalServerError, "invalid address book data")
+			return
+		}
+		result := h.db.Model(&model.AddressBookEntry{}).Where("id = ? AND user_id = ?", proposed.ID, approval.UserID).
+			Updates(map[string]interface{}{
+				"nickname": proposed.Nickname,
+				"address":  proposed.Address,
+				"memo":     proposed.Memo,
+			})
+		if result.Error != nil {
+			jsonError(c, http.StatusInternalServerError, "failed to update address book entry")
+			return
+		}
+		if result.RowsAffected == 0 {
+			jsonError(c, http.StatusNotFound, "address book entry no longer exists")
+			return
+		}
+		approverPasskeyID := passkeyUserIDFromCtx(c)
+		h.db.Model(&approval).Updates(map[string]interface{}{"status": "approved", "approved_by": approverPasskeyID})
+		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
+			"type": "addressbook_update", "nickname": proposed.Nickname, "chain": proposed.Chain,
+		})
+		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "entry": proposed})
+		return
+	}
+
 	// Policy change approvals: apply the proposed policy and finish.
 	if approval.ApprovalType == "policy_change" {
 		var proposed model.ApprovalPolicy
@@ -159,8 +214,12 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			return
 		}
 		var policy model.ApprovalPolicy
-		if h.db.Where("wallet_id = ?", approval.WalletID).First(&policy).Error != nil {
-			policy = model.ApprovalPolicy{WalletID: approval.WalletID}
+		if approval.WalletID == nil {
+			jsonError(c, http.StatusBadRequest, "approval has no wallet")
+			return
+		}
+		if h.db.Where("wallet_id = ?", *approval.WalletID).First(&policy).Error != nil {
+			policy = model.ApprovalPolicy{WalletID: *approval.WalletID}
 		}
 		policy.ThresholdUSD = proposed.ThresholdUSD
 		policy.Enabled = proposed.Enabled
@@ -184,8 +243,12 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	}
 
 	// Load wallet to get the key name.
+	if approval.WalletID == nil {
+		jsonError(c, http.StatusBadRequest, "approval has no wallet")
+		return
+	}
 	var wallet model.Wallet
-	if err := h.db.First(&wallet, "id = ?", approval.WalletID).Error; err != nil {
+	if err := h.db.First(&wallet, "id = ?", *approval.WalletID).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "wallet not found")
 		return
 	}
@@ -333,7 +396,9 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				if a, ok := new(big.Float).SetString(amount); ok {
 					f, _ := a.Float64()
 					amountUSD := new(big.Float).SetFloat64(f * usdPrice).Text('f', 2)
-					addDailySpentUSD(h.db, approval.WalletID, amountUSD)
+					if approval.WalletID != nil {
+						addDailySpentUSD(h.db, *approval.WalletID, amountUSD)
+					}
 				}
 			}
 		}
