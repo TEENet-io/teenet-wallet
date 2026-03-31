@@ -15,7 +15,7 @@ import (
 	"github.com/TEENet-io/teenet-wallet/model"
 )
 
-// ContractHandler manages the per-wallet ERC-20 contract whitelist.
+// ContractHandler manages the per-user-per-chain contract whitelist.
 type ContractHandler struct {
 	db             *gorm.DB
 	sdk            *sdk.Client
@@ -82,7 +82,8 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 	}
 
 	proposed := model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          wallet.UserID,
+		Chain:           wallet.Chain,
 		ContractAddress: addr,
 		Label:           req.Label,
 		Symbol:          strings.ToUpper(strings.TrimSpace(req.Symbol)),
@@ -114,7 +115,7 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 
 	if err := h.db.Create(&proposed).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE") {
-			jsonError(c, http.StatusConflict, "contract already whitelisted for this wallet")
+			jsonError(c, http.StatusConflict, "contract already whitelisted for this chain")
 			return
 		}
 		jsonError(c, http.StatusInternalServerError, "db error")
@@ -135,7 +136,7 @@ func (h *ContractHandler) ListContracts(c *gin.Context) {
 	}
 
 	var contracts []model.AllowedContract
-	if err := h.db.Where("wallet_id = ?", wallet.ID).Order("created_at asc").Find(&contracts).Error; err != nil {
+	if err := h.db.Where("user_id = ? AND chain = ?", wallet.UserID, wallet.Chain).Order("created_at asc").Find(&contracts).Error; err != nil {
 		jsonError(c, http.StatusInternalServerError, "db error")
 		return
 	}
@@ -159,7 +160,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 
 	var existing model.AllowedContract
-	if err := h.db.Where("id = ? AND wallet_id = ?", cid, wallet.ID).First(&existing).Error; err != nil {
+	if err := h.db.Where("id = ? AND user_id = ? AND chain = ?", cid, wallet.UserID, wallet.Chain).First(&existing).Error; err != nil {
 		jsonError(c, http.StatusNotFound, "contract not found")
 		return
 	}
@@ -260,7 +261,7 @@ func (h *ContractHandler) DeleteContract(c *gin.Context) {
 	}
 
 	var contract model.AllowedContract
-	if err := h.db.Where("id = ? AND wallet_id = ?", cid, wallet.ID).First(&contract).Error; err != nil {
+	if err := h.db.Where("id = ? AND user_id = ? AND chain = ?", cid, wallet.UserID, wallet.Chain).First(&contract).Error; err != nil {
 		jsonError(c, http.StatusNotFound, "contract not found")
 		return
 	}

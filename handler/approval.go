@@ -118,8 +118,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		}
 		approverPasskeyID := passkeyUserIDFromCtx(c)
 		h.db.Model(&approval).Updates(map[string]interface{}{"status": "approved", "approved_by": approverPasskeyID})
-		writeAuditCtx(h.db, c, "approval_approve", "success", &approval.WalletID, map[string]interface{}{
-			"approval_id": approval.ID, "type": "contract_add", "contract": proposed.ContractAddress,
+		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
+			"type": "contract_add", "contract": proposed.ContractAddress,
 		})
 		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "contract": proposed})
 		return
@@ -133,7 +133,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			return
 		}
 		// Update the existing record by ID.
-		if err := h.db.Model(&model.AllowedContract{}).Where("id = ? AND wallet_id = ?", proposed.ID, approval.WalletID).
+		if err := h.db.Model(&model.AllowedContract{}).Where("id = ? AND user_id = ?", proposed.ID, approval.UserID).
 			Updates(map[string]interface{}{
 				"label":    proposed.Label,
 				"symbol":   proposed.Symbol,
@@ -144,8 +144,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		}
 		approverPasskeyID := passkeyUserIDFromCtx(c)
 		h.db.Model(&approval).Updates(map[string]interface{}{"status": "approved", "approved_by": approverPasskeyID})
-		writeAuditCtx(h.db, c, "approval_approve", "success", &approval.WalletID, map[string]interface{}{
-			"approval_id": approval.ID, "type": "contract_update", "contract": proposed.ContractAddress,
+		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
+			"type": "contract_update", "contract": proposed.ContractAddress,
 		})
 		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "contract": proposed})
 		return
@@ -172,9 +172,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		approverPasskeyID := passkeyUserIDFromCtx(c)
 		updates := map[string]interface{}{"status": "approved", "approved_by": approverPasskeyID}
 		h.db.Model(&approval).Updates(updates)
-		writeAuditCtx(h.db, c, "approval_approve", "success", &approval.WalletID, map[string]interface{}{
-			"approval_id": approval.ID, "type": "policy_change",
-			"threshold_usd": proposed.ThresholdUSD,
+		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
+			"type": "policy_change", "threshold_usd": proposed.ThresholdUSD,
 		})
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
@@ -308,23 +307,23 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		jsonError(c, http.StatusInternalServerError, "update approval failed")
 		return
 	}
-	auditDetails := map[string]interface{}{"approval_id": approval.ID, "type": approval.ApprovalType}
+	auditExtra := map[string]interface{}{"type": approval.ApprovalType}
 	if txHash != "" {
-		auditDetails["tx_hash"] = txHash
+		auditExtra["tx_hash"] = txHash
 	}
 	// Parse TxContext once; reuse for audit enrichment and daily-limit update below.
 	var txCtx map[string]interface{}
 	_ = json.Unmarshal([]byte(approval.TxContext), &txCtx)
 	if txCtx != nil {
 		if to, ok := txCtx["to"].(string); ok && to != "" {
-			auditDetails["to"] = to
+			auditExtra["to"] = to
 		}
 		if amount, currency := extractAmountCurrency(txCtx); amount != "" {
-			auditDetails["amount"] = amount
-			auditDetails["currency"] = currency
+			auditExtra["amount"] = amount
+			auditExtra["currency"] = currency
 		}
 	}
-	writeAuditCtx(h.db, c, "approval_approve", "success", &approval.WalletID, auditDetails)
+	updateAuditByApprovalID(h.db, approval.ID, "success", auditExtra)
 
 	// Update daily USD spent counter for /transfer approvals that were successfully broadcast.
 	if txHash != "" && txCtx != nil && h.prices != nil {
@@ -373,8 +372,8 @@ func (h *ApprovalHandler) Reject(c *gin.Context) {
 		jsonError(c, http.StatusInternalServerError, "update failed")
 		return
 	}
-	writeAuditCtx(h.db, c, "approval_reject", "success", &approval.WalletID, map[string]interface{}{
-		"approval_id": approval.ID, "type": approval.ApprovalType,
+	updateAuditByApprovalID(h.db, approval.ID, "rejected", map[string]interface{}{
+		"type": approval.ApprovalType,
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true, "status": "rejected"})
 }

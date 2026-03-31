@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -86,6 +87,41 @@ func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string
 	}
 	if err := db.Create(&entry).Error; err != nil {
 		slog.Error("audit write failed", "user_id", userID, "action", action, "error", err)
+	}
+}
+
+// updateAuditByApprovalID finds the existing pending audit log for the given approval ID
+// and updates it in-place with the new status, approval timestamp, and merged details.
+// This avoids creating two separate records for the same approval flow.
+func updateAuditByApprovalID(db *gorm.DB, approvalID uint, newStatus string, extraDetails map[string]interface{}) {
+	var log model.AuditLog
+	// Match on details JSON containing this approval_id AND status=pending.
+	pattern := fmt.Sprintf("%%\"approval_id\":%d%%", approvalID)
+	if err := db.Where("status = ? AND details LIKE ?", "pending", pattern).First(&log).Error; err != nil {
+		slog.Error("audit update: pending log not found", "approval_id", approvalID, "error", err)
+		return
+	}
+
+	// Merge extra details into existing details JSON.
+	var existing map[string]interface{}
+	if log.Details != "" {
+		_ = json.Unmarshal([]byte(log.Details), &existing)
+	}
+	if existing == nil {
+		existing = make(map[string]interface{})
+	}
+	for k, v := range extraDetails {
+		existing[k] = v
+	}
+	merged, _ := json.Marshal(existing)
+
+	now := time.Now()
+	if err := db.Model(&log).Updates(map[string]interface{}{
+		"status":      newStatus,
+		"approved_at": now,
+		"details":     string(merged),
+	}).Error; err != nil {
+		slog.Error("audit update failed", "approval_id", approvalID, "error", err)
 	}
 }
 

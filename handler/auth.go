@@ -454,7 +454,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	// Delete all related data, wallets, then user in a transaction.
 	if err := h.db.Transaction(func(tx *gorm.DB) error {
 		if len(walletIDs) > 0 {
-			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.AllowedContract{})
+			tx.Where("user_id = ?", userID).Delete(&model.AllowedContract{})
 			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalPolicy{})
 			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalRequest{})
 		}

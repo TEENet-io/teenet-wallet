@@ -82,7 +82,7 @@ func TestTransfer_SPL_Whitelisted_FailsAtRPC(t *testing.T) {
 	// Whitelist the token
 	mintAddr := "So11111111111111111111111111111111111111112"
 	db.Create(&model.AllowedContract{
-		WalletID: wallet.ID, ContractAddress: mintAddr, Symbol: "wSOL", Decimals: 9,
+		UserID: user.ID, Chain: wallet.Chain, ContractAddress: mintAddr, Symbol: "wSOL", Decimals: 9,
 	})
 
 	// Use mock SOL RPC that returns a blockhash
@@ -124,7 +124,7 @@ func TestTransfer_SPL_InvalidAddress(t *testing.T) {
 
 	mintAddr := "So11111111111111111111111111111111111111112"
 	db.Create(&model.AllowedContract{
-		WalletID: wallet.ID, ContractAddress: mintAddr, Symbol: "wSOL", Decimals: 9,
+		UserID: user.ID, Chain: wallet.Chain, ContractAddress: mintAddr, Symbol: "wSOL", Decimals: 9,
 	})
 
 	r := solTransferRouter(db, user.ID, nil, "")

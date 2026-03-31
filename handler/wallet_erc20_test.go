@@ -70,7 +70,7 @@ func TestTransfer_ERC20_Whitelisted_FailsAtRPC(t *testing.T) {
 
 	contractAddr := "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 	db.Create(&model.AllowedContract{
-		WalletID: wallet.ID, ContractAddress: contractAddr, Symbol: "USDC", Decimals: 6,
+		UserID: uid, Chain: wallet.Chain, ContractAddress: contractAddr, Symbol: "USDC", Decimals: 6,
 	})
 
 	r := ethTransferRouter(db, uid, nil, "") // empty ethRPC

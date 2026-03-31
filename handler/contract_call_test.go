@@ -116,7 +116,8 @@ func seedWalletWithContract(t *testing.T, db *gorm.DB) (model.User, model.Wallet
 	t.Helper()
 	user, wallet := seedWallet(t, db)
 	contract := model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          wallet.UserID,
+		Chain:           wallet.Chain,
 		ContractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		Symbol:          "USDC",
 		Decimals:        6,
@@ -354,7 +355,8 @@ func TestContractCall_SolanaNoAccounts(t *testing.T) {
 
 	programID := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 	contract := model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          user.ID,
+		Chain:           wallet.Chain,
 		ContractAddress: programID,
 	}
 	db.Create(&contract)
@@ -394,7 +396,8 @@ func TestContractCall_Solana_APIKey_RequiresApproval(t *testing.T) {
 
 	programID := "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 	contract := model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          user.ID,
+		Chain:           wallet.Chain,
 		ContractAddress: programID,
 	}
 	db.Create(&contract)

@@ -2,13 +2,15 @@ package model
 
 import "time"
 
-// AllowedContract is a whitelisted ERC-20 (or other) contract address for a wallet.
+// AllowedContract is a whitelisted contract address scoped per user + chain.
+// All wallets on the same chain share the same whitelist.
 // Only contracts in this list can be interacted with via the /transfer endpoint.
 // Adding/removing entries requires Passkey authentication (human security gate).
 type AllowedContract struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`
-	WalletID        string    `json:"wallet_id" gorm:"size:36;not null;uniqueIndex:idx_wallet_contract"`
-	ContractAddress string    `json:"contract_address" gorm:"not null;uniqueIndex:idx_wallet_contract"` // lowercase hex
+	UserID          uint      `json:"user_id" gorm:"not null;uniqueIndex:idx_user_chain_contract"`
+	Chain           string    `json:"chain" gorm:"size:32;not null;uniqueIndex:idx_user_chain_contract"`
+	ContractAddress string    `json:"contract_address" gorm:"not null;uniqueIndex:idx_user_chain_contract"` // lowercase hex or base58
 	Label           string    `json:"label"`    // e.g. "USDC on Ethereum"
 	Symbol          string    `json:"symbol"`   // e.g. "USDC"
 	Decimals        int       `json:"decimals"` // e.g. 6

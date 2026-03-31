@@ -138,7 +138,7 @@ func TestAddContract_Success(t *testing.T) {
 
 	// Verify stored in DB.
 	var count int64
-	db.Model(&model.AllowedContract{}).Where("wallet_id = ?", wallet.ID).Count(&count)
+	db.Model(&model.AllowedContract{}).Where("user_id = ? AND chain = ?", user.ID, wallet.Chain).Count(&count)
 	if count != 1 {
 		t.Errorf("expected 1 contract in DB, got %d", count)
 	}
@@ -162,7 +162,7 @@ func TestAddContract_NormalizesAddressToLowercase(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 	var stored model.AllowedContract
-	db.Where("wallet_id = ?", wallet.ID).First(&stored)
+	db.Where("user_id = ? AND chain = ?", user.ID, wallet.Chain).First(&stored)
 	if stored.ContractAddress != "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" {
 		t.Errorf("expected lowercase address, got %q", stored.ContractAddress)
 	}
@@ -281,8 +281,8 @@ func TestListContracts_WithEntries(t *testing.T) {
 
 	// Seed contracts directly.
 	contracts := []model.AllowedContract{
-		{WalletID: wallet.ID, ContractAddress: "0x1111111111111111111111111111111111111111", Symbol: "USDC", Decimals: 6},
-		{WalletID: wallet.ID, ContractAddress: "0x2222222222222222222222222222222222222222", Symbol: "WETH", Decimals: 18},
+		{UserID: user.ID, Chain: wallet.Chain, ContractAddress: "0x1111111111111111111111111111111111111111", Symbol: "USDC", Decimals: 6},
+		{UserID: user.ID, Chain: wallet.Chain, ContractAddress: "0x2222222222222222222222222222222222222222", Symbol: "WETH", Decimals: 18},
 	}
 	for i := range contracts {
 		db.Create(&contracts[i])
@@ -309,9 +309,10 @@ func TestListContracts_DoesNotLeakOtherWallet(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 	_, otherWallet := seedWallet(t, db)
 
-	// Contract on the other wallet — should NOT appear in user's wallet list.
+	// Contract on the other user's chain — should NOT appear in user's list.
 	db.Create(&model.AllowedContract{
-		WalletID:        otherWallet.ID,
+		UserID:          otherWallet.UserID,
+		Chain:           otherWallet.Chain,
 		ContractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Symbol:          "OTHER",
 	})
@@ -336,7 +337,8 @@ func TestDeleteContract_Success(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 
 	contract := model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          user.ID,
+		Chain:           wallet.Chain,
 		ContractAddress: "0x1234567890123456789012345678901234567890",
 		Symbol:          "USDC",
 	}
@@ -381,7 +383,8 @@ func TestDeleteContract_WrongWallet(t *testing.T) {
 	_, otherWallet := seedWallet(t, db)
 
 	contract := model.AllowedContract{
-		WalletID:        otherWallet.ID,
+		UserID:          otherWallet.UserID,
+		Chain:           otherWallet.Chain,
 		ContractAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Symbol:          "EVIL",
 	}
@@ -417,6 +420,129 @@ func TestDeleteContract_InvalidID(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+// ─── Per-chain whitelist sharing ────────────────────────────────────────────
+
+// seedSecondWallet creates a second wallet on the given chain for an existing user.
+func seedSecondWallet(t *testing.T, db *gorm.DB, user model.User, chain string) model.Wallet {
+	t.Helper()
+	n := atomic.AddInt64(&dbCounter, 1)
+	w := model.Wallet{
+		UserID:  user.ID,
+		Chain:   chain,
+		KeyName: fmt.Sprintf("k-extra-%d", n),
+		Label:   fmt.Sprintf("extra-%d", n),
+		Status:  "ready",
+	}
+	if err := db.Create(&w).Error; err != nil {
+		t.Fatalf("create second wallet: %v", err)
+	}
+	return w
+}
+
+func TestListContracts_SharedAcrossSameChainWallets(t *testing.T) {
+	db := testDB(t)
+	user, wallet1 := seedWallet(t, db) // ethereum
+	wallet2 := seedSecondWallet(t, db, user, "ethereum")
+
+	// Add a contract via wallet1.
+	db.Create(&model.AllowedContract{
+		UserID: user.ID, Chain: "ethereum",
+		ContractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Symbol: "USDC",
+	})
+
+	r := contractRouter(db, user.ID)
+
+	// Query via wallet1 — should see the contract.
+	req1 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", wallet1.ID), nil)
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	var resp1 map[string]interface{}
+	json.Unmarshal(w1.Body.Bytes(), &resp1)
+	list1, _ := resp1["contracts"].([]interface{})
+	if len(list1) != 1 {
+		t.Errorf("wallet1: expected 1 contract, got %d", len(list1))
+	}
+
+	// Query via wallet2 (same user, same chain) — should also see the contract.
+	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", wallet2.ID), nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	var resp2 map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &resp2)
+	list2, _ := resp2["contracts"].([]interface{})
+	if len(list2) != 1 {
+		t.Errorf("wallet2: expected 1 shared contract, got %d", len(list2))
+	}
+}
+
+func TestListContracts_NotSharedAcrossDifferentChains(t *testing.T) {
+	db := testDB(t)
+	user, ethWallet := seedWallet(t, db) // ethereum
+	solWallet := seedSecondWallet(t, db, user, "solana")
+
+	// Add a contract for ethereum only.
+	db.Create(&model.AllowedContract{
+		UserID: user.ID, Chain: "ethereum",
+		ContractAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Symbol: "WETH",
+	})
+
+	r := contractRouter(db, user.ID)
+
+	// Ethereum wallet — should see it.
+	req1 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", ethWallet.ID), nil)
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	var resp1 map[string]interface{}
+	json.Unmarshal(w1.Body.Bytes(), &resp1)
+	list1, _ := resp1["contracts"].([]interface{})
+	if len(list1) != 1 {
+		t.Errorf("eth wallet: expected 1 contract, got %d", len(list1))
+	}
+
+	// Solana wallet — should NOT see it.
+	req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/wallets/%s/contracts", solWallet.ID), nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	var resp2 map[string]interface{}
+	json.Unmarshal(w2.Body.Bytes(), &resp2)
+	list2, _ := resp2["contracts"].([]interface{})
+	if len(list2) != 0 {
+		t.Errorf("sol wallet: expected 0 contracts, got %d (leaked across chains?)", len(list2))
+	}
+}
+
+func TestAddContract_DuplicateAcrossWalletsSameChain(t *testing.T) {
+	db := testDB(t)
+	user, wallet1 := seedWallet(t, db) // ethereum
+	wallet2 := seedSecondWallet(t, db, user, "ethereum")
+
+	r := contractRouter(db, user.ID)
+	body := map[string]interface{}{
+		"contract_address": "0xcccccccccccccccccccccccccccccccccccccccc",
+		"symbol":           "USDC",
+	}
+
+	// Add via wallet1 — should succeed.
+	req1 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet1.ID), jsonBody(body))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("wallet1 add: expected 200, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	// Add same contract via wallet2 (same user, same chain) — should be 409 duplicate.
+	req2 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contracts", wallet2.ID), jsonBody(body))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusConflict {
+		t.Fatalf("wallet2 add: expected 409 Conflict, got %d: %s", w2.Code, w2.Body.String())
 	}
 }
 

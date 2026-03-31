@@ -532,23 +532,16 @@ curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/balance" \
 
 > ⚠️ `/balance` returns the wallet's **native gas token** only (ETH / SOL). Never present this as a token balance.
 
-**Step 2 — Build the global token list** (for Ethereum wallets):
+**Step 2 — Fetch the wallet's token whitelist** (for Ethereum wallets):
 
-The whitelist controls *sending*, not *receiving*. Any wallet can hold tokens that aren't on its own whitelist. To avoid missing balances, collect the **union of whitelisted contracts across all wallets on the same chain**, then query every target wallet against that global list.
+Query the current wallet's contract whitelist to get its token list. Only tokens whitelisted on **this wallet** are checked for balances.
 
 ```bash
-# 1. Fetch all wallets
-curl -s "${TEE_WALLET_API_URL}/api/wallets" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
-
-# 2. For each wallet id, fetch its contracts (run in parallel)
 curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
   -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
 ```
 
-Deduplicate by `contract_address` to get the global token list. Then for each token in the list, query the target wallet's on-chain balance (see Section 9.1).
-
-> ⚠️ **Never skip this step because a wallet's own whitelist is empty.** The whitelist only gates sending — a wallet can hold any token. Always use the global list.
+Use the returned contracts as the token list for on-chain balance queries (see Section 9.1). If the whitelist is empty, only the native balance is shown.
 
 **Present all balances together:**
 > 💼 **Wallet** `0xabcd…1234` (Ethereum)
@@ -577,7 +570,7 @@ import json, urllib.request, os
 wallet = "<wallet_address>"
 tokens = [
     # (contract_address_lowercase, symbol, decimals)
-    # Fill from the global token list (union of all wallet whitelists)
+    # Fill from the wallet's own whitelist (GET /api/wallets/<id>/contracts)
     ("0x1c7d4b196cb0c7b01d743fbc6116a902379c7238", "USDC", 6),
     # add more as needed...
 ]
@@ -876,7 +869,7 @@ Map common API errors to user-friendly messages:
 18. **Contract whitelist proposals via API key**: `POST /contracts` with an API key returns 202 — follow the Approval Polling Flow (Section 12, `contract_add` type) and share the approval link. The passkey owner must approve before the contract can be used.
 19. **Approve/reject is hardware-protected**: each approve or reject action requires a fresh hardware Passkey assertion at that moment — a stolen session token alone cannot approve. The Web UI handles this automatically.
 20. **Audit log available**: users can check their operation history via `GET /api/audit/logs` (Section 13).
-21. **Global token list for balances**: when checking balances, always collect the union of whitelisted contracts across all wallets on the same chain. Apply this global list when querying any wallet — the whitelist gates sending, not holding. Never skip token queries because a specific wallet's whitelist is empty.
+21. **Token list for balances**: when checking balances, only query tokens from the current wallet's own whitelist. If the whitelist is empty, only show the native balance.
 22. **Contract calls**: use `/contract-call` for general smart contract interactions. The contract must be whitelisted first. Use `/call-read` for read-only queries (no approval needed).
 23. **All contract operations via API Key require Passkey approval**: contract calls, token approvals, and revocations initiated via API Key always require Passkey confirmation. Passkey sessions execute directly.
 24. **Use convenience endpoints**: prefer `/approve-token` and `/revoke-approval` over raw `/contract-call` for token approvals — they handle ABI encoding automatically.

@@ -83,11 +83,22 @@ func (h *WalletHandler) CreateWallet(c *gin.Context) {
 		return
 	}
 
+	// Enforce unique label per user.
+	label := strings.TrimSpace(req.Label)
+	if label != "" {
+		var dup int64
+		h.db.Model(&model.Wallet{}).Where("user_id = ? AND label = ?", userID, label).Count(&dup)
+		if dup > 0 {
+			jsonError(c, http.StatusConflict, "a wallet with this label already exists")
+			return
+		}
+	}
+
 	// Create a pending wallet record immediately so the user can see progress.
 	wallet := model.Wallet{
 		UserID:    userID,
 		Chain:     req.Chain,
-		Label:     req.Label,
+		Label:     label,
 		Curve:     chainCfg.Curve,
 		Protocol:  chainCfg.Protocol,
 		Status:    "creating",
@@ -193,6 +204,13 @@ func (h *WalletHandler) RenameWallet(c *gin.Context) {
 	}
 	if len(label) > 100 {
 		jsonError(c, http.StatusBadRequest, "label must be at most 100 characters")
+		return
+	}
+	// Enforce unique label per user.
+	var dup int64
+	h.db.Model(&model.Wallet{}).Where("user_id = ? AND label = ? AND id != ?", wallet.UserID, label, wallet.ID).Count(&dup)
+	if dup > 0 {
+		jsonError(c, http.StatusConflict, "a wallet with this label already exists")
 		return
 	}
 	if err := h.db.Model(&wallet).Update("label", label).Error; err != nil {
@@ -614,7 +632,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			// ERC-20 transfer: validate contract is whitelisted, then build contract call tx.
 			tokenContractAddr = strings.ToLower(strings.TrimSpace(req.Token.Contract))
 			var allowed model.AllowedContract
-			if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, tokenContractAddr).First(&allowed).Error; err != nil {
+			if err := h.db.Where("user_id = ? AND chain = ? AND contract_address = ?", wallet.UserID, wallet.Chain, tokenContractAddr).First(&allowed).Error; err != nil {
 				jsonError(c, http.StatusForbidden, "contract not whitelisted: "+tokenContractAddr)
 				return
 			}
@@ -681,7 +699,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			// Whitelist check
 			var allowed model.AllowedContract
-			if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, mintAddr).First(&allowed).Error; err != nil {
+			if err := h.db.Where("user_id = ? AND chain = ? AND contract_address = ?", wallet.UserID, wallet.Chain, mintAddr).First(&allowed).Error; err != nil {
 				jsonError(c, http.StatusForbidden, "token not whitelisted: "+mintAddr)
 				return
 			}

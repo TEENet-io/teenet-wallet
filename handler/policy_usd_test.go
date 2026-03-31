@@ -560,7 +560,8 @@ func TestTransfer_UnknownTokenPrice_RequiresApproval(t *testing.T) {
 	db := testDB(t)
 	user, wallet := seedWalletWithAddress(t, db)
 	db.Create(&model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          user.ID,
+		Chain:           wallet.Chain,
 		ContractAddress: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		Symbol:          "UNKNOWN",
 		Decimals:        18,
@@ -590,7 +591,8 @@ func TestContractCall_NoPolicy_APIKey_StillRequiresApproval(t *testing.T) {
 	ps := makePS(2000, 100)
 
 	db.Create(&model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          user.ID,
+		Chain:           wallet.Chain,
 		ContractAddress: "0x0000000000000000000000000000000000000abc",
 	})
 
@@ -623,7 +625,8 @@ func TestTransfer_TokenPricedByContractAddress_BelowThreshold(t *testing.T) {
 	user, wallet := seedWalletWithAddress(t, db)
 	// Whitelist UNI token — not a stablecoin, not in coinGeckoIDs
 	db.Create(&model.AllowedContract{
-		WalletID:        wallet.ID,
+		UserID:          user.ID,
+		Chain:           wallet.Chain,
 		ContractAddress: "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
 		Symbol:          "UNI",
 		Decimals:        18,

@@ -14,6 +14,7 @@ type AuditLog struct {
 	APIKeyPrefix string `json:"api_key_prefix,omitempty" gorm:"size:16"` // immutable key prefix for lookup
 	IP       string `json:"ip" gorm:"size:64"`
 	// Status: "success" | "pending" | "failed"
-	Status    string    `json:"status" gorm:"size:16;not null;default:'success'"`
-	CreatedAt time.Time `json:"created_at"`
+	Status     string     `json:"status" gorm:"size:16;not null;default:'success'"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ApprovedAt *time.Time `json:"approved_at,omitempty"` // filled when approval is granted or rejected
 }

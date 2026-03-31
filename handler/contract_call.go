@@ -102,7 +102,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 
 	// Layer 1: Whitelist check.
 	var allowed model.AllowedContract
-	if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, contractAddr).First(&allowed).Error; err != nil {
+	if err := h.db.Where("user_id = ? AND chain = ? AND contract_address = ?", wallet.UserID, wallet.Chain, contractAddr).First(&allowed).Error; err != nil {
 		jsonError(c, http.StatusForbidden, "contract not whitelisted: "+contractAddr)
 		return
 	}
@@ -280,7 +280,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 
 	// Layer 1: Whitelist
 	var allowed model.AllowedContract
-	if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, programID).First(&allowed).Error; err != nil {
+	if err := h.db.Where("user_id = ? AND chain = ? AND contract_address = ?", wallet.UserID, wallet.Chain, programID).First(&allowed).Error; err != nil {
 		jsonError(c, http.StatusForbidden, "program not whitelisted: "+programID)
 		return
 	}
@@ -476,7 +476,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 
 	// Whitelist check.
 	var allowed model.AllowedContract
-	if err := h.db.Where("wallet_id = ? AND contract_address = ?", wallet.ID, contractAddr).First(&allowed).Error; err != nil {
+	if err := h.db.Where("user_id = ? AND chain = ? AND contract_address = ?", wallet.UserID, wallet.Chain, contractAddr).First(&allowed).Error; err != nil {
 		jsonError(c, http.StatusForbidden, "contract not whitelisted: "+contractAddr)
 		return
 	}
