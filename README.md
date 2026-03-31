@@ -136,6 +136,7 @@ All configuration is via environment variables:
 | `MAX_WALLETS_PER_USER` | `10` | Maximum wallets a single user can create |
 | `MAX_API_KEYS_PER_USER` | `10` | Maximum API keys a single user can hold |
 | `MAX_USERS` | `500` | Maximum registered users (0 = unlimited) |
+| `FAUCET_URL` | _(empty)_ | Internal faucet service URL for testnet token claims; empty disables `/api/faucet` |
 
 RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Override the file path with `CHAINS_FILE` if needed. Additional EVM chains can also be added at runtime via the `POST /api/chains` endpoint (Passkey required); these are persisted in the database and survive restarts.
 
@@ -227,6 +228,12 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | POST | `/api/approvals/:id/approve` | Passkey | Approve a pending request |
 | POST | `/api/approvals/:id/reject` | Passkey | Reject a pending request |
 
+### Faucet (Testnet Only)
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/faucet` | Dual | Request testnet tokens (Sepolia, Base Sepolia; requires `FAUCET_URL`) |
+
 ### Audit
 
 | Method | Endpoint | Auth | Description |
@@ -299,6 +306,7 @@ handler/
   approval.go            Approval queue (list, approve, reject)
   balance.go             Native token balance queries
   audit.go               Audit log queries
+  faucet.go              Testnet faucet proxy (Sepolia, Base Sepolia)
   middleware.go          Auth, CSRF, Passkey-only middleware
   ratelimit.go           Per-key and per-IP rate limiters
   idempotency.go         Idempotent transfer deduplication

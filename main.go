@@ -344,6 +344,11 @@ func main() {
 	balanceH := handler.NewBalanceHandler(db)
 	auth.GET("/wallets/:id/balance", balanceH.GetBalance)
 
+	// Faucet proxy (dual-auth, testnet only).
+	faucetURL := envOrDefault("FAUCET_URL", "")
+	faucetH := handler.NewFaucetHandler(db, faucetURL)
+	auth.POST("/faucet", faucetH.Claim)
+
 	// Audit log routes (dual-auth).
 	auditH := handler.NewAuditHandler(db)
 	auth.GET("/audit/logs", auditH.ListLogs)
