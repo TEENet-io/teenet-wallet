@@ -1,0 +1,23 @@
+{
+  "name": "teenet-wallet",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TEENet Wallet plugin for OpenClaw — manage crypto wallets backed by TEE hardware security",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.34.49",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

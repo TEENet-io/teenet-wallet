@@ -1,0 +1,22 @@
+{
+  "id": "teenet-wallet",
+  "name": "TEENet Wallet",
+  "description": "Manage crypto wallets secured by Trusted Execution Environment (TEE) hardware. Create wallets, send crypto, manage approval policies, and interact with smart contracts across Ethereum and Solana chains.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiUrl": {
+        "type": "string",
+        "description": "Wallet service URL (e.g. https://test.teenet.io/instance/wallet)"
+      },
+      "apiKey": {
+        "type": "string",
+        "description": "API key (starts with ocw_)"
+      }
+    },
+    "required": ["apiUrl", "apiKey"]
+  },
+  "skills": ["skill/tee-wallet"]
+}
