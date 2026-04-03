@@ -44,15 +44,16 @@ func (s *IdempotencyStore) cleanup(ctx context.Context) {
 	}
 }
 
-// Check looks up a cached idempotency record for the given key and user.
+// Check looks up a cached idempotency record for the given key, user, and wallet.
 // If found, it writes the cached response and returns true; the caller should return.
 // If not found, returns false — the caller should proceed with the request.
 func (s *IdempotencyStore) Check(c *gin.Context, key string, userID uint) bool {
 	if key == "" {
 		return false
 	}
+	walletID := c.Param("id") // wallet ID from URL path
 	var rec model.IdempotencyRecord
-	if err := s.db.Where("key = ? AND user_id = ? AND expires_at > ?", key, userID, time.Now()).First(&rec).Error; err != nil {
+	if err := s.db.Where("key = ? AND user_id = ? AND wallet_id = ? AND expires_at > ?", key, userID, walletID, time.Now()).First(&rec).Error; err != nil {
 		return false
 	}
 	// Return the cached response.
@@ -62,14 +63,16 @@ func (s *IdempotencyStore) Check(c *gin.Context, key string, userID uint) bool {
 }
 
 // Save stores the response for a given idempotency key.
-func (s *IdempotencyStore) Save(key string, userID uint, statusCode int, response gin.H) {
+func (s *IdempotencyStore) Save(c *gin.Context, key string, userID uint, statusCode int, response gin.H) {
 	if key == "" {
 		return
 	}
+	walletID := c.Param("id") // wallet ID from URL path
 	respBytes, _ := json.Marshal(response)
 	rec := model.IdempotencyRecord{
 		Key:        key,
 		UserID:     userID,
+		WalletID:   walletID,
 		StatusCode: statusCode,
 		Response:   string(respBytes),
 		ExpiresAt:  time.Now().Add(idempotencyTTL),
@@ -91,7 +94,7 @@ func (h *WalletHandler) SetIdempotencyStore(store *IdempotencyStore) {
 // respondWithIdempotency returns a JSON response and caches it for idempotency.
 func respondWithIdempotency(c *gin.Context, store *IdempotencyStore, key string, userID uint, statusCode int, response gin.H) {
 	if store != nil && key != "" {
-		store.Save(key, userID, statusCode, response)
+		store.Save(c, key, userID, statusCode, response)
 	}
 	c.JSON(statusCode, response)
 }

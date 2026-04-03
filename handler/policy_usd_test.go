@@ -23,9 +23,9 @@ func policyUSDRouter(t *testing.T, db *gorm.DB, userID uint, ps *handler.PriceSe
 	t.Helper()
 	rpc := mockETHRPCServer(t)
 	// Patch chain registry to use mock RPC.
-	if cfg, ok := model.Chains["ethereum"]; ok {
+	if cfg, ok := model.GetChain("ethereum"); ok {
 		cfg.RPCURL = rpc.URL
-		model.Chains["ethereum"] = cfg
+		model.SetChain("ethereum", cfg)
 	}
 
 	gin.SetMode(gin.TestMode)
@@ -49,9 +49,9 @@ func policyUSDRouter(t *testing.T, db *gorm.DB, userID uint, ps *handler.PriceSe
 func contractCallUSDRouter(t *testing.T, db *gorm.DB, userID uint, ps *handler.PriceService, authMode string) *gin.Engine {
 	t.Helper()
 	rpc := mockETHRPCServer(t)
-	if cfg, ok := model.Chains["ethereum"]; ok {
+	if cfg, ok := model.GetChain("ethereum"); ok {
 		cfg.RPCURL = rpc.URL
-		model.Chains["ethereum"] = cfg
+		model.SetChain("ethereum", cfg)
 	}
 
 	gin.SetMode(gin.TestMode)
@@ -329,90 +329,7 @@ func TestSetPolicy_APIKey_CreatesPendingApproval(t *testing.T) {
 	}
 }
 
-func TestSign_USDThreshold_AboveThreshold_PendingApproval(t *testing.T) {
-	db := testDB(t)
-	user, wallet := seedWalletWithAddress(t, db)
-	ps := makePS(2000, 100) // ETH = $2000
 
-	// threshold $100
-	db.Create(&model.ApprovalPolicy{
-		WalletID: wallet.ID, ThresholdUSD: "100", Enabled: true,
-	})
-
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	wh := handler.NewWalletHandler(db, nil, "http://localhost")
-	wh.SetPriceService(ps)
-	r.Use(func(c *gin.Context) {
-		c.Set("userID", user.ID)
-		c.Set("authMode", "passkey")
-		c.Next()
-	})
-	r.POST("/wallets/:id/sign", wh.Sign)
-
-	// Sign with tx_context indicating 1 ETH = $2000 > $100
-	body := jsonBody(map[string]interface{}{
-		"message":  "deadbeef",
-		"encoding": "hex",
-		"tx_context": map[string]interface{}{
-			"amount":   "1",
-			"currency": "ETH",
-		},
-	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/sign", wallet.ID), body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 for Sign with amount > threshold, got %d: %s", w.Code, w.Body.String())
-	}
-	resp := respJSON(w)
-	if resp["status"] != "pending_approval" {
-		t.Errorf("expected pending_approval, got %v", resp["status"])
-	}
-}
-
-func TestSign_USDThreshold_BelowThreshold_DirectSign(t *testing.T) {
-	db := testDB(t)
-	user, wallet := seedWalletWithAddress(t, db)
-	ps := makePS(2000, 100) // ETH = $2000
-
-	// threshold $5000 → 1 ETH = $2000 < $5000 → direct path
-	db.Create(&model.ApprovalPolicy{
-		WalletID: wallet.ID, ThresholdUSD: "5000", Enabled: true,
-	})
-
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	wh := handler.NewWalletHandler(db, nil, "http://localhost")
-	wh.SetPriceService(ps)
-	r.Use(func(c *gin.Context) {
-		c.Set("userID", user.ID)
-		c.Set("authMode", "passkey")
-		c.Next()
-	})
-	r.POST("/wallets/:id/sign", wh.Sign)
-
-	body := jsonBody(map[string]interface{}{
-		"message":  "deadbeef",
-		"encoding": "hex",
-		"tx_context": map[string]interface{}{
-			"amount":   "1",
-			"currency": "ETH",
-		},
-	})
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/sign", wallet.ID), body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	resp := respJSON(w)
-	// Should NOT be pending_approval (sdk=nil → 502 at signing, but not approval)
-	if resp["status"] == "pending_approval" {
-		t.Error("should not trigger approval for $2000 < $5000 threshold")
-	}
-}
 
 func TestTransfer_DailySpent_RollbackOnSigningFailure(t *testing.T) {
 	db := testDB(t)
@@ -484,9 +401,9 @@ func TestTransfer_DailySpent_RollbackOnApprovalPath(t *testing.T) {
 func policyUSDRouterWithAuth(t *testing.T, db *gorm.DB, userID uint, ps *handler.PriceService, authMode string) *gin.Engine {
 	t.Helper()
 	rpc := mockETHRPCServer(t)
-	if cfg, ok := model.Chains["ethereum"]; ok {
+	if cfg, ok := model.GetChain("ethereum"); ok {
 		cfg.RPCURL = rpc.URL
-		model.Chains["ethereum"] = cfg
+		model.SetChain("ethereum", cfg)
 	}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

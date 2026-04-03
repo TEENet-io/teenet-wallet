@@ -60,7 +60,11 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 	}
 
 	// Normalize and validate address based on chain family.
-	chainCfg := model.Chains[wallet.Chain]
+	chainCfg, ok := model.GetChain(wallet.Chain)
+	if !ok {
+		jsonError(c, http.StatusBadRequest, "unsupported chain: "+wallet.Chain)
+		return
+	}
 	var addr string
 	if chainCfg.Family == "solana" {
 		addr = strings.TrimSpace(req.ContractAddress)

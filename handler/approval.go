@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,19 +19,54 @@ import (
 	"github.com/TEENet-io/teenet-wallet/model"
 )
 
+// approvalMu provides per-approval mutexes to prevent TOCTOU races on status checks.
+var approvalMu sync.Map // map[uint]*sync.Mutex
+
+func lockApproval(id uint) func() {
+	mu, _ := approvalMu.LoadOrStore(id, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	return func() {
+		mu.(*sync.Mutex).Unlock()
+		approvalMu.Delete(id)
+	}
+}
+
 // ApprovalHandler handles approval request lifecycle.
 type ApprovalHandler struct {
 	db     *gorm.DB
 	sdk    *sdk.Client
 	prices *PriceService
+	sseHub *SSEHub
 }
 
-func NewApprovalHandler(db *gorm.DB, sdkClient *sdk.Client) *ApprovalHandler {
-	return &ApprovalHandler{db: db, sdk: sdkClient}
+func NewApprovalHandler(db *gorm.DB, sdkClient *sdk.Client, sseHub *SSEHub) *ApprovalHandler {
+	return &ApprovalHandler{db: db, sdk: sdkClient, sseHub: sseHub}
 }
 
 // SetPriceService sets the USD price service used for daily spent conversion.
 func (h *ApprovalHandler) SetPriceService(ps *PriceService) { h.prices = ps }
+
+// broadcastApproval sends an SSE event to all subscribers for the approval's user.
+func (h *ApprovalHandler) broadcastApproval(approval model.ApprovalRequest, status string, txHash string) {
+	if h.sseHub == nil {
+		return
+	}
+	evtData := map[string]interface{}{
+		"approval_id":   approval.ID,
+		"status":        status,
+		"approval_type": approval.ApprovalType,
+	}
+	if txHash != "" {
+		evtData["tx_hash"] = txHash
+	}
+	if approval.WalletID != nil {
+		evtData["wallet_id"] = *approval.WalletID
+	}
+	h.sseHub.Broadcast(approval.UserID, SSEEvent{
+		Type: "approval_resolved",
+		Data: evtData,
+	})
+}
 
 // ListPending returns all pending approval requests for the current user.
 // GET /api/approvals/pending
@@ -91,6 +127,15 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if !ok {
 		return
 	}
+
+	unlock := lockApproval(approval.ID)
+	defer unlock()
+
+	// Re-check status under lock to prevent TOCTOU race.
+	if err := h.db.First(&approval, approval.ID).Error; err != nil {
+		jsonError(c, http.StatusNotFound, "approval not found")
+		return
+	}
 	if approval.Status != "pending" {
 		jsonError(c, http.StatusBadRequest, "approval is not pending (status: "+approval.Status+")")
 		return
@@ -112,7 +157,11 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		proposed.ID = 0 // let DB assign a new ID
 		if err := h.db.Create(&proposed).Error; err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") {
-				// Already whitelisted — treat as success.
+				// Already whitelisted — look up the existing record so we return the correct ID.
+				var existing model.AllowedContract
+				if qErr := h.db.Where("user_id = ? AND chain = ? AND contract_address = ?", proposed.UserID, proposed.Chain, proposed.ContractAddress).First(&existing).Error; qErr == nil {
+					proposed = existing
+				}
 			} else {
 				slog.Error("failed to add contract", "approval_id", approval.ID, "contract", proposed.ContractAddress, "error", err)
 				jsonErrorDetails(c, http.StatusInternalServerError, "failed to add contract", gin.H{"stage": "create_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
@@ -124,6 +173,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
 			"type": "contract_add", "contract": proposed.ContractAddress,
 		})
+		h.broadcastApproval(approval, "approved", "")
 		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "contract": proposed})
 		return
 	}
@@ -152,6 +202,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
 			"type": "contract_update", "contract": proposed.ContractAddress,
 		})
+		h.broadcastApproval(approval, "approved", "")
 		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "contract": proposed})
 		return
 	}
@@ -179,6 +230,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
 			"type": "addressbook_add", "nickname": proposed.Nickname, "chain": proposed.Chain,
 		})
+		h.broadcastApproval(approval, "approved", "")
 		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "entry": proposed})
 		return
 	}
@@ -211,6 +263,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
 			"type": "addressbook_update", "nickname": proposed.Nickname, "chain": proposed.Chain,
 		})
+		h.broadcastApproval(approval, "approved", "")
 		c.JSON(http.StatusOK, gin.H{"success": true, "status": "approved", "entry": proposed})
 		return
 	}
@@ -245,6 +298,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updateAuditByApprovalID(h.db, approval.ID, "success", map[string]interface{}{
 			"type": "policy_change", "threshold_usd": proposed.ThresholdUSD,
 		})
+		h.broadcastApproval(approval, "approved", "")
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"status":  "approved",
@@ -276,8 +330,12 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	// Rebuild the transaction with fresh chain state before signing.
 	// - Solana: blockhash expires in ~60s
 	// - ETH: nonce may have advanced since the approval was created (e.g. another tx was sent)
+	//
+	// TODO(tech-debt): The Solana branch below guesses tx type by trying different unmarshal
+	// targets in order. This is fragile — a better approach would be to store an explicit
+	// tx_type field on ApprovalRequest or within TxParams so we can dispatch deterministically.
 	txParamsToUse := approval.TxParams
-	cfg, cfgOk := model.Chains[wallet.Chain]
+	cfg, cfgOk := model.GetChain(wallet.Chain)
 	if cfgOk && approval.TxParams != "" {
 		switch cfg.Family {
 		case "solana":
@@ -332,7 +390,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			freshTx, buildErr := chain.RebuildETHTx(cfg.RPCURL, ethParams)
 			if buildErr != nil {
 				slog.Error("ETH tx rebuild failed", "approval_id", approval.ID, "error", buildErr)
-				jsonErrorDetails(c, http.StatusBadGateway, "failed to refresh transaction params: "+buildErr.Error(), gin.H{
+				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to refresh transaction params: "+buildErr.Error(), gin.H{
 					"stage": "rebuild_tx", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
 				})
 				return
@@ -354,7 +412,9 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			errMsg = result.Error
 		}
 		slog.Error("TEE signing failed", "approval_id", approval.ID, "wallet_id", wallet.ID, "key", wallet.KeyName, "error", errMsg)
-		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+		h.db.Model(&approval).Update("status", "failed")
+		h.broadcastApproval(approval, "failed", "signing error: "+errMsg)
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+errMsg, gin.H{
 			"stage": "signing", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
 		})
 		return
@@ -370,6 +430,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		txHash, broadcastErr = broadcastSigned(wallet, txParamsToUse, result.Signature)
 		if broadcastErr != nil {
 			slog.Error("broadcast failed", "approval_id", approval.ID, "wallet_id", wallet.ID, "address", wallet.Address, "error", broadcastErr)
+			h.db.Model(&approval).Update("status", "failed")
+			h.broadcastApproval(approval, "failed", "broadcast error: "+broadcastErr.Error())
 			respondBroadcastErrorDetails(c, broadcastErr, gin.H{
 				"approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
 			})
@@ -434,6 +496,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if txHash != "" {
 		resp["tx_hash"] = txHash
 	}
+	h.broadcastApproval(approval, "approved", txHash)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -461,6 +524,7 @@ func (h *ApprovalHandler) Reject(c *gin.Context) {
 	updateAuditByApprovalID(h.db, approval.ID, "rejected", map[string]interface{}{
 		"type": approval.ApprovalType,
 	})
+	h.broadcastApproval(approval, "rejected", "")
 	c.JSON(http.StatusOK, gin.H{"success": true, "status": "rejected"})
 }
 

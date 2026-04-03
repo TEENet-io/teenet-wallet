@@ -25,7 +25,6 @@ type ContractCallHandler struct {
 	sdk            *sdk.Client
 	baseURL        string
 	approvalExpiry time.Duration
-	idempotency    *IdempotencyStore
 	prices         *PriceService
 }
 
@@ -67,7 +66,7 @@ func (h *ContractCallHandler) ContractCall(c *gin.Context) {
 		return
 	}
 
-	chainCfg, cfgOk := model.Chains[wallet.Chain]
+	chainCfg, cfgOk := model.GetChain(wallet.Chain)
 	if !cfgOk {
 		jsonError(c, http.StatusBadRequest, "unsupported chain")
 		return
@@ -203,7 +202,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			"revert_reason", revertReason,
 			"error", buildErr.Error(),
 		)
-		respondContractCallStageError(c, http.StatusBadGateway, "estimate_gas", "build contract tx: "+buildErr.Error(), wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, selector, len(calldata), buildErr)
+		respondContractCallStageError(c, http.StatusUnprocessableEntity, "estimate_gas", "build contract tx: "+buildErr.Error(), wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, selector, len(calldata), buildErr)
 		return
 	}
 
@@ -216,8 +215,8 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	signingMsg := txData.SigningHash
 
 	// Layer 2: Security decision.
-	// Passkey auth: human is already present — proceed directly.
 	// API Key auth: contract operations always require passkey approval.
+	// Passkey auth: proceeds directly unless a value transfer exceeds the approval policy threshold.
 	needsApproval := false
 	var approvalReason string
 	if !isPasskeyAuth(c) {
@@ -233,6 +232,17 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			if a, ok := new(big.Float).SetString(req.Value); ok {
 				f, _ := a.Float64()
 				effectiveUSD = f * usdPrice
+			}
+		}
+	}
+
+	// Passkey auth with ETH value: check approval policy threshold.
+	if !needsApproval && effectiveUSD > 0 {
+		var policy model.ApprovalPolicy
+		if h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil {
+			if exceedsUSDThreshold(effectiveUSD, policy.ThresholdUSD) {
+				needsApproval = true
+				approvalReason = fmt.Sprintf("value transfer ($%.2f USD) exceeds approval threshold ($%s USD)", effectiveUSD, policy.ThresholdUSD)
 			}
 		}
 	}
@@ -305,7 +315,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			"wallet_id", wallet.ID, "chain", wallet.Chain,
 			"contract", contractAddr, "method", methodName, "error", errMsg,
 		)
-		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+errMsg, gin.H{
 			"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"contract": contractAddr, "method": methodName,
 		})
@@ -386,7 +396,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 			"wallet_id", wallet.ID, "chain", wallet.Chain,
 			"program_id", programID, "error", buildErr.Error(),
 		)
-		jsonErrorDetails(c, http.StatusBadGateway, "build program call tx: "+buildErr.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "build program call tx: "+buildErr.Error(), gin.H{
 			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"program_id": programID,
 		})
@@ -465,7 +475,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 			"wallet_id", wallet.ID, "chain", wallet.Chain,
 			"program_id", programID, "error", errMsg,
 		)
-		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+errMsg, gin.H{
 			"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"program_id": programID,
 		})
@@ -552,7 +562,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		return
 	}
 
-	chainCfg, cfgOk := model.Chains[wallet.Chain]
+	chainCfg, cfgOk := model.GetChain(wallet.Chain)
 	if !cfgOk || chainCfg.Family != "evm" {
 		jsonError(c, http.StatusBadRequest, "contract calls are only supported on EVM chains")
 		return
@@ -609,7 +619,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 			"contract", contractAddr, "spender", spenderAddr,
 			"action", auditAction, "error", buildErr.Error(),
 		)
-		jsonErrorDetails(c, http.StatusBadGateway, "build approve tx: "+buildErr.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "build approve tx: "+buildErr.Error(), gin.H{
 			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
 			"revert_reason": extractRevertReason(buildErr),
@@ -689,7 +699,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 			"contract", contractAddr, "spender", spenderAddr,
 			"action", auditAction, "error", errMsg,
 		)
-		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+errMsg, gin.H{
 			"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
 		})

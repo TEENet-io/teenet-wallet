@@ -84,7 +84,7 @@ func fetchETHChainParams(rpcURL, fromAddr string) (*ethChainParams, error) {
 
 	maxFee, priorityFee, chainID, err := fetchGasFeesAndChainID(rpcURL)
 	if err != nil {
-		nonceMgr.ResetNonce(fromAddr)
+		nonceMgr.ResetNonce(rpcURL, fromAddr) // chain-specific reset
 		return nil, err
 	}
 

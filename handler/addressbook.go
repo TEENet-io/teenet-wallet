@@ -95,7 +95,7 @@ func (h *AddressBookHandler) AddEntry(c *gin.Context) {
 	}
 
 	// Validate chain exists.
-	if _, ok := model.Chains[req.Chain]; !ok {
+	if _, ok := model.GetChain(req.Chain); !ok {
 		jsonError(c, http.StatusBadRequest, "unsupported chain")
 		return
 	}
@@ -329,7 +329,7 @@ func (h *AddressBookHandler) DeleteEntry(c *gin.Context) {
 
 // validateAddress validates and normalizes an address for the given chain.
 func validateAddress(addr, chainName string) (string, error) {
-	chainCfg, ok := model.Chains[chainName]
+	chainCfg, ok := model.GetChain(chainName)
 	if !ok {
 		return "", fmt.Errorf("unsupported chain")
 	}

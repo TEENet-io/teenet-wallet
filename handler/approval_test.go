@@ -20,7 +20,7 @@ import (
 func approvalRouter(db *gorm.DB, userID uint) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	ah := handler.NewApprovalHandler(db, nil)
+	ah := handler.NewApprovalHandler(db, nil, nil)
 	r.Use(func(c *gin.Context) {
 		c.Set("userID", userID)
 		c.Set("authMode", "passkey")

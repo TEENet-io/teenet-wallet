@@ -23,32 +23,47 @@ var nonceMgr = &NonceManager{nonces: make(map[string]uint64)}
 // (or after a reset) it fetches the pending nonce from the chain. Subsequent
 // calls return locally-incremented values.
 func (nm *NonceManager) AcquireNonce(rpcURL, address string) (uint64, error) {
+	key := rpcURL + ":" + address
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
-	if n, ok := nm.nonces[address]; ok {
-		nm.nonces[address] = n + 1
+	if n, ok := nm.nonces[key]; ok {
+		nm.nonces[key] = n + 1
 		return n, nil
 	}
 	onChainNonce, err := fetchNonceFromChain(rpcURL, address)
 	if err != nil {
 		return 0, err
 	}
-	nm.nonces[address] = onChainNonce + 1
+	nm.nonces[key] = onChainNonce + 1
 	return onChainNonce, nil
 }
 
-// ResetNonce removes the cached nonce for an address, forcing the next
-// AcquireNonce call to re-fetch from the chain. Should be called after a
-// broadcast failure.
-func (nm *NonceManager) ResetNonce(address string) {
+// ResetNonce removes the cached nonce for an address on a specific chain,
+// forcing the next AcquireNonce call to re-fetch from the chain.
+// Should be called after a broadcast failure.
+func (nm *NonceManager) ResetNonce(rpcURL, address string) {
+	key := rpcURL + ":" + address
 	nm.mu.Lock()
-	delete(nm.nonces, address)
+	delete(nm.nonces, key)
 	nm.mu.Unlock()
 }
 
-// ResetNonce is a package-level convenience to reset the cached nonce for an address.
+// ResetNonceForChain is a package-level convenience to reset the cached nonce
+// for an address on a specific chain.
+func ResetNonceForChain(rpcURL, address string) {
+	nonceMgr.ResetNonce(rpcURL, address)
+}
+
+// ResetNonce removes all cached nonces for an address across all chains.
+// Prefer ResetNonceForChain when the rpcURL is known.
 func ResetNonce(address string) {
-	nonceMgr.ResetNonce(address)
+	nonceMgr.mu.Lock()
+	for key := range nonceMgr.nonces {
+		if strings.HasSuffix(key, ":"+address) {
+			delete(nonceMgr.nonces, key)
+		}
+	}
+	nonceMgr.mu.Unlock()
 }
 
 // fetchNonceFromChain queries eth_getTransactionCount for the pending nonce.

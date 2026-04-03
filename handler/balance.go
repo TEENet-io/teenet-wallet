@@ -32,7 +32,7 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 		return
 	}
 
-	cfg, ok2 := model.Chains[wallet.Chain]
+	cfg, ok2 := model.GetChain(wallet.Chain)
 	if !ok2 {
 		jsonError(c, http.StatusBadRequest, "unsupported chain: "+wallet.Chain)
 		return

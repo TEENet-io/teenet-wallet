@@ -124,9 +124,9 @@ func contractCallRouter(db *gorm.DB, userID uint, authMode string, rpcURL string
 	gin.SetMode(gin.TestMode)
 	if rpcURL != "" {
 		// Patch the in-memory chain registry so the handler uses our mock RPC.
-		if cfg, ok := model.Chains["ethereum"]; ok {
+		if cfg, ok := model.GetChain("ethereum"); ok {
 			cfg.RPCURL = rpcURL
-			model.Chains["ethereum"] = cfg
+			model.SetChain("ethereum", cfg)
 		}
 	}
 	r := gin.New()
@@ -436,9 +436,9 @@ func TestContractCall_Solana_APIKey_RequiresApproval(t *testing.T) {
 
 	// Patch solana chain RPC to our mock so BuildSOLProgramCallTx can complete.
 	rpc := mockSOLRPCServer(t)
-	if cfg, ok := model.Chains["solana"]; ok {
+	if cfg, ok := model.GetChain("solana"); ok {
 		cfg.RPCURL = rpc.URL
-		model.Chains["solana"] = cfg
+		model.SetChain("solana", cfg)
 	}
 
 	r := contractCallRouter(db, user.ID, "apikey", "")

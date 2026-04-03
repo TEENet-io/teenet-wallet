@@ -464,6 +464,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalPolicy{})
 			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalRequest{})
 		}
+		tx.Where("user_id = ?", userID).Delete(&model.AddressBookEntry{})
 		tx.Where("user_id = ?", userID).Delete(&model.AuditLog{})
 		tx.Where("user_id = ?", userID).Delete(&model.APIKey{})
 		if err := tx.Where("user_id = ?", userID).Delete(&model.Wallet{}).Error; err != nil {

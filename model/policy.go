@@ -51,11 +51,14 @@ func (a *ApprovalRequest) BeforeCreate(db *gorm.DB) error {
 		return nil
 	}
 	for range 10 {
-		var buf [4]byte
+		var buf [8]byte
 		if _, err := rand.Read(buf[:]); err != nil {
 			return err
 		}
-		id := uint(binary.BigEndian.Uint32(buf[:]))%90000000 + 10000000
+		id := uint(binary.BigEndian.Uint64(buf[:]))
+		if id < 1000000000 {
+			id += 1000000000
+		}
 		var count int64
 		db.Model(&ApprovalRequest{}).Where("id = ?", id).Count(&count)
 		if count == 0 {

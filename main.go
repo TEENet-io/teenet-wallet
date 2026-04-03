@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -25,9 +28,29 @@ import (
 	"github.com/TEENet-io/teenet-wallet/model"
 )
 
+func raiseFileLimit() {
+	var rlimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit); err != nil {
+		return
+	}
+	if rlimit.Cur < 65535 {
+		rlimit.Cur = 65535
+		if rlimit.Max < 65535 {
+			rlimit.Max = 65535
+		}
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rlimit); err != nil {
+			slog.Warn("failed to raise file descriptor limit", "error", err, "current", rlimit.Cur)
+		} else {
+			slog.Info("raised file descriptor limit", "nofile", rlimit.Cur)
+		}
+	}
+}
+
 func main() {
 	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(slogLogger)
+
+	raiseFileLimit()
 
 	consensusURL := envOrDefault("CONSENSUS_URL", "http://localhost:8089")
 	host := envOrDefault("HOST", "0.0.0.0")
@@ -94,13 +117,19 @@ func main() {
 
 	sessions := handler.NewSessionStore()
 	defer sessions.Stop()
+	sseHub := handler.NewSSEHub()
 
 	// Price service for USD threshold conversion.
-	priceService := handler.NewPriceService(10 * time.Second)
+	priceTTL := time.Duration(envOrDefaultInt("PRICE_CACHE_TTL", 60)) * time.Second
+	priceService := handler.NewPriceService(priceTTL)
 
 	// Router.
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20) // 1 MB
+		c.Next()
+	})
 	r.Use(requestIDMiddleware())
 	r.Use(corsMiddleware(frontendURL))
 
@@ -108,7 +137,7 @@ func main() {
 	r.Use(func(c *gin.Context) {
 		if !strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.Header("Content-Security-Policy",
-				"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
 		}
 		c.Next()
 	})
@@ -138,8 +167,9 @@ func main() {
 	// Chain list (public) — used by frontend to populate chain selector.
 	// The "custom" field in each ChainConfig is true for user-added chains.
 	r.GET("/api/chains", func(c *gin.Context) {
-		list := make([]model.ChainConfig, 0, len(model.Chains))
-		for _, cfg := range model.Chains {
+		all := model.GetAllChains()
+		list := make([]model.ChainConfig, 0, len(all))
+		for _, cfg := range all {
 			list = append(list, cfg)
 		}
 		c.JSON(200, gin.H{"success": true, "chains": list})
@@ -211,17 +241,23 @@ func main() {
 			return
 		}
 
+		// SSRF protection: validate the RPC URL is not targeting internal networks.
+		if err := validateExternalURL(req.RPCURL); err != nil {
+			c.JSON(400, gin.H{"error": fmt.Sprintf("invalid rpc_url: %s", err.Error())})
+			return
+		}
+
 		// Only EVM custom chains are supported for now.
 		// (Solana requires different protocol/curve and additional validation.)
 		family := "evm"
 
 		// Reject if it would collide with a built-in chain.
-		if existing, exists := model.Chains[req.Name]; exists && !existing.Custom {
+		if existing, exists := model.GetChain(req.Name); exists && !existing.Custom {
 			c.JSON(409, gin.H{"error": "cannot overwrite a built-in chain"})
 			return
 		}
 		// Reject if a custom chain with this name already exists.
-		if existing, exists := model.Chains[req.Name]; exists && existing.Custom {
+		if existing, exists := model.GetChain(req.Name); exists && existing.Custom {
 			c.JSON(409, gin.H{"error": "custom chain already exists"})
 			return
 		}
@@ -251,7 +287,7 @@ func main() {
 			ChainID:  row.ChainID,
 			Custom:   true,
 		}
-		model.Chains[cfg.Name] = cfg
+		model.SetChain(cfg.Name, cfg)
 
 		slog.Info("custom chain added", "name", cfg.Name, "chain_id", cfg.ChainID)
 		c.JSON(201, gin.H{"success": true, "chain": cfg})
@@ -260,7 +296,7 @@ func main() {
 	passkeyOnly.DELETE("/chains/:name", func(c *gin.Context) {
 		name := c.Param("name")
 
-		existing, exists := model.Chains[name]
+		existing, exists := model.GetChain(name)
 		if !exists {
 			c.JSON(404, gin.H{"error": "chain not found"})
 			return
@@ -287,7 +323,7 @@ func main() {
 			c.JSON(500, gin.H{"error": "failed to delete custom chain"})
 			return
 		}
-		delete(model.Chains, name)
+		model.DeleteChain(name)
 
 		slog.Info("custom chain deleted", "name", name)
 		c.JSON(200, gin.H{"success": true})
@@ -321,7 +357,6 @@ func main() {
 	auth.GET("/wallets/:id", walletH.GetWallet)
 	auth.PATCH("/wallets/:id", walletH.RenameWallet)         // rename: API Key or Passkey
 	passkeyOnly.DELETE("/wallets/:id", walletH.DeleteWallet) // irreversible: Passkey only
-	auth.POST("/wallets/:id/sign", walletH.Sign)
 
 	// General contract call (API Key or Passkey, with security layers).
 	contractCallH := handler.NewContractCallHandler(db, sdkClient, baseURL, approvalExpiry)
@@ -329,8 +364,6 @@ func main() {
 	auth.POST("/wallets/:id/contract-call", contractCallH.ContractCall)
 	auth.POST("/wallets/:id/approve-token", contractCallH.ApproveToken)
 	auth.POST("/wallets/:id/revoke-approval", contractCallH.RevokeApproval)
-	auth.POST("/wallets/:id/call-read", contractCallH.CallRead)
-
 	auth.POST("/wallets/:id/transfer", walletH.Transfer) // backend builds+broadcasts tx
 	auth.POST("/wallets/:id/wrap-sol", walletH.WrapSOL)
 	auth.POST("/wallets/:id/unwrap-sol", walletH.UnwrapSOL)
@@ -354,16 +387,19 @@ func main() {
 	auth.GET("/audit/logs", auditH.ListLogs)
 
 	// Approval routes.
-	approvalH := handler.NewApprovalHandler(db, sdkClient)
+	approvalH := handler.NewApprovalHandler(db, sdkClient, sseHub)
 	approvalH.SetPriceService(priceService)
 	auth.GET("/approvals/pending", approvalH.ListPending)
 	auth.GET("/approvals/:id", approvalH.GetApproval)
-
 	// Approve/reject: Passkey only.
 	approveOnly := auth.Group("")
 	approveOnly.Use(handler.PasskeyOnlyMiddleware())
 	approveOnly.POST("/approvals/:id/approve", approvalH.Approve)
 	approveOnly.POST("/approvals/:id/reject", approvalH.Reject)
+
+	// SSE event stream (API Key or Passkey).
+	sseH := handler.NewSSEHandler(sseHub)
+	auth.GET("/events/stream", sseH.Stream)
 
 	addr := host + ":" + port
 	slog.Info("server starting",
@@ -371,7 +407,7 @@ func main() {
 		"consensus_url", consensusURL,
 		"base_url", baseURL,
 		"chains_file", chainsFile,
-		"chains_loaded", len(model.Chains),
+		"chains_loaded", model.ChainsLen(),
 		"approval_expiry_minutes", approvalExpiryMinutes,
 		"max_wallets_per_user", maxWalletsPerUser,
 		"max_api_keys_per_user", maxAPIKeysPerUser,
@@ -442,7 +478,10 @@ func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
 
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Authorization,Content-Type,X-CSRF-Token,Idempotency-Key")
-		c.Header("Access-Control-Allow-Credentials", "true")
+		if allowedOrigin != "*" {
+			c.Header("Access-Control-Allow-Credentials", "true")
+		}
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -453,4 +492,54 @@ func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// validateExternalURL checks that the URL uses http(s) and does not resolve to
+// a private/loopback IP address, preventing SSRF attacks.
+func validateExternalURL(rawURL string) error {
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return fmt.Errorf("URL must start with http:// or https://")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("malformed URL")
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return fmt.Errorf("missing host")
+	}
+	if strings.EqualFold(host, "localhost") {
+		return fmt.Errorf("localhost is not allowed")
+	}
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve host: %s", host)
+	}
+	privateRanges := []string{
+		"127.0.0.0/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+	}
+	var cidrs []*net.IPNet
+	for _, cidr := range privateRanges {
+		_, network, _ := net.ParseCIDR(cidr)
+		cidrs = append(cidrs, network)
+	}
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		for _, cidr := range cidrs {
+			if cidr.Contains(ip) {
+				return fmt.Errorf("private/internal IP address is not allowed")
+			}
+		}
+	}
+	return nil
 }

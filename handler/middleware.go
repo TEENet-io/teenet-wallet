@@ -196,11 +196,6 @@ func extractBearer(c *gin.Context) string {
 	return ""
 }
 
-func hashAPIKey(key string) string {
-	h := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(h[:])
-}
-
 func hashAPIKeyWithSalt(key, salt string) string {
 	h := sha256.New()
 	h.Write([]byte(salt))

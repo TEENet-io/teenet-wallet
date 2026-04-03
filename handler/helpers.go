@@ -14,6 +14,20 @@ import (
 	"github.com/TEENet-io/teenet-wallet/model"
 )
 
+// respondPendingApproval sends a unified 202 response for any operation
+// that requires Passkey approval. All approval-returning endpoints use this
+// to ensure a consistent response shape for the plugin/agent.
+func respondPendingApproval(c *gin.Context, baseURL string, approvalID uint, message string) {
+	approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, baseURL), approvalID)
+	c.JSON(http.StatusAccepted, gin.H{
+		"success":      true,
+		"status":       "pending_approval",
+		"approval_id":  approvalID,
+		"approval_url": approvalURL,
+		"message":      message,
+	})
+}
+
 // isPasskeyAuth reports whether the request was authenticated via a passkey session.
 func isPasskeyAuth(c *gin.Context) bool {
 	authMode, _ := c.Get("authMode")

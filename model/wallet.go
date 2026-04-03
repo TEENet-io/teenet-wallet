@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,7 +60,51 @@ type ChainConfig struct {
 }
 
 // Chains is the active chain registry, loaded at startup.
-var Chains map[string]ChainConfig
+// Use GetChain/SetChain/DeleteChain/GetAllChains for concurrent access.
+var (
+	chainsMu sync.RWMutex
+	Chains   map[string]ChainConfig
+)
+
+// GetChain returns the ChainConfig for the given name and whether it exists.
+func GetChain(name string) (ChainConfig, bool) {
+	chainsMu.RLock()
+	defer chainsMu.RUnlock()
+	c, ok := Chains[name]
+	return c, ok
+}
+
+// SetChain sets a ChainConfig in the registry.
+func SetChain(name string, cfg ChainConfig) {
+	chainsMu.Lock()
+	defer chainsMu.Unlock()
+	Chains[name] = cfg
+}
+
+// DeleteChain removes a chain from the registry.
+func DeleteChain(name string) {
+	chainsMu.Lock()
+	defer chainsMu.Unlock()
+	delete(Chains, name)
+}
+
+// GetAllChains returns a snapshot copy of the chain registry.
+func GetAllChains() map[string]ChainConfig {
+	chainsMu.RLock()
+	defer chainsMu.RUnlock()
+	cp := make(map[string]ChainConfig, len(Chains))
+	for k, v := range Chains {
+		cp[k] = v
+	}
+	return cp
+}
+
+// ChainsLen returns the number of chains in the registry.
+func ChainsLen() int {
+	chainsMu.RLock()
+	defer chainsMu.RUnlock()
+	return len(Chains)
+}
 
 // defaultChains is the fallback when no chains.json is present.
 var defaultChains = []ChainConfig{

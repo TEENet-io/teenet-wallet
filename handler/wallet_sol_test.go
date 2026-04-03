@@ -87,13 +87,13 @@ func TestTransfer_SPL_Whitelisted_FailsAtRPC(t *testing.T) {
 
 	// Use mock SOL RPC that returns a blockhash
 	solRPC := mockSOLRPCServer(t)
-	origCfg := model.Chains["solana-devnet"]
-	model.Chains["solana-devnet"] = model.ChainConfig{
+	origCfg, _ := model.GetChain("solana-devnet")
+	model.SetChain("solana-devnet", model.ChainConfig{
 		Name: "solana-devnet", Label: "Solana Devnet", Family: "solana",
 		Currency: "SOL", Curve: "ed25519", Protocol: "schnorr",
 		RPCURL: solRPC.URL,
-	}
-	t.Cleanup(func() { model.Chains["solana-devnet"] = origCfg })
+	})
+	t.Cleanup(func() { model.SetChain("solana-devnet", origCfg) })
 
 	r := solTransferRouter(db, user.ID, nil, "")
 
@@ -206,13 +206,13 @@ func TestWrapSOL_FailsAtRPC(t *testing.T) {
 	user, wallet := seedSolWallet(t, db)
 
 	solRPC := mockSOLRPCServer(t)
-	origCfg := model.Chains["solana-devnet"]
-	model.Chains["solana-devnet"] = model.ChainConfig{
+	origCfg, _ := model.GetChain("solana-devnet")
+	model.SetChain("solana-devnet", model.ChainConfig{
 		Name: "solana-devnet", Label: "Solana Devnet", Family: "solana",
 		Currency: "SOL", Curve: "ed25519", Protocol: "schnorr",
 		RPCURL: solRPC.URL,
-	}
-	t.Cleanup(func() { model.Chains["solana-devnet"] = origCfg })
+	})
+	t.Cleanup(func() { model.SetChain("solana-devnet", origCfg) })
 
 	r := solTransferRouter(db, user.ID, nil, "")
 
@@ -269,13 +269,13 @@ func TestUnwrapSOL_FailsAtRPC(t *testing.T) {
 	user, wallet := seedSolWallet(t, db)
 
 	solRPC := mockSOLRPCServer(t)
-	origCfg := model.Chains["solana-devnet"]
-	model.Chains["solana-devnet"] = model.ChainConfig{
+	origCfg, _ := model.GetChain("solana-devnet")
+	model.SetChain("solana-devnet", model.ChainConfig{
 		Name: "solana-devnet", Label: "Solana Devnet", Family: "solana",
 		Currency: "SOL", Curve: "ed25519", Protocol: "schnorr",
 		RPCURL: solRPC.URL,
-	}
-	t.Cleanup(func() { model.Chains["solana-devnet"] = origCfg })
+	})
+	t.Cleanup(func() { model.SetChain("solana-devnet", origCfg) })
 
 	r := solTransferRouter(db, user.ID, nil, "")
 

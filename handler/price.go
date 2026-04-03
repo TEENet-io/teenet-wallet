@@ -97,6 +97,9 @@ type PriceService struct {
 	// Built from /coins/list, cached for 24 hours.
 	symbolMap       map[string]string // "LINK" -> "chainlink"
 	symbolMapExpiry time.Time
+
+	refreshMu   sync.Mutex // serialises refresh() calls
+	symbolMapMu sync.Mutex // serialises ensureSymbolMap() calls
 }
 
 // NewPriceService creates a PriceService with the given cache TTL.
@@ -220,6 +223,7 @@ func (ps *PriceService) GetTokenUSDPrice(chainName, contractAddress string) (flo
 	}
 
 	ps.mu.Lock()
+	ps.evictExpiredTokenPrices()
 	ps.tokenPrices[cacheKey] = usd
 	ps.tokenExpiry[cacheKey] = time.Now().Add(ps.ttl)
 	ps.mu.Unlock()
@@ -354,6 +358,9 @@ func (ps *PriceService) GetPriceBySymbol(symbol string) (float64, error) {
 // The list maps uppercase token symbols to CoinGecko coin IDs (e.g., "LINK" → "chainlink").
 // When multiple coins share a symbol, the first result (typically highest market cap) wins.
 func (ps *PriceService) ensureSymbolMap() {
+	ps.symbolMapMu.Lock()
+	defer ps.symbolMapMu.Unlock()
+
 	ps.mu.RLock()
 	if ps.symbolMap != nil && time.Now().Before(ps.symbolMapExpiry) {
 		ps.mu.RUnlock()
@@ -398,8 +405,26 @@ func (ps *PriceService) ensureSymbolMap() {
 	slog.Info("symbol map loaded", "coins", len(m))
 }
 
+// evictExpiredTokenPrices removes expired entries from tokenPrices/tokenExpiry when
+// the map exceeds 10 000 entries. Caller must hold ps.mu (write lock).
+func (ps *PriceService) evictExpiredTokenPrices() {
+	if len(ps.tokenPrices) <= 10000 {
+		return
+	}
+	now := time.Now()
+	for k, exp := range ps.tokenExpiry {
+		if now.After(exp) {
+			delete(ps.tokenPrices, k)
+			delete(ps.tokenExpiry, k)
+		}
+	}
+}
+
 // refresh fetches fresh prices from CoinGecko.
+// Only one goroutine refreshes at a time; concurrent callers block and share the result.
 func (ps *PriceService) refresh() {
+	ps.refreshMu.Lock()
+	defer ps.refreshMu.Unlock()
 	// Build comma-separated list of CoinGecko IDs.
 	ids := make([]string, 0, len(coinGeckoIDs))
 	for _, id := range coinGeckoIDs {

@@ -7,8 +7,9 @@ import "time"
 // re-executing the transaction.
 type IdempotencyRecord struct {
 	ID         uint      `gorm:"primaryKey"`
-	Key        string    `gorm:"uniqueIndex;size:64;not null"`
-	UserID     uint      `gorm:"index;not null"`
+	Key        string    `gorm:"size:64;not null;uniqueIndex:idx_idem_key_user_wallet"`
+	UserID     uint      `gorm:"not null;uniqueIndex:idx_idem_key_user_wallet"`
+	WalletID   string    `gorm:"size:36;not null;uniqueIndex:idx_idem_key_user_wallet;default:''"`
 	StatusCode int       `gorm:"not null"`
 	Response   string    `gorm:"type:text"`
 	ExpiresAt  time.Time `gorm:"index"`
