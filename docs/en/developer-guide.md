@@ -34,7 +34,7 @@ teenet-wallet/
 ├── main.go              # Entry point: routes, middleware, DI wiring
 ├── handler/             # HTTP handlers (one file per domain)
 │   ├── auth.go          # Passkey registration/login, API key CRUD, account deletion
-│   ├── wallet.go        # Wallet CRUD, transfer, sign, wrap/unwrap SOL, policy, daily-spent
+│   ├── wallet.go        # Wallet CRUD, transfer, wrap/unwrap SOL, policy, daily-spent
 │   ├── contract.go      # Contract whitelist add/update/delete
 │   ├── contract_call.go # General contract calls (EVM + Solana), approve-token, revoke-approval
 │   ├── call_read.go     # Read-only contract queries (eth_call)

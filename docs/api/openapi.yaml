@@ -51,7 +51,7 @@ tags:
   - name: Authentication
     description: Passkey registration, login, API key management
   - name: Wallets
-    description: Wallet CRUD, signing, transfers, wrap/unwrap SOL
+    description: Wallet CRUD, transfers, wrap/unwrap SOL
   - name: Contracts
     description: Per-wallet contract/program whitelist management
   - name: Contract Calls
@@ -1433,89 +1433,6 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Wallet not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /api/wallets/{id}/sign:
-    post:
-      tags: [Wallets]
-      summary: Sign an arbitrary message
-      description: |
-        Signs a hex or base64-encoded message using the wallet's TEE key.
-        If an approval policy is set and the transaction context indicates
-        the USD value exceeds the threshold, returns 202 with a pending approval.
-      operationId: signMessage
-      security:
-        - ApiKeyAuth: []
-      parameters:
-        - $ref: "#/components/parameters/WalletId"
-        - $ref: "#/components/parameters/CSRFToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [message]
-              properties:
-                message:
-                  type: string
-                  description: Hex or base64-encoded message to sign
-                  example: "68656c6c6f"
-                encoding:
-                  type: string
-                  enum: [hex, base64]
-                  default: hex
-                  example: "hex"
-                tx_context:
-                  type: object
-                  description: Optional context for approval policy evaluation
-                  example:
-                    amount: "1.5"
-                    currency: "ETH"
-      responses:
-        "200":
-          description: Message signed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "signed"
-                  signature:
-                    type: string
-                    description: Hex-encoded signature with 0x prefix
-                    example: "0xabcdef..."
-                  wallet_address:
-                    type: string
-                    example: "0x1234..."
-                  chain:
-                    type: string
-                    example: "sepolia"
-        "202":
-          description: Pending approval (USD threshold exceeded)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PendingApprovalResponse"
-        "400":
-          description: Validation error or wallet not ready
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "401":
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "502":
-          description: TEE signing failure
           content:
             application/json:
               schema:
