@@ -31,7 +31,7 @@ A `202` response means the request needs Passkey approval:
 {
   "success": true,
   "pending": true,
-  "approval_id": 7,
+  "approval_id": 4839271056,
   "message": "Contract whitelist request submitted for approval"
 }
 ```
@@ -115,33 +115,9 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contract-call \
 
 The program ID must be whitelisted. The wallet's own address is added as a signer automatically if required. The `data` field contains hex-encoded instruction data (discriminator + encoded arguments).
 
-### Read-Only Calls
+### Read-Only Queries
 
-Query contract state without signing or sending a transaction. No gas fees, no approval needed:
-
-```bash
-curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/call-read \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-    "func_sig": "balanceOf(address)",
-    "args": ["0xYourWalletAddress..."]
-  }'
-```
-
-Response:
-
-```json
-{
-  "success": true,
-  "result": "0x0000000000000000000000000000000000000000000000000000000005f5e100",
-  "contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-  "method": "balanceOf"
-}
-```
-
-Useful for checking token balances (`balanceOf`), allowances (`allowance`), and reading contract state (`totalSupply`, `name`, `symbol`, `decimals`). This endpoint is EVM-only.
+For read-only contract queries (e.g., `balanceOf`, `allowance`, `totalSupply`), use `eth_call` against public RPC endpoints directly. These calls do not require signing or gas, so there is no need to route them through the wallet service.
 
 ### The `amount_usd` Field for Threshold Enforcement
 

@@ -62,6 +62,8 @@ tags:
     description: USD-denominated threshold and daily limit policies
   - name: Audit
     description: Operation audit log
+  - name: Events
+    description: Real-time event streams
 
 components:
   securitySchemes:
@@ -98,8 +100,8 @@ components:
       required: true
       schema:
         type: integer
-      description: Approval request ID (6-digit random)
-      example: 384729
+      description: Approval request ID (random 64-bit integer)
+      example: 4839271056
     CSRFToken:
       name: X-CSRF-Token
       in: header
@@ -284,8 +286,8 @@ components:
       properties:
         id:
           type: integer
-          description: Random 6-digit ID
-          example: 384729
+          description: Random 64-bit ID
+          example: 4839271056
         wallet_id:
           type: string
           format: uuid
@@ -293,7 +295,7 @@ components:
           type: integer
         approval_type:
           type: string
-          enum: [sign, transfer, contract_call, contract_add, contract_update, policy_change, wrap_sol, unwrap_sol]
+          enum: [transfer, contract_call, contract_add, contract_update, policy_change, wrap_sol, unwrap_sol, addressbook_add, addressbook_update]
           example: "transfer"
         message:
           type: string
@@ -395,7 +397,7 @@ components:
           example: "pending_approval"
         approval_id:
           type: integer
-          example: 384729
+          example: 4839271056
         message:
           type: string
           example: "amount ~$150.00 USD exceeds approval threshold $100 USD"
@@ -403,7 +405,7 @@ components:
           type: object
         approval_url:
           type: string
-          example: "http://localhost:8080/#/approve/384729"
+          example: "http://localhost:8080/#/approve/4839271056"
 
     BalanceResult:
       type: object
@@ -1871,7 +1873,7 @@ paths:
                     example: true
                   approval_id:
                     type: integer
-                    example: 384729
+                    example: 4839271056
                   message:
                     type: string
                     example: "Contract whitelist request submitted for approval"
@@ -2316,80 +2318,6 @@ paths:
                 $ref: "#/components/schemas/Error"
         "502":
           description: RPC, signing, or broadcast failure
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /api/wallets/{id}/call-read:
-    post:
-      tags: [Contract Calls]
-      summary: Read-only contract call
-      description: |
-        Performs an `eth_call` against a contract. No signing, no transaction,
-        no gas fees. EVM chains only. Returns raw hex-encoded return data.
-      operationId: callRead
-      security:
-        - ApiKeyAuth: []
-      parameters:
-        - $ref: "#/components/parameters/WalletId"
-        - $ref: "#/components/parameters/CSRFToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [contract, func_sig]
-              properties:
-                contract:
-                  type: string
-                  description: Contract address (0x...)
-                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-                func_sig:
-                  type: string
-                  description: Solidity function signature
-                  example: "balanceOf(address)"
-                args:
-                  type: array
-                  items: {}
-                  description: Function arguments
-                  example: ["0xOwnerAddress..."]
-      responses:
-        "200":
-          description: Call result
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  result:
-                    type: string
-                    description: Hex-encoded return data with 0x prefix
-                    example: "0x000000000000000000000000000000000000000000000000000000003b9aca00"
-                  contract:
-                    type: string
-                    example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-                  method:
-                    type: string
-                    example: "balanceOf"
-        "400":
-          description: Validation error or non-EVM chain
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "401":
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "502":
-          description: RPC error
           content:
             application/json:
               schema:
@@ -2903,3 +2831,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Events ────────────────────────
+  /api/events/stream:
+    get:
+      tags: [Events]
+      summary: SSE event stream
+      description: |
+        Server-Sent Events stream for real-time approval notifications.
+        Requires authentication (API Key or Passkey session).
+        Events are scoped to the authenticated user.
+        The server sends a heartbeat comment every 30 seconds to keep the connection alive.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  event: approval_resolved
+                  data: {"approval_id":4839271056,"status":"approved","approval_type":"transfer","tx_hash":"0xabc..."}

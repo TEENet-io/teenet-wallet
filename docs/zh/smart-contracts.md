@@ -32,7 +32,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
 {
   "success": true,
   "pending": true,
-  "approval_id": 7,
+  "approval_id": 4839271056,
   "message": "Contract whitelist request submitted for approval"
 }
 ```
@@ -125,36 +125,9 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contract-call" \
 - `data`（必填）：十六进制编码的指令数据（鉴别器 + 编码参数）
 - `amount_usd`（可选）：USD 价值申报
 
-### 只读调用
+### 只读查询
 
-查询链上合约状态，无需签名、无 Gas 消耗、无需审批（仅 EVM）：
-
-```bash
-curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/call-read" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contract": "0xContractAddress...",
-    "func_sig": "balanceOf(address)",
-    "args": ["0xWalletAddress..."]
-  }'
-```
-
-返回示例：
-
-```json
-{
-  "success": true,
-  "result": "0x0000000000000000000000000000000000000000000000000000000005f5e100",
-  "contract": "0x...",
-  "method": "balanceOf"
-}
-```
-
-常见用途：
-- 查询代币余额：`balanceOf(address)`
-- 查询授权额度：`allowance(address,address)`
-- 读取合约状态：`totalSupply()`、`name()`、`symbol()`、`decimals()`
+对于只读合约查询（如 `balanceOf`、`allowance`、`totalSupply`），请直接通过公共 RPC 端点使用 `eth_call`。这些调用不需要签名或 Gas，因此无需通过钱包服务路由。
 
 ### amount_usd 阈值申报
 

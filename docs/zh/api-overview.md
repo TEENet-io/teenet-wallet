@@ -108,7 +108,7 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | `wallet_create` | 创建钱包 |
 | `wallet_delete` | 删除钱包 |
 | `transfer` | 转账（成功或待审批） |
-| `sign` | 签名（成功或待审批） |
+| `sign` | 转账/合约操作的内部签名步骤 |
 | `policy_update` | 设置审批策略 |
 | `approval_approve` | 审批通过 |
 | `approval_reject` | 审批拒绝 |
@@ -138,7 +138,7 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | 消费控制 | USD 计价阈值和日限额，预扣/回退模式 |
 | API 防护 | 按 Key 速率限制、CSRF 保护、邀请制注册 |
 | 传输 | 钱包服务与 TEE-DAO 集群之间使用 mTLS |
-| 数据 | SQLite WAL 模式、结构化审计日志、CSP 头 |
+| 数据 | SQLite WAL 模式、结构化审计日志、CSP 和 HSTS 头 |
 
 ---
 

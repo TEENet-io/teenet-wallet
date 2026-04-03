@@ -13,7 +13,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 - **SPL token transfers** with automatic ATA (Associated Token Account) creation for recipients
 - **General smart contract interaction** via `contract-call` endpoint -- full ABI encoding on EVM, generic program calls on Solana
 - **Wrap/Unwrap SOL** -- convert between native SOL and wSOL (Wrapped SOL) SPL token
-- **Convenience endpoints** -- `approve-token`, `revoke-approval`, `call-read` for common DeFi operations
+- **Convenience endpoints** -- `approve-token`, `revoke-approval` for common DeFi operations
 - **EIP-1559 transactions** with dynamic fee estimation
 - **Solana transaction building** -- native transfers, SPL TransferChecked, arbitrary program instructions
 - **Nonce manager** for concurrent EVM transaction safety
@@ -59,6 +59,7 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 - **OpenClaw skill integration** for AI agent interaction
 - **Docker deployment** -- runs as non-root user
 - **Content Security Policy** headers for the web UI
+- **Real-time SSE notifications** -- per-user Server-Sent Events stream for approval status changes
 
 ## How It Works
 
@@ -144,6 +145,7 @@ All configuration is via environment variables:
 | `MAX_API_KEYS_PER_USER` | `10` | Maximum API keys a single user can hold |
 | `MAX_USERS` | `500` | Maximum registered users (0 = unlimited) |
 | `FAUCET_URL` | _(empty)_ | Internal faucet service URL for testnet token claims; empty disables `/api/faucet` |
+| `PRICE_CACHE_TTL` | `60` | Price cache TTL in seconds |
 
 RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Override the file path with `CHAINS_FILE` if needed. Additional EVM chains can also be added at runtime via the `POST /api/chains` endpoint (Passkey required); these are persisted in the database and survive restarts.
 
@@ -193,7 +195,6 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | GET | `/api/wallets/:id` | Dual | Get wallet details |
 | PATCH | `/api/wallets/:id` | Dual | Rename a wallet (update label) |
 | DELETE | `/api/wallets/:id` | Passkey | Delete a wallet (irreversible) |
-| POST | `/api/wallets/:id/sign` | Dual | Sign an arbitrary message |
 | POST | `/api/wallets/:id/transfer` | Dual | Build, sign, and broadcast a transfer (native or token) |
 | POST | `/api/wallets/:id/wrap-sol` | Dual | Wrap native SOL into wSOL (Solana only) |
 | POST | `/api/wallets/:id/unwrap-sol` | Dual | Unwrap all wSOL back to native SOL (Solana only) |
@@ -217,7 +218,6 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (API Key: requires approval; Passkey: direct) |
 | POST | `/api/wallets/:id/approve-token` | Dual | Approve ERC-20 token spending (API Key: requires approval; Passkey: direct) |
 | POST | `/api/wallets/:id/revoke-approval` | Dual | Revoke ERC-20 token approval (API Key: requires approval; Passkey: direct) |
-| POST | `/api/wallets/:id/call-read` | Dual | Read-only contract call (no signing, EVM only) |
 
 ### Approval Policies
 
@@ -235,6 +235,12 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | GET | `/api/approvals/:id` | Dual | Get approval details |
 | POST | `/api/approvals/:id/approve` | Passkey | Approve a pending request |
 | POST | `/api/approvals/:id/reject` | Passkey | Reject a pending request |
+
+### Events
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/events/stream` | Dual | SSE event stream for real-time approval notifications |
 
 ### Address Book
 
@@ -266,7 +272,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 - **CSRF Protection:** All state-changing API requests from Passkey sessions require a `X-CSRF-Token` header.
 - **Rate Limiting:** Per-API-key and per-IP rate limits protect against abuse and prevent TEE DKG resource exhaustion.
 - **Daily Spend Limits:** Optional USD-denominated daily limits that hard-block transfers when exceeded. Unknown token transfers (tokens without a CoinGecko price) require Passkey approval (fail-closed). Uses pre-deduction with rollback on signing/broadcast failure (auth/capture pattern) to prevent phantom spend from failed transactions.
-- **Content Security Policy:** The web UI is served with a restrictive CSP header. Additional security headers include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Content Security Policy:** The web UI is served with a restrictive CSP header. Additional security headers include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security` (HSTS).
 
 ## Supported Chains
 
@@ -319,8 +325,9 @@ handler/
   wallet.go              Wallet CRUD, sign, transfer, policy management
   contract.go            Contract whitelist CRUD
   contract_call.go       General contract calls, approve-token, revoke-approval
-  call_read.go           Read-only contract calls
   approval.go            Approval queue (list, approve, reject)
+  sse.go                 SSE event stream endpoint
+  sse_hub.go             Per-user SSE pub/sub hub
   balance.go             Native token balance queries
   addressbook.go         Address book CRUD with nickname resolution
   audit.go               Audit log queries
@@ -350,13 +357,17 @@ chain/
 frontend/                Pre-built web UI assets
 docs/                    Design documents
 skill/tee-wallet/        OpenClaw AI agent skill definition
+plugin/                  OpenClaw native plugin (TypeScript) with real-time approval notifications
 chains.json              Supported chain configuration
 Dockerfile               Multi-stage Docker build (non-root runtime)
 ```
 
-## OpenClaw Skill
+## OpenClaw Integration
 
-The `skill/tee-wallet/` directory contains an [OpenClaw](https://openclaw.io) skill definition that enables AI agents to manage wallets, check balances, and send transactions through natural language. See `skill/tee-wallet/SKILL.md` for the full specification.
+Two ways to use this wallet with [OpenClaw](https://openclaw.ai) AI agents:
+
+- **Native Plugin** (`plugin/`) -- TypeScript plugin with 29 registered tools and real-time SSE approval notifications via `subagent.run()`. See `plugin/README.md`.
+- **Skill-only** (`skill/tee-wallet/`) -- Standalone skill definition where the agent uses `curl`/`web_fetch` to call the REST API directly. No plugin installation required. See `skill/tee-wallet/SKILL.md`.
 
 ## Related Projects
 

@@ -37,7 +37,8 @@ teenet-wallet/
 │   ├── wallet.go        # 钱包增删改查、转账、签名、wrap/unwrap SOL、策略、日花费
 │   ├── contract.go      # 合约白名单增删改
 │   ├── contract_call.go # 通用合约调用（EVM + Solana）、approve-token、revoke-approval
-│   ├── call_read.go     # 只读合约查询（eth_call）
+│   ├── sse.go           # SSE 事件流端点
+│   ├── sse_hub.go       # 按用户分发的 SSE 发布/订阅中心
 │   ├── approval.go      # 审批列表/详情/批准/拒绝、审批后执行
 │   ├── balance.go       # 链上余额查询（原生 + ERC-20 + SPL）
 │   ├── addressbook.go   # 地址簿增删改查、昵称解析

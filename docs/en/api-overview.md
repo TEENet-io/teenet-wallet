@@ -110,7 +110,7 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | `wallet_create` | Wallet created |
 | `wallet_delete` | Wallet deleted |
 | `transfer` | Transfer sent or pending |
-| `sign` | Message signed or pending |
+| `sign` | Internal signing step during transfer/contract operations |
 | `policy_update` | Approval policy set or pending |
 | `approval_approve` | Approval request approved |
 | `approval_reject` | Approval request rejected |
@@ -140,7 +140,7 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | Spend control | USD-denominated thresholds and daily limits with auth/capture pattern. |
 | API protection | Per-key rate limiting, CSRF protection for browser sessions, invite-based registration. |
 | Transport | Mutual TLS between wallet service and TEE-DAO cluster. |
-| Data | SQLite with WAL mode, structured audit logging, Content Security Policy headers. |
+| Data | SQLite with WAL mode, structured audit logging, Content Security Policy and HSTS headers. |
 
 ---
 [Previous: AI Agent Integration](/en/agent-integration.md) | [Next: Developer Guide](/en/developer-guide.md)

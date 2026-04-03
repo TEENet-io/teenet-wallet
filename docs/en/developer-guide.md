@@ -37,7 +37,8 @@ teenet-wallet/
 │   ├── wallet.go        # Wallet CRUD, transfer, wrap/unwrap SOL, policy, daily-spent
 │   ├── contract.go      # Contract whitelist add/update/delete
 │   ├── contract_call.go # General contract calls (EVM + Solana), approve-token, revoke-approval
-│   ├── call_read.go     # Read-only contract queries (eth_call)
+│   ├── sse.go           # SSE event stream endpoint
+│   ├── sse_hub.go       # Per-user SSE pub/sub hub
 │   ├── approval.go      # Approval list/detail/approve/reject, post-approval execution
 │   ├── balance.go       # On-chain balance queries (native + ERC-20 + SPL)
 │   ├── addressbook.go   # Address book CRUD, nickname resolution
