@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -39,7 +40,10 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 
 	result, balErr := chain.GetBalance(cfg.Family, wallet.Address, cfg.RPCURL, wallet.Chain, cfg.Currency)
 	if balErr != nil {
-		jsonError(c, http.StatusBadGateway, balErr.Error())
+		slog.Error("balance query failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", balErr)
+		jsonErrorDetails(c, http.StatusBadGateway, balErr.Error(), gin.H{
+			"stage": "balance_query", "wallet_id": wallet.ID, "chain": wallet.Chain,
+		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})

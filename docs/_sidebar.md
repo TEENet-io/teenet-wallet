@@ -11,6 +11,7 @@
   - [Authentication](en/authentication.md)
   - [Wallet Management](en/wallets.md)
   - [Transfers](en/transfers.md)
+  - [Address Book](en/addressbook.md)
   - [Smart Contracts](en/smart-contracts.md)
   - [Approval System](en/approvals.md)
   - [AI Agent Integration](en/agent-integration.md)

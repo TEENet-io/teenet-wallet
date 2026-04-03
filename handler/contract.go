@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -118,7 +119,8 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 			jsonError(c, http.StatusConflict, "contract already whitelisted for this chain")
 			return
 		}
-		jsonError(c, http.StatusInternalServerError, "db error")
+		slog.Error("contract add failed", "wallet_id", wallet.ID, "contract", addr, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "contract_add", "wallet_id": wallet.ID, "contract": addr})
 		return
 	}
 	writeAuditCtx(h.db, c, "contract_add", "success", &wallet.ID, map[string]interface{}{
@@ -137,7 +139,8 @@ func (h *ContractHandler) ListContracts(c *gin.Context) {
 
 	var contracts []model.AllowedContract
 	if err := h.db.Where("user_id = ? AND chain = ?", wallet.UserID, wallet.Chain).Order("created_at asc").Find(&contracts).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "db error")
+		slog.Error("contract list failed", "wallet_id", wallet.ID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "contract_list", "wallet_id": wallet.ID})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "contracts": contracts})
@@ -234,7 +237,8 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&existing).Updates(updates).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "update failed")
+		slog.Error("contract update failed", "contract_id", cid, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "contract_update", "contract_id": cid})
 		return
 	}
 	writeAuditCtx(h.db, c, "contract_update", "success", &wallet.ID, map[string]interface{}{
@@ -267,7 +271,8 @@ func (h *ContractHandler) DeleteContract(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&contract).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "delete failed")
+		slog.Error("contract delete failed", "contract_id", cid, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "delete failed", gin.H{"stage": "contract_delete", "contract_id": cid})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})

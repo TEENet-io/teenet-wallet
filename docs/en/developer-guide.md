@@ -40,6 +40,7 @@ teenet-wallet/
 │   ├── call_read.go     # Read-only contract queries (eth_call)
 │   ├── approval.go      # Approval list/detail/approve/reject, post-approval execution
 │   ├── balance.go       # On-chain balance queries (native + ERC-20 + SPL)
+│   ├── addressbook.go   # Address book CRUD, nickname resolution
 │   ├── audit.go         # Audit log queries + writeAuditCtx helper
 │   ├── price.go         # PriceService: CoinGecko + Jupiter price feeds, TTL cache
 │   ├── middleware.go     # Auth middleware (API key + Passkey session), CORS, CSP
@@ -53,6 +54,7 @@ teenet-wallet/
 │   ├── apikey.go        # APIKey
 │   ├── policy.go        # ApprovalPolicy, ApprovalRequest
 │   ├── contract.go      # AllowedContract
+│   ├── addressbook.go   # AddressBookEntry
 │   ├── audit.go         # AuditLog
 │   └── idempotency.go   # IdempotencyRecord
 ├── chain/               # Blockchain interaction (no DB, no HTTP -- pure chain logic)
@@ -189,6 +191,7 @@ SQLite with WAL mode. Tables are auto-migrated on startup:
 | `allowed_contracts` | `AllowedContract` | Contract whitelist per wallet |
 | `audit_logs` | `AuditLog` | Full operation audit trail |
 | `idempotency_records` | `IdempotencyRecord` | Idempotency-Key cache (24h TTL) |
+| `address_book_entries` | `AddressBookEntry` | Saved contacts per user/chain (unique nickname) |
 | `custom_chains` | `CustomChain` | User-added EVM chains |
 
 ---

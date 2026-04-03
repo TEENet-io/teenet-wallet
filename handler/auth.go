@@ -60,7 +60,8 @@ func (h *AuthHandler) InviteUser(c *gin.Context) {
 		} else if res != nil {
 			msg = res.Error
 		}
-		jsonError(c, http.StatusBadGateway, msg)
+		slog.Error("passkey invite failed", "error", msg)
+		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_invite"})
 		return
 	}
 	registerURL := h.baseURL + "/#/register?token=" + res.InviteToken
@@ -90,7 +91,8 @@ func (h *AuthHandler) CheckName(c *gin.Context) {
 func (h *AuthHandler) PasskeyOptions(c *gin.Context) {
 	res, err := h.sdk.PasskeyLoginOptions(c.Request.Context())
 	if err != nil {
-		jsonError(c, http.StatusBadGateway, err.Error())
+		slog.Error("passkey login options failed", "error", err)
+		jsonErrorDetails(c, http.StatusBadGateway, err.Error(), gin.H{"stage": "passkey_login_options"})
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -121,7 +123,8 @@ func (h *AuthHandler) PasskeyRegistrationBegin(c *gin.Context) {
 		} else if inviteRes != nil {
 			msg = inviteRes.Error
 		}
-		jsonError(c, http.StatusBadGateway, msg)
+		slog.Error("passkey registration invite failed", "display_name", displayName, "error", msg)
+		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_invite"})
 		return
 	}
 
@@ -135,7 +138,8 @@ func (h *AuthHandler) PasskeyRegistrationBegin(c *gin.Context) {
 		} else if optRes != nil {
 			msg = optRes.Error
 		}
-		jsonError(c, http.StatusBadGateway, msg)
+		slog.Error("passkey registration options failed", "error", msg)
+		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_options"})
 		return
 	}
 	c.JSON(http.StatusOK, optRes)
@@ -151,7 +155,8 @@ func (h *AuthHandler) PasskeyRegistrationOptions(c *gin.Context) {
 	}
 	res, err := h.sdk.PasskeyRegistrationOptions(c.Request.Context(), token)
 	if err != nil {
-		jsonError(c, http.StatusBadGateway, err.Error())
+		slog.Error("passkey registration options failed", "error", err)
+		jsonErrorDetails(c, http.StatusBadGateway, err.Error(), gin.H{"stage": "passkey_registration_options"})
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -178,7 +183,8 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		} else if res != nil {
 			msg = res.Error
 		}
-		jsonError(c, http.StatusBadGateway, msg)
+		slog.Error("passkey registration verify failed", "error", msg)
+		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_verify"})
 		return
 	}
 	// Enforce user limit.
@@ -200,7 +206,7 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		PasskeyUserID: res.PasskeyUserID,
 	}
 	if err := h.db.Create(&user).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "create user failed")
+		jsonErrorDetails(c, http.StatusInternalServerError, "create user failed", gin.H{"stage": "user_create"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "user_id": user.ID, "username": user.Username})
@@ -262,7 +268,7 @@ func (h *AuthHandler) PasskeyVerify(c *gin.Context) {
 		user = model.User{Username: username, PasskeyUserID: uint(passkeyUserID)}
 		if err := h.db.Create(&user).Error; err != nil {
 			slog.Error("auto-create user failed", "passkey_user_id", passkeyUserID, "error", err)
-			jsonError(c, http.StatusInternalServerError, "failed to create user")
+			jsonErrorDetails(c, http.StatusInternalServerError, "failed to create user", gin.H{"stage": "user_auto_create"})
 			return
 		}
 		slog.Info("auto-created local user", "user_id", user.ID, "passkey_user_id", passkeyUserID, "username", username)
@@ -303,7 +309,7 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 	// Enforce per-user limit.
 	var count int64
 	if err := h.db.Model(&model.APIKey{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "db error")
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "apikey_count"})
 		return
 	}
 	if count >= int64(h.maxAPIKeys) {
@@ -326,7 +332,7 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 		Label:   label,
 	}
 	if err := h.db.Create(&apiKey).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to save key")
+		jsonErrorDetails(c, http.StatusInternalServerError, "failed to save key", gin.H{"stage": "apikey_save"})
 		return
 	}
 	writeAuditCtx(h.db, c, "apikey_generate", "success", nil, map[string]interface{}{"prefix": prefix, "label": label})
@@ -348,7 +354,7 @@ func (h *AuthHandler) ListAPIKeys(c *gin.Context) {
 	}
 	var apiKeys []model.APIKey
 	if err := h.db.Where("user_id = ?", userID).Order("created_at asc").Find(&apiKeys).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "db error")
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "apikey_list"})
 		return
 	}
 	keys := []gin.H{}
@@ -387,7 +393,7 @@ func (h *AuthHandler) RenameAPIKey(c *gin.Context) {
 
 	oldLabel := apiKey.Label
 	if err := h.db.Model(&apiKey).Update("label", req.Label).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "rename failed")
+		jsonErrorDetails(c, http.StatusInternalServerError, "rename failed", gin.H{"stage": "apikey_rename"})
 		return
 	}
 	writeAuditCtx(h.db, c, "apikey_rename", "success", nil, map[string]interface{}{
@@ -422,7 +428,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	// Load all wallets for this user.
 	var wallets []model.Wallet
 	if err := h.db.Where("user_id = ?", userID).Find(&wallets).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to load wallets")
+		jsonErrorDetails(c, http.StatusInternalServerError, "failed to load wallets", gin.H{"stage": "account_delete"})
 		return
 	}
 
@@ -441,7 +447,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	// Load user to get PasskeyUserID before deletion.
 	var user model.User
 	if err := h.db.First(&user, userID).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to load user")
+		jsonErrorDetails(c, http.StatusInternalServerError, "failed to load user", gin.H{"stage": "account_delete"})
 		return
 	}
 
@@ -465,7 +471,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 		}
 		return tx.Delete(&model.User{}, userID).Error
 	}); err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to delete account")
+		jsonErrorDetails(c, http.StatusInternalServerError, "failed to delete account", gin.H{"stage": "account_delete"})
 		return
 	}
 
@@ -518,7 +524,7 @@ func (h *AuthHandler) RevokeAPIKey(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&apiKey).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "revoke failed")
+		jsonErrorDetails(c, http.StatusInternalServerError, "revoke failed", gin.H{"stage": "apikey_revoke"})
 		return
 	}
 	writeAuditCtx(h.db, c, "apikey_revoke", "success", nil, map[string]interface{}{"prefix": prefix, "label": apiKey.Label})

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/hex"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +53,11 @@ func (h *ContractCallHandler) CallRead(c *gin.Context) {
 
 	result, callErr := chain.ETHCall(chainCfg.RPCURL, wallet.Address, contractAddr, calldata)
 	if callErr != nil {
-		jsonError(c, http.StatusBadGateway, "eth_call: "+callErr.Error())
+		slog.Error("eth_call failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "contract", contractAddr, "func_sig", req.FuncSig, "error", callErr)
+		jsonErrorDetails(c, http.StatusBadGateway, "eth_call: "+callErr.Error(), gin.H{
+			"stage": "eth_call", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"contract": contractAddr, "func_sig": req.FuncSig,
+		})
 		return
 	}
 

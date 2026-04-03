@@ -189,4 +189,4 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/revoke-approval \
 ```
 
 ---
-[Previous: Transfers](/en/transfers.md) | [Next: Approval System](/en/approvals.md)
+[Previous: Address Book](/en/addressbook.md) | [Next: Approval System](/en/approvals.md)

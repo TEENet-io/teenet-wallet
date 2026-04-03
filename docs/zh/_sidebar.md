@@ -11,6 +11,7 @@
   - [认证体系](/zh/authentication.md)
   - [钱包管理](/zh/wallets.md)
   - [转账](/zh/transfers.md)
+  - [地址簿](/zh/addressbook.md)
   - [智能合约交互](/zh/smart-contracts.md)
   - [审批系统](/zh/approvals.md)
   - [AI Agent 集成](/zh/agent-integration.md)

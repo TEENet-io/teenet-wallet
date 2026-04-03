@@ -19,3 +19,7 @@ Thumbs.db
 # Environment
 .env
 .env.*
+
+# Local-only docs 
+docs/zh/skill-onboarding-feature.md
+docs/zh/skill-context-optimization.md

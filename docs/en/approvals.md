@@ -125,6 +125,8 @@ Pending approvals expire after the configured timeout (default: 24 hours).
 | `contract_update` | Contract whitelist update via API key |
 | `wrap_sol` | Wrap SOL exceeds threshold |
 | `unwrap_sol` | Unwrap SOL exceeds threshold |
+| `addressbook_add` | Address book entry addition via API key |
+| `addressbook_update` | Address book entry update via API key |
 
 ### Contract Call Approvals
 

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -54,7 +55,8 @@ func (h *AddressBookHandler) ListEntries(c *gin.Context) {
 
 	var entries []model.AddressBookEntry
 	if err := q.Order("nickname asc, chain asc").Find(&entries).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "db error")
+		slog.Error("addressbook list failed", "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "addressbook_list"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "entries": entries})
@@ -155,7 +157,8 @@ func (h *AddressBookHandler) AddEntry(c *gin.Context) {
 			jsonError(c, http.StatusConflict, "an entry with this nickname already exists for this chain")
 			return
 		}
-		jsonError(c, http.StatusInternalServerError, "db error")
+		slog.Error("addressbook create failed", "nickname", nickname, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "addressbook_add", "nickname": nickname})
 		return
 	}
 
@@ -277,7 +280,8 @@ func (h *AddressBookHandler) UpdateEntry(c *gin.Context) {
 			jsonError(c, http.StatusConflict, "an entry with this nickname already exists for this chain")
 			return
 		}
-		jsonError(c, http.StatusInternalServerError, "update failed")
+		slog.Error("addressbook update failed", "entry_id", entryID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "addressbook_update", "entry_id": entryID})
 		return
 	}
 
@@ -312,7 +316,8 @@ func (h *AddressBookHandler) DeleteEntry(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&entry).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "delete failed")
+		slog.Error("addressbook delete failed", "entry_id", entryID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "delete failed", gin.H{"stage": "addressbook_delete", "entry_id": entryID})
 		return
 	}
 

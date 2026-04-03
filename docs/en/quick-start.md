@@ -37,7 +37,7 @@ The server listens on `http://0.0.0.0:8080` by default.
 All examples in this documentation use shell variables. Set them before running the commands:
 
 ```bash
-export TEE_WALLET_URL="http://localhost:8080"   # your wallet server URL
+export TEE_WALLET_URL="https://test.teenet.io/instance/wallet"   # your wallet server URL
 export API_KEY="ocw_..."                         # your API key (generated in Step 2)
 ```
 
@@ -45,7 +45,7 @@ export API_KEY="ocw_..."                         # your API key (generated in St
 
 **Step 1: Register with a Passkey.**
 
-Open the web UI (e.g., `http://localhost:8080`) in a browser that supports WebAuthn (Chrome, Safari, Firefox). Complete the Passkey registration flow. This creates your user account and a Passkey session.
+Open the web UI ([`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)) in a browser that supports WebAuthn (Chrome, Safari, Firefox). Complete the Passkey registration flow. This creates your user account and a Passkey session.
 
 **Step 2: Generate an API key.**
 

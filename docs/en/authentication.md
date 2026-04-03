@@ -31,6 +31,16 @@ curl -s ${TEE_WALLET_URL}/api/auth/apikey/list \
   -H "X-CSRF-Token: nocheck"
 ```
 
+**Renaming a key:**
+
+```bash
+curl -s -X PATCH ${TEE_WALLET_URL}/api/auth/apikey \
+  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
+  -H "X-CSRF-Token: nocheck" \
+  -H "Content-Type: application/json" \
+  -d '{"key_id": "KEY_ID_HERE", "label": "new-label"}'
+```
+
 **Revoking a key:**
 
 ```bash
@@ -62,12 +72,13 @@ Passkey sessions use the WebAuthn standard for hardware-bound authentication. Th
 3. `POST /api/auth/passkey/verify` -- submit the assertion and receive a session token
 
 Passkey sessions are required for:
-- Generating, listing, and revoking API keys
+- Generating, renaming, and revoking API keys
 - Deleting wallets
 - Deleting approval policies
 - Removing contracts from the whitelist
 - Approving or rejecting pending approval requests
 - Deleting the user account
+- Deleting address book entries
 - Adding or removing custom chains
 
 ### CSRF Protection

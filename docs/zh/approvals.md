@@ -66,7 +66,7 @@ curl -s "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/daily-spent" \
 {
   "status": "pending_approval",
   "approval_id": 42,
-  "approval_url": "http://localhost:8080/#/approve/42"
+  "approval_url": "https://test.teenet.io/instance/wallet/#/approve/42"
 }
 ```
 
@@ -105,6 +105,10 @@ curl -s -X POST "${TEE_WALLET_URL}/api/approvals/${APPROVAL_ID}/reject" \
   -H "Authorization: Bearer ps_session_token" \
   -H "X-CSRF-Token: csrf_token_value"
 ```
+
+### 地址簿审批
+
+通过 API Key 添加或修改地址簿条目时，会创建待审批请求。Passkey 所有者确认后生效。删除地址簿条目仅限 Passkey 会话。
 
 ### 合约调用审批
 

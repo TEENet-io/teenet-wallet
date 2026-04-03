@@ -63,7 +63,7 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 		if err == gorm.ErrRecordNotFound {
 			jsonError(c, http.StatusNotFound, "wallet not found")
 		} else {
-			jsonError(c, http.StatusInternalServerError, "database error")
+			jsonErrorDetails(c, http.StatusInternalServerError, "database error", gin.H{"stage": "faucet_db_lookup"})
 		}
 		return
 	}
@@ -84,7 +84,9 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 	resp, err := h.client.Post(h.faucetURL+"/api/claim", "application/json", bytes.NewReader(body))
 	if err != nil {
 		slog.Error("faucet request failed", "error", err)
-		jsonError(c, http.StatusBadGateway, "faucet service unavailable")
+		jsonErrorDetails(c, http.StatusBadGateway, "faucet service unavailable", gin.H{
+			"stage": "faucet_request", "chain": wallet.Chain, "address": wallet.Address,
+		})
 		return
 	}
 	defer resp.Body.Close()
@@ -97,10 +99,14 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 			Error string `json:"error"`
 		}
 		if json.Unmarshal(respBody, &faucetErr) == nil && faucetErr.Error != "" {
-			jsonError(c, resp.StatusCode, faucetErr.Error)
+			jsonErrorDetails(c, resp.StatusCode, faucetErr.Error, gin.H{
+				"stage": "faucet_claim", "chain": wallet.Chain, "address": wallet.Address,
+			})
 			return
 		}
-		jsonError(c, resp.StatusCode, "faucet request failed")
+		jsonErrorDetails(c, resp.StatusCode, "faucet request failed", gin.H{
+			"stage": "faucet_claim", "chain": wallet.Chain, "address": wallet.Address,
+		})
 		return
 	}
 
@@ -110,7 +116,7 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 		Chain  string `json:"chain"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		jsonError(c, http.StatusInternalServerError, "invalid faucet response")
+		jsonErrorDetails(c, http.StatusInternalServerError, "invalid faucet response", gin.H{"stage": "faucet_response_parse"})
 		return
 	}
 

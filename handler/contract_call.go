@@ -4,8 +4,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -80,23 +82,64 @@ func (h *ContractCallHandler) ContractCall(c *gin.Context) {
 	}
 }
 
+var revertReasonRe = regexp.MustCompile(`execution reverted(?:: )?(.+)?$`)
+
+func extractRevertReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	m := revertReasonRe.FindStringSubmatch(err.Error())
+	if len(m) >= 2 {
+		return strings.TrimSpace(m[1])
+	}
+	return ""
+}
+
+func contractCallDebug(wallet model.Wallet, contractAddr, methodName, funcSig string, args []interface{}, value string, selector string, calldataLen int) gin.H {
+	return gin.H{
+		"wallet_address": wallet.Address,
+		"chain":          wallet.Chain,
+		"method":         methodName,
+		"args":           args,
+		"value":          value,
+		"tx_preview": gin.H{
+			"to":           contractAddr,
+			"value":        value,
+			"selector":     selector,
+			"calldata_len": calldataLen,
+		},
+	}
+}
+
+func respondContractCallStageError(c *gin.Context, status int, stage string, msg string, wallet model.Wallet, contractAddr, methodName, funcSig string, args []interface{}, value string, selector string, calldataLen int, err error) {
+	revertReason := extractRevertReason(err)
+	jsonErrorDetails(c, status, msg, gin.H{
+		"stage":         stage,
+		"contract":      contractAddr,
+		"func_sig":      funcSig,
+		"selector":      selector,
+		"revert_reason": revertReason,
+		"debug":         contractCallDebug(wallet, contractAddr, methodName, funcSig, args, value, selector, calldataLen),
+	})
+}
+
 // contractCallEVM implements contract call logic for EVM chains.
 func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Wallet, chainCfg model.ChainConfig) {
 	var req ContractCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		jsonError(c, http.StatusBadRequest, err.Error())
+		jsonErrorDetails(c, http.StatusBadRequest, err.Error(), gin.H{"stage": "bind_json"})
 		return
 	}
 
 	if req.FuncSig == "" {
-		jsonError(c, http.StatusBadRequest, "func_sig is required for EVM contract calls")
+		jsonErrorDetails(c, http.StatusBadRequest, "func_sig is required for EVM contract calls", gin.H{"stage": "validation"})
 		return
 	}
 
 	// Normalize contract address.
 	contractAddr, addrErr := normalizeEVMAddress(req.Contract)
 	if addrErr != nil {
-		jsonError(c, http.StatusBadRequest, "contract: "+addrErr.Error())
+		jsonErrorDetails(c, http.StatusBadRequest, "contract: "+addrErr.Error(), gin.H{"stage": "validation", "contract": req.Contract})
 		return
 	}
 
@@ -110,14 +153,14 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	// Extract method name from func_sig (everything before the first "(").
 	methodName, err := extractMethodName(req.FuncSig)
 	if err != nil {
-		jsonError(c, http.StatusBadRequest, err.Error())
+		jsonErrorDetails(c, http.StatusBadRequest, err.Error(), gin.H{"stage": "validation", "func_sig": req.FuncSig})
 		return
 	}
 
 	// Encode calldata (validation only — no RPC yet).
 	calldata, encErr := chain.EncodeCall(req.FuncSig, req.Args)
 	if encErr != nil {
-		jsonError(c, http.StatusBadRequest, "encode calldata: "+encErr.Error())
+		respondContractCallStageError(c, http.StatusBadRequest, "encode_calldata", "encode calldata: "+encErr.Error(), wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, "", 0, encErr)
 		return
 	}
 
@@ -142,13 +185,31 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	// consistent with how /transfer works.
 	txData, buildErr := chain.BuildETHContractCallTx(chainCfg.RPCURL, wallet.Address, contractAddr, calldata, valueWei)
 	if buildErr != nil {
-		jsonError(c, http.StatusBadGateway, "build contract tx: "+buildErr.Error())
+		selector := ""
+		if len(calldata) >= 4 {
+			selector = "0x" + hex.EncodeToString(calldata[:4])
+		}
+		revertReason := extractRevertReason(buildErr)
+		slog.Error("contract-call build tx failed",
+			"wallet_id", wallet.ID,
+			"wallet_address", wallet.Address,
+			"chain", wallet.Chain,
+			"contract", contractAddr,
+			"method", methodName,
+			"func_sig", req.FuncSig,
+			"args", req.Args,
+			"value", req.Value,
+			"selector", selector,
+			"revert_reason", revertReason,
+			"error", buildErr.Error(),
+		)
+		respondContractCallStageError(c, http.StatusBadGateway, "estimate_gas", "build contract tx: "+buildErr.Error(), wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, selector, len(calldata), buildErr)
 		return
 	}
 
 	txParamsJSON, marshalErr := json.Marshal(txData.Params)
 	if marshalErr != nil {
-		jsonError(c, http.StatusInternalServerError, "marshal tx params failed")
+		jsonErrorDetails(c, http.StatusInternalServerError, "marshal tx params failed", gin.H{"stage": "marshal_tx_params"})
 		return
 	}
 
@@ -215,7 +276,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
-			jsonError(c, http.StatusInternalServerError, "create approval request failed")
+			jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval"})
 			return
 		}
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
@@ -240,13 +301,27 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		} else if result != nil {
 			errMsg = result.Error
 		}
-		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		slog.Error("contract-call signing failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"contract", contractAddr, "method", methodName, "error", errMsg,
+		)
+		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+			"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"contract": contractAddr, "method": methodName,
+		})
 		return
 	}
 
 	txHash, broadcastErr := broadcastSigned(wallet, string(txParamsJSON), result.Signature)
 	if broadcastErr != nil {
-		respondBroadcastError(c, broadcastErr)
+		slog.Error("contract-call broadcast failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"contract", contractAddr, "method", methodName, "error", broadcastErr.Error(),
+		)
+		respondBroadcastErrorDetails(c, broadcastErr, gin.H{
+			"stage": "broadcast", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"contract": contractAddr, "method": methodName,
+		})
 		return
 	}
 
@@ -307,7 +382,14 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 	// Build tx
 	txData, buildErr := chain.BuildSOLProgramCallTx(chainCfg.RPCURL, wallet.Address, programID, req.Accounts, instrData)
 	if buildErr != nil {
-		jsonError(c, http.StatusBadGateway, "build program call tx: "+buildErr.Error())
+		slog.Error("solana program-call build tx failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"program_id", programID, "error", buildErr.Error(),
+		)
+		jsonErrorDetails(c, http.StatusBadGateway, "build program call tx: "+buildErr.Error(), gin.H{
+			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"program_id": programID,
+		})
 		return
 	}
 	txParamsJSON, _ := json.Marshal(txData.Params)
@@ -354,7 +436,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
-			jsonError(c, http.StatusInternalServerError, "create approval request failed")
+			jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval"})
 			return
 		}
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
@@ -379,13 +461,27 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		} else if result != nil {
 			errMsg = result.Error
 		}
-		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		slog.Error("solana program-call signing failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"program_id", programID, "error", errMsg,
+		)
+		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+			"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"program_id": programID,
+		})
 		return
 	}
 
 	txHash, broadcastErr := chain.AssembleAndBroadcastSOLProgram(chainCfg.RPCURL, txData.Params, result.Signature)
 	if broadcastErr != nil {
-		jsonError(c, http.StatusBadGateway, "broadcast failed: "+broadcastErr.Error())
+		slog.Error("solana program-call broadcast failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"program_id", programID, "error", broadcastErr.Error(),
+		)
+		respondBroadcastErrorDetails(c, broadcastErr, gin.H{
+			"stage": "broadcast", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"program_id": programID,
+		})
 		return
 	}
 
@@ -508,13 +604,22 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 	walletAddr := wallet.Address
 	txData, buildErr := chain.BuildETHContractCallTx(rpcURL, walletAddr, contractAddr, calldata, nil)
 	if buildErr != nil {
-		jsonError(c, http.StatusBadGateway, "build approve tx: "+buildErr.Error())
+		slog.Error("approve-token build tx failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"contract", contractAddr, "spender", spenderAddr,
+			"action", auditAction, "error", buildErr.Error(),
+		)
+		jsonErrorDetails(c, http.StatusBadGateway, "build approve tx: "+buildErr.Error(), gin.H{
+			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
+			"revert_reason": extractRevertReason(buildErr),
+		})
 		return
 	}
 
 	txParamsJSON, marshalErr := json.Marshal(txData.Params)
 	if marshalErr != nil {
-		jsonError(c, http.StatusInternalServerError, "marshal tx params failed")
+		jsonErrorDetails(c, http.StatusInternalServerError, "marshal tx params failed", gin.H{"stage": "marshal_tx_params"})
 		return
 	}
 
@@ -553,7 +658,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
-			jsonError(c, http.StatusInternalServerError, "create approval request failed")
+			jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval"})
 			return
 		}
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
@@ -579,13 +684,29 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		} else if result != nil {
 			errMsg = result.Error
 		}
-		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		slog.Error("approve-token signing failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"contract", contractAddr, "spender", spenderAddr,
+			"action", auditAction, "error", errMsg,
+		)
+		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+			"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
+		})
 		return
 	}
 
 	txHash, broadcastErr := broadcastSigned(wallet, string(txParamsJSON), result.Signature)
 	if broadcastErr != nil {
-		respondBroadcastError(c, broadcastErr)
+		slog.Error("approve-token broadcast failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"contract", contractAddr, "spender", spenderAddr,
+			"action", auditAction, "error", broadcastErr.Error(),
+		)
+		respondBroadcastErrorDetails(c, broadcastErr, gin.H{
+			"stage": "broadcast", "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
+		})
 		return
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,37 @@ func mockETHRPCServer(t *testing.T) *httptest.Server {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": result})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func mockETHRPCServerEstimateRevert(t *testing.T, revertMsg string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		method, _ := req["method"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		switch method {
+		case "eth_getTransactionCount":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": "0x1"})
+		case "eth_gasPrice":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": "0x3B9ACA00"})
+		case "eth_maxPriorityFeePerGas":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": "0x3B9ACA00"})
+		case "eth_getBlockByNumber":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": map[string]interface{}{"baseFeePerGas": "0x3B9ACA00", "gasLimit": "0x1C9C380", "number": "0x1"}})
+		case "eth_chainId":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": "0x1"})
+		case "eth_estimateGas":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "error": map[string]interface{}{"code": 3, "message": "execution reverted: " + revertMsg}})
+		default:
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": nil})
+		}
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -658,6 +690,29 @@ func TestContractCall_InvalidFuncSig(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid func_sig, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestContractCall_EstimateGasRevert_PropagatesReason(t *testing.T) {
+	db := testDB(t)
+	user, wallet, _ := seedWalletWithContract(t, db)
+	rpc := mockETHRPCServerEstimateRevert(t, "Too little received")
+	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	body := jsonBody(map[string]interface{}{
+		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		"func_sig": "approve(address,uint256)",
+		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000000"},
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 for estimateGas revert, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Too little received") {
+		t.Fatalf("expected revert reason in response, got: %s", w.Body.String())
 	}
 }
 

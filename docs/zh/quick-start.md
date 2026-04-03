@@ -38,13 +38,13 @@ docker run -p 8080:8080 \
   teenet-wallet:latest
 ```
 
-服务启动后，访问 `http://localhost:8080` 即可看到内置 Web UI。
+服务启动后，访问 [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet) 即可看到内置 Web UI。
 
 ### 创建第一个钱包
 
 **第 1 步：注册账户并获取 API Key**
 
-通过 Web UI（`http://localhost:8080`）完成 Passkey 注册，然后在界面中生成 API Key。
+通过 Web UI（[`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)）完成 Passkey 注册，然后在界面中生成 API Key。
 
 或者通过 API 注册流程：
 
@@ -61,7 +61,7 @@ curl -s -X POST ${TEE_WALLET_URL}/api/auth/passkey/register/begin \
 **第 2 步：查看支持的链**
 
 ```bash
-export TEE_WALLET_URL=http://localhost:8080
+export TEE_WALLET_URL=https://test.teenet.io/instance/wallet
 export API_KEY=ocw_your_api_key_here
 
 curl -s "${TEE_WALLET_URL}/api/chains"

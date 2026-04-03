@@ -116,8 +116,14 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | `contract_call` | 合约调用 |
 | `wrap_sol` | SOL 打包为 wSOL |
 | `unwrap_sol` | wSOL 解包为 SOL |
+| `contract_update` | 更新合约白名单 |
+| `contract_delete` | 删除合约白名单条目 |
+| `addressbook_add` | 添加地址簿条目 |
+| `addressbook_update` | 更新地址簿条目 |
+| `addressbook_delete` | 删除地址簿条目 |
 | `apikey_generate` | 生成 API 密钥 |
 | `apikey_revoke` | 撤销 API 密钥 |
+| `apikey_rename` | 重命名 API 密钥 |
 
 ---
 

@@ -16,7 +16,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
 ```
 
 **参数说明：**
-- `to`（必填）：接收方地址（EVM 为 `0x...` 格式，Solana 为 base58 格式）
+- `to`（必填）：接收方地址（EVM 为 `0x...` 格式，Solana 为 base58 格式），或地址簿中的昵称（参见[地址簿](/zh/addressbook.md)）
 - `amount`（必填）：转账金额，人类可读单位（如 `"0.5"` 表示 0.5 ETH）
 - `memo`（可选）：交易备注
 
@@ -38,7 +38,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
 {
   "status": "pending_approval",
   "approval_id": 42,
-  "approval_url": "http://localhost:8080/#/approve/42"
+  "approval_url": "https://test.teenet.io/instance/wallet/#/approve/42"
 }
 ```
 
@@ -143,4 +143,4 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
 - **适用端点：** `/transfer`、`/contract-call`、`/wrap-sol`、`/unwrap-sol`。
 
 ---
-[上一页: 钱包管理](/zh/wallets.md) | [下一页: 智能合约交互](/zh/smart-contracts.md)
+[上一页: 钱包管理](/zh/wallets.md) | [下一页: 地址簿](/zh/addressbook.md)

@@ -20,7 +20,8 @@ This is the heart of the experience. You interact with your wallet by chatting w
 | **View approvals** | List and check pending approval requests | No |
 | **View history** | See audit log of all past operations | No |
 | **Check prices** | See current ETH, SOL, and stablecoin prices | No |
-| **Manage API keys** | Generate or revoke API keys | Passkey only |
+| **Address book** | Save, update, and delete contacts with nicknames | Yes (add/update via API key); Passkey only (delete) |
+| **Manage API keys** | Generate, rename, or revoke API keys | Passkey only |
 
 ---
 
@@ -37,6 +38,7 @@ This is the heart of the experience. You interact with your wallet by chatting w
 ### Sending Crypto
 
 - **"Send 0.1 ETH to 0xABC...123"** -- sends 0.1 ETH to the specified address. If it is below your threshold, it goes through instantly.
+- **"Send 0.1 ETH to alice"** -- sends 0.1 ETH to the address saved as "alice" in your address book.
 - **"Send 50 USDC to 0xDEF...456"** -- sends 50 USDC (an ERC-20 token transfer). OpenClaw will make sure the USDC contract is whitelisted first.
 - **"Transfer 1 SOL to ABC...XYZ"** -- sends 1 SOL on Solana.
 
@@ -52,6 +54,13 @@ This is the heart of the experience. You interact with your wallet by chatting w
 - **"Show my whitelisted contracts"** -- lists all contracts currently on your whitelist.
 
 Note: Adding a contract to your whitelist always requires Passkey approval. This is a safety measure to prevent unauthorized contracts from being added.
+
+### Address Book
+
+- **"Save alice as 0xABC...123 on Ethereum"** -- saves a contact. You can then use "alice" instead of the address when sending.
+- **"Send 0.5 ETH to alice"** -- sends to the address saved under the nickname "alice" on the wallet's chain.
+- **"Show my address book"** -- lists all saved contacts.
+- **"Remove alice from my contacts"** -- deletes the address book entry (requires Passkey).
 
 ### Policy and Security
 
@@ -78,6 +87,8 @@ For experienced users, these shortcuts provide fast access to common operations:
 | `/whitelist 0xabc...` | Add a contract to whitelist |
 | `/policy` | Show current approval policy |
 | `/policy 100` | Set threshold to $100 |
+| `/contacts` | Show address book |
+| `/contacts alice 0xabc...` | Save a contact |
 | `/spent` | Today's USD spend and remaining budget |
 | `/prices` | Current crypto prices |
 | `/chains` | Available blockchains |

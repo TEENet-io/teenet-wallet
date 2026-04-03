@@ -199,4 +199,4 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/revoke-approval" \
 ```
 
 ---
-[上一页: 转账](/zh/transfers.md) | [下一页: 审批系统](/zh/approvals.md)
+[上一页: 地址簿](/zh/addressbook.md) | [下一页: 审批系统](/zh/approvals.md)

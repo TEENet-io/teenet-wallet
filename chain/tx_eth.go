@@ -3,6 +3,7 @@ package chain
 import (
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
 
@@ -415,7 +416,19 @@ func BuildETHContractCallTx(rpcURL, fromAddr, contractAddr string, callData []by
 		"id": 1,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("estimate gas: %w", err)
+		selector := ""
+		if len(callData) >= 4 {
+			selector = "0x" + hex.EncodeToString(callData[:4])
+		}
+		slog.Error("eth_estimateGas failed for contract call",
+			"from", fromAddr,
+			"to", contractAddr,
+			"value_wei", value.String(),
+			"selector", selector,
+			"calldata_len", len(callData),
+			"error", err.Error(),
+		)
+		return nil, fmt.Errorf("estimate gas reverted or failed: %w", err)
 	}
 	estimateHex, ok := estimateRaw["result"].(string)
 	if !ok || estimateHex == "" {

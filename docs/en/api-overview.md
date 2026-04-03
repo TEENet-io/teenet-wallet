@@ -117,8 +117,15 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 | `contract_add` | Contract added to whitelist or pending |
 | `wrap_sol` | SOL wrapped into wSOL |
 | `unwrap_sol` | wSOL unwrapped to SOL |
+| `contract_update` | Contract whitelist entry updated |
+| `contract_delete` | Contract removed from whitelist |
+| `contract_call` | Contract call executed |
+| `addressbook_add` | Address book entry added |
+| `addressbook_update` | Address book entry updated |
+| `addressbook_delete` | Address book entry deleted |
 | `apikey_generate` | API key generated |
 | `apikey_revoke` | API key revoked |
+| `apikey_rename` | API key renamed |
 
 ---
 

@@ -47,7 +47,8 @@ func (h *ApprovalHandler) ListPending(c *gin.Context) {
 	var pending []model.ApprovalRequest
 	if err := h.db.Where("user_id = ? AND status = ?", userID, "pending").
 		Order("created_at desc").Find(&pending).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "db error")
+		slog.Error("list pending approvals failed", "user_id", userID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "list_pending", "user_id": userID})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "approvals": pending})
@@ -104,7 +105,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if approval.ApprovalType == "contract_add" {
 		var proposed model.AllowedContract
 		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
-			jsonError(c, http.StatusInternalServerError, "invalid contract data")
+			slog.Error("invalid contract data in approval", "approval_id", approval.ID, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "invalid contract data", gin.H{"stage": "unmarshal_contract", "approval_id": approval.ID})
 			return
 		}
 		proposed.ID = 0 // let DB assign a new ID
@@ -112,7 +114,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				// Already whitelisted — treat as success.
 			} else {
-				jsonError(c, http.StatusInternalServerError, "failed to add contract")
+				slog.Error("failed to add contract", "approval_id", approval.ID, "contract", proposed.ContractAddress, "error", err)
+				jsonErrorDetails(c, http.StatusInternalServerError, "failed to add contract", gin.H{"stage": "create_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
 				return
 			}
 		}
@@ -129,7 +132,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if approval.ApprovalType == "contract_update" {
 		var proposed model.AllowedContract
 		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
-			jsonError(c, http.StatusInternalServerError, "invalid contract data")
+			slog.Error("invalid contract data in approval", "approval_id", approval.ID, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "invalid contract data", gin.H{"stage": "unmarshal_contract", "approval_id": approval.ID})
 			return
 		}
 		// Update the existing record by ID.
@@ -139,7 +143,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				"symbol":   proposed.Symbol,
 				"decimals": proposed.Decimals,
 			}).Error; err != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to update contract")
+			slog.Error("failed to update contract", "approval_id", approval.ID, "contract", proposed.ContractAddress, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "failed to update contract", gin.H{"stage": "update_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
 			return
 		}
 		approverPasskeyID := passkeyUserIDFromCtx(c)
@@ -155,7 +160,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if approval.ApprovalType == "addressbook_add" {
 		var proposed model.AddressBookEntry
 		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
-			jsonError(c, http.StatusInternalServerError, "invalid address book data")
+			slog.Error("invalid address book data in approval", "approval_id", approval.ID, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "invalid address book data", gin.H{"stage": "unmarshal_addressbook", "approval_id": approval.ID})
 			return
 		}
 		proposed.ID = 0
@@ -163,7 +169,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				// Already exists — treat as success.
 			} else {
-				jsonError(c, http.StatusInternalServerError, "failed to add address book entry")
+				slog.Error("failed to add address book entry", "approval_id", approval.ID, "nickname", proposed.Nickname, "error", err)
+				jsonErrorDetails(c, http.StatusInternalServerError, "failed to add address book entry", gin.H{"stage": "create_addressbook", "approval_id": approval.ID, "nickname": proposed.Nickname})
 				return
 			}
 		}
@@ -180,7 +187,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if approval.ApprovalType == "addressbook_update" {
 		var proposed model.AddressBookEntry
 		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
-			jsonError(c, http.StatusInternalServerError, "invalid address book data")
+			slog.Error("invalid address book data in approval", "approval_id", approval.ID, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "invalid address book data", gin.H{"stage": "unmarshal_addressbook", "approval_id": approval.ID})
 			return
 		}
 		result := h.db.Model(&model.AddressBookEntry{}).Where("id = ? AND user_id = ?", proposed.ID, approval.UserID).
@@ -190,7 +198,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				"memo":     proposed.Memo,
 			})
 		if result.Error != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to update address book entry")
+			slog.Error("failed to update address book entry", "approval_id", approval.ID, "nickname", proposed.Nickname, "error", result.Error)
+			jsonErrorDetails(c, http.StatusInternalServerError, "failed to update address book entry", gin.H{"stage": "update_addressbook", "approval_id": approval.ID, "nickname": proposed.Nickname})
 			return
 		}
 		if result.RowsAffected == 0 {
@@ -210,7 +219,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	if approval.ApprovalType == "policy_change" {
 		var proposed model.ApprovalPolicy
 		if err := json.Unmarshal([]byte(approval.PolicyData), &proposed); err != nil {
-			jsonError(c, http.StatusInternalServerError, "invalid policy data")
+			slog.Error("invalid policy data in approval", "approval_id", approval.ID, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "invalid policy data", gin.H{"stage": "unmarshal_policy", "approval_id": approval.ID})
 			return
 		}
 		var policy model.ApprovalPolicy
@@ -225,7 +235,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		policy.Enabled = proposed.Enabled
 		policy.DailyLimitUSD = proposed.DailyLimitUSD
 		if err := h.db.Save(&policy).Error; err != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to apply policy")
+			slog.Error("failed to apply policy", "approval_id", approval.ID, "wallet_id", *approval.WalletID, "error", err)
+			jsonErrorDetails(c, http.StatusInternalServerError, "failed to apply policy", gin.H{"stage": "apply_policy", "approval_id": approval.ID})
 			return
 		}
 		approverPasskeyID := passkeyUserIDFromCtx(c)
@@ -249,14 +260,16 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	}
 	var wallet model.Wallet
 	if err := h.db.First(&wallet, "id = ?", *approval.WalletID).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "wallet not found")
+		slog.Error("wallet not found for approval", "approval_id", approval.ID, "wallet_id", *approval.WalletID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "wallet not found", gin.H{"stage": "load_wallet", "approval_id": approval.ID, "wallet_id": *approval.WalletID})
 		return
 	}
 
 	// Decode the original message.
 	msgBytes, err := decodeMessage(approval.Message, "hex")
 	if err != nil {
-		jsonError(c, http.StatusInternalServerError, "invalid stored message: "+err.Error())
+		slog.Error("invalid stored message in approval", "approval_id", approval.ID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "invalid stored message: "+err.Error(), gin.H{"stage": "decode_message", "approval_id": approval.ID})
 		return
 	}
 
@@ -313,13 +326,15 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			var ethParams chain.ETHTxParams
 			if jsonErr := json.Unmarshal([]byte(approval.TxParams), &ethParams); jsonErr != nil {
 				slog.Error("ETH tx params unmarshal failed", "approval_id", approval.ID, "error", jsonErr)
-				jsonError(c, http.StatusInternalServerError, "invalid stored tx params")
+				jsonErrorDetails(c, http.StatusInternalServerError, "invalid stored tx params", gin.H{"stage": "unmarshal_tx_params", "approval_id": approval.ID, "chain": wallet.Chain})
 				return
 			}
 			freshTx, buildErr := chain.RebuildETHTx(cfg.RPCURL, ethParams)
 			if buildErr != nil {
 				slog.Error("ETH tx rebuild failed", "approval_id", approval.ID, "error", buildErr)
-				jsonError(c, http.StatusBadGateway, "failed to refresh transaction params: "+buildErr.Error())
+				jsonErrorDetails(c, http.StatusBadGateway, "failed to refresh transaction params: "+buildErr.Error(), gin.H{
+					"stage": "rebuild_tx", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
+				})
 				return
 			}
 			msgBytes = freshTx.SigningHash
@@ -339,7 +354,9 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			errMsg = result.Error
 		}
 		slog.Error("TEE signing failed", "approval_id", approval.ID, "wallet_id", wallet.ID, "key", wallet.KeyName, "error", errMsg)
-		jsonError(c, http.StatusBadGateway, "signing failed: "+errMsg)
+		jsonErrorDetails(c, http.StatusBadGateway, "signing failed: "+errMsg, gin.H{
+			"stage": "signing", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
+		})
 		return
 	}
 
@@ -353,7 +370,9 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		txHash, broadcastErr = broadcastSigned(wallet, txParamsToUse, result.Signature)
 		if broadcastErr != nil {
 			slog.Error("broadcast failed", "approval_id", approval.ID, "wallet_id", wallet.ID, "address", wallet.Address, "error", broadcastErr)
-			respondBroadcastError(c, broadcastErr)
+			respondBroadcastErrorDetails(c, broadcastErr, gin.H{
+				"approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
+			})
 			return
 		}
 	}
@@ -367,7 +386,8 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updates["tx_hash"] = txHash
 	}
 	if err := h.db.Model(&approval).Updates(updates).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "update approval failed")
+		slog.Error("update approval failed", "approval_id", approval.ID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "update approval failed", gin.H{"stage": "update_approval", "approval_id": approval.ID})
 		return
 	}
 	auditExtra := map[string]interface{}{"type": approval.ApprovalType}
@@ -434,7 +454,8 @@ func (h *ApprovalHandler) Reject(c *gin.Context) {
 		return
 	}
 	if err := h.db.Model(&approval).Update("status", "rejected").Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "update failed")
+		slog.Error("reject approval update failed", "approval_id", approval.ID, "error", err)
+		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "reject_approval", "approval_id": approval.ID})
 		return
 	}
 	updateAuditByApprovalID(h.db, approval.ID, "rejected", map[string]interface{}{
@@ -524,7 +545,7 @@ func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessio
 	var user model.User
 	if err := db.First(&user, sessionUserID).Error; err != nil {
 		slog.Error("SECURITY: failed to load user for passkey verification", "user_id", sessionUserID, "error", err)
-		jsonError(c, http.StatusInternalServerError, "failed to verify user identity")
+		jsonErrorDetails(c, http.StatusInternalServerError, "failed to verify user identity", gin.H{"stage": "passkey_verify"})
 		return false
 	}
 	res, err := sdkClient.PasskeyLoginVerifyAs(c.Request.Context(), loginSessionID, credBytes, user.PasskeyUserID)

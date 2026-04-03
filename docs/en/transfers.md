@@ -27,6 +27,8 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer \
   }'
 ```
 
+The `to` field accepts either a raw on-chain address or an address book nickname (see [Address Book](addressbook.md)). When a nickname is provided, the wallet resolves it to the stored address for the wallet's chain.
+
 The backend builds the transaction (EIP-1559 for EVM, native transfer instruction for Solana), signs it via the TEE cluster, and broadcasts it. The response includes the `tx_hash` on success.
 
 ### ERC-20 Token Transfers
@@ -115,4 +117,4 @@ If a request with the same idempotency key has already been processed, the walle
 - **Applies to:** `/transfer`, `/contract-call`, `/wrap-sol`, `/unwrap-sol`.
 
 ---
-[Previous: Wallet Management](/en/wallets.md) | [Next: Smart Contracts](/en/smart-contracts.md)
+[Previous: Wallet Management](/en/wallets.md) | [Next: Address Book](/en/addressbook.md)

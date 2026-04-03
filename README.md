@@ -42,6 +42,13 @@ A multi-chain crypto wallet where private keys never leave TEE hardware -- split
 - **Rate limiting** -- per-API-key for general requests, per-IP for registration endpoints
 - **Invite-based and open registration** flows
 
+### Address Book
+
+- **Nickname-based transfers** -- save contacts as `alice`, `treasury`, etc. and use nicknames instead of raw addresses in transfer requests
+- **Per-user, per-chain** entries with unique nickname enforcement
+- **Dual-auth support** -- API key creates pending approval, Passkey applies directly with fresh hardware assertion
+- **Address validation** per chain family (EVM checksummed hex, Solana base58)
+
 ### Infrastructure
 
 - **Structured logging** (slog, JSON format)
@@ -167,6 +174,7 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | DELETE | `/api/auth/account` | Passkey | Delete account and all keys |
 | POST | `/api/auth/apikey/generate` | Passkey | Generate a new API key (max 10, optional label) |
 | GET | `/api/auth/apikey/list` | Passkey | List all API keys (id, prefix, label, created_at) |
+| PATCH | `/api/auth/apikey` | Passkey | Rename an API key (update label) |
 | DELETE | `/api/auth/apikey` | Passkey | Revoke an API key by prefix |
 
 ### Custom Chains
@@ -227,6 +235,15 @@ RPC URLs for each blockchain are defined in `chains.json`, not as individual env
 | GET | `/api/approvals/:id` | Dual | Get approval details |
 | POST | `/api/approvals/:id/approve` | Passkey | Approve a pending request |
 | POST | `/api/approvals/:id/reject` | Passkey | Reject a pending request |
+
+### Address Book
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/addressbook` | Dual | List address book entries (filter by `nickname`, `chain`) |
+| POST | `/api/addressbook` | Dual | Add entry (API key creates pending approval) |
+| PUT | `/api/addressbook/:id` | Dual | Update entry (API key creates pending approval) |
+| DELETE | `/api/addressbook/:id` | Passkey | Delete an entry |
 
 ### Faucet (Testnet Only)
 
@@ -305,6 +322,7 @@ handler/
   call_read.go           Read-only contract calls
   approval.go            Approval queue (list, approve, reject)
   balance.go             Native token balance queries
+  addressbook.go         Address book CRUD with nickname resolution
   audit.go               Audit log queries
   faucet.go              Testnet faucet proxy (Sepolia, Base Sepolia)
   middleware.go          Auth, CSRF, Passkey-only middleware
@@ -319,6 +337,7 @@ model/
   wallet.go              Wallet, CustomChain models and chain config loader
   contract.go            AllowedContract model (whitelist)
   policy.go              ApprovalPolicy and ApprovalRequest models
+  addressbook.go         AddressBookEntry model
   audit.go               AuditLog model
   idempotency.go         IdempotencyRecord model
 chain/

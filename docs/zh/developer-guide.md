@@ -40,6 +40,7 @@ teenet-wallet/
 │   ├── call_read.go     # 只读合约查询（eth_call）
 │   ├── approval.go      # 审批列表/详情/批准/拒绝、审批后执行
 │   ├── balance.go       # 链上余额查询（原生 + ERC-20 + SPL）
+│   ├── addressbook.go   # 地址簿增删改查、昵称解析
 │   ├── audit.go         # 审计日志查询 + writeAuditCtx 辅助函数
 │   ├── price.go         # 价格服务：CoinGecko + Jupiter，TTL 缓存
 │   ├── middleware.go     # 认证中间件（API Key + Passkey 会话）、CORS、CSP
@@ -53,6 +54,7 @@ teenet-wallet/
 │   ├── apikey.go        # APIKey
 │   ├── policy.go        # ApprovalPolicy、ApprovalRequest
 │   ├── contract.go      # AllowedContract
+│   ├── addressbook.go   # AddressBookEntry
 │   ├── audit.go         # AuditLog
 │   └── idempotency.go   # IdempotencyRecord
 ├── chain/               # 区块链交互（无数据库、无 HTTP -- 纯链逻辑）
@@ -189,6 +191,7 @@ SQLite WAL 模式，启动时自动迁移：
 | `allowed_contracts` | `AllowedContract` | 每个钱包的合约白名单 |
 | `audit_logs` | `AuditLog` | 完整操作审计记录 |
 | `idempotency_records` | `IdempotencyRecord` | Idempotency-Key 缓存（24 小时 TTL） |
+| `address_book_entries` | `AddressBookEntry` | 地址簿（按用户/链唯一昵称） |
 | `custom_chains` | `CustomChain` | 用户添加的 EVM 链 |
 
 ---

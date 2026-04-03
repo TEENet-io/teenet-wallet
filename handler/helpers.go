@@ -75,7 +75,7 @@ func createPendingApproval(db *gorm.DB, c *gin.Context, walletID *string, approv
 		ExpiresAt:    time.Now().Add(expiryDur),
 	}
 	if err := db.Create(&approval).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to create approval request")
+		jsonErrorDetails(c, http.StatusInternalServerError, "failed to create approval request", gin.H{"stage": "create_approval"})
 		return nil, false
 	}
 	return &approval, true

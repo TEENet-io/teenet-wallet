@@ -53,7 +53,7 @@ Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://opencl
 
 TEENet Wallet 内置了一个完整的 Web 前端界面，开箱即用，无需单独部署。
 
-**访问方式：** 启动服务后直接访问 `http://<HOST>:<PORT>`（默认 `http://localhost:8080`）。
+**访问方式：** 启动服务后直接访问 [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)。
 
 **主要功能：**
 - **账户管理**：Passkey 注册/登录、API Key 生成与管理

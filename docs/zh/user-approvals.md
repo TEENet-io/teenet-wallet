@@ -1,4 +1,4 @@
-[wallet-url]: https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a
+[wallet-url]: https://test.teenet.io/instance/wallet/
 
 # 审批与 Web 界面
 

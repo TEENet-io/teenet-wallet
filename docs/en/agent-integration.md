@@ -31,7 +31,7 @@ TEENet Wallet is designed to serve as the custody layer for AI agents. The `skil
 
 ## Web UI
 
-TEENet Wallet includes a built-in web interface served at the root URL (e.g., `http://localhost:8080`). The web UI provides:
+TEENet Wallet includes a built-in web interface served at the root URL (e.g., [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)). The web UI provides:
 
 - **Account management:** Passkey registration, login, and session management.
 - **Wallet dashboard:** Create, view, rename, and delete wallets. View addresses, balances, and chain information.
