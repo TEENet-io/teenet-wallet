@@ -84,5 +84,7 @@ API 密钥是 OpenClaw 访问你钱包的凭证。
 
 策略变更始终需要 Passkey 确认，API 密钥泄露也无法降低你的保护级别。
 
+<div align="center"><img src="picture/appqueue.png" alt="通过 Web 审批交易" width="480" /></div>
+
 ---
 [下一页: 和 OpenClaw 对话](/zh/user-commands.md)

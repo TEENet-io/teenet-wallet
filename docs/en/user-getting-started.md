@@ -84,5 +84,7 @@ Set an approval policy so large transactions require your fingerprint.
 
 Policy changes always require your Passkey approval, so a compromised API key can't weaken your protections.
 
+<div align="center"><img src="picture/appqueue.png" alt="Web approval page" width="480" /></div>
+
 ---
 [Next: Talking to OpenClaw](/en/user-commands.md)
