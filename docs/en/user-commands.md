@@ -42,6 +42,8 @@ This is the heart of the experience. You interact with your wallet by chatting w
 - **"Send 50 USDC to 0xDEF...456"** -- sends 50 USDC (an ERC-20 token transfer). OpenClaw will make sure the USDC contract is whitelisted first.
 - **"Transfer 1 SOL to ABC...XYZ"** -- sends 1 SOL on Solana.
 
+<div align="center"><img src="picture/transfer-flow.gif" alt="Transfer conversation flow demo" width="480" /></div>
+
 ### DeFi and Contract Interaction
 
 - **"Swap 0.5 ETH for USDC on Uniswap"** -- OpenClaw builds the swap transaction and sends you an approval link. All contract interactions require your Passkey approval.

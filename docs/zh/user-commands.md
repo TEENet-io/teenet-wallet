@@ -43,6 +43,8 @@
 
 如果转账金额低于你设定的阈值，OpenClaw 会即时完成并告诉你交易哈希。如果超过阈值，OpenClaw 会在聊天中发给你一个审批链接，等你用指纹确认后再执行。
 
+<div align="center"><img src="picture/transfer-flow.gif" alt="转账对话流程演示" width="480" /></div>
+
 ### DeFi 和合约交互
 
 - **"在 Uniswap 上把 0.5 ETH 换成 USDC"** -- OpenClaw 构建交易并发给你审批链接。所有合约操作都需要你用 Passkey 确认
