@@ -708,8 +708,8 @@ func TestContractCall_EstimateGasRevert_PropagatesReason(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502 for estimateGas revert, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for estimateGas revert, got %d: %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), "Too little received") {
 		t.Fatalf("expected revert reason in response, got: %s", w.Body.String())

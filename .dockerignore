@@ -5,3 +5,12 @@ frontend-src/dist
 frontend/
 *.md
 docs/
+.github/
+*.tar.gz
+plugin/node_modules
+skill/
+export.sh
+teenet-wallet
+.env
+.env.*
+.claude/

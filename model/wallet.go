@@ -121,6 +121,8 @@ var defaultChains = []ChainConfig{
 // LoadChains loads chain configuration from a JSON file.
 // Falls back to built-in defaults if the file does not exist or cannot be parsed.
 func LoadChains(path string) {
+	chainsMu.Lock()
+	defer chainsMu.Unlock()
 	Chains = make(map[string]ChainConfig)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -154,6 +156,8 @@ func LoadCustomChains(db *gorm.DB) {
 		slog.Warn("failed to load custom chains from db", "error", err)
 		return
 	}
+	chainsMu.Lock()
+	defer chainsMu.Unlock()
 	added := 0
 	for _, row := range rows {
 		if _, exists := Chains[row.Name]; exists {

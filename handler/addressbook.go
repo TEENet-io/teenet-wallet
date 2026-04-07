@@ -24,16 +24,17 @@ var nicknameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 type AddressBookHandler struct {
 	db             *gorm.DB
 	sdk            *sdk.Client
+	baseURL        string
 	approvalExpiry time.Duration
 }
 
 // NewAddressBookHandler creates a new AddressBookHandler.
-func NewAddressBookHandler(db *gorm.DB, sdkClient *sdk.Client, approvalExpiry ...time.Duration) *AddressBookHandler {
+func NewAddressBookHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, approvalExpiry ...time.Duration) *AddressBookHandler {
 	expiry := 30 * time.Minute
 	if len(approvalExpiry) > 0 && approvalExpiry[0] > 0 {
 		expiry = approvalExpiry[0]
 	}
-	return &AddressBookHandler{db: db, sdk: sdkClient, approvalExpiry: expiry}
+	return &AddressBookHandler{db: db, sdk: sdkClient, baseURL: baseURL, approvalExpiry: expiry}
 }
 
 // ListEntries returns all address book entries for the authenticated user.
@@ -137,13 +138,8 @@ func (h *AddressBookHandler) AddEntry(c *gin.Context) {
 		}
 		writeAuditCtx(h.db, c, "addressbook_add", "pending", nil, map[string]interface{}{
 			"nickname": nickname, "chain": req.Chain, "address": addr, "approval_id": approval.ID,
-		})
-		c.JSON(http.StatusAccepted, gin.H{
-			"success":     true,
-			"pending":     true,
-			"approval_id": approval.ID,
-			"message":     "Address book entry submitted for approval",
-		})
+		}, approval.ID)
+		respondPendingApproval(c, h.baseURL, approval.ID, "Address book entry submitted for approval")
 		return
 	}
 
@@ -260,13 +256,8 @@ func (h *AddressBookHandler) UpdateEntry(c *gin.Context) {
 		}
 		writeAuditCtx(h.db, c, "addressbook_update", "pending", nil, map[string]interface{}{
 			"entry_id": entryID, "nickname": proposed.Nickname, "address": proposed.Address, "approval_id": approval.ID,
-		})
-		c.JSON(http.StatusAccepted, gin.H{
-			"success":     true,
-			"pending":     true,
-			"approval_id": approval.ID,
-			"message":     "Address book update submitted for approval",
-		})
+		}, approval.ID)
+		respondPendingApproval(c, h.baseURL, approval.ID, "Address book update submitted for approval")
 		return
 	}
 

@@ -151,20 +151,23 @@ func TestSSEHub_ConcurrentSafety(t *testing.T) {
 	wg.Add(goroutines * 2)
 
 	// Half goroutines subscribe and unsubscribe.
+	// Each goroutine uses a unique userID to avoid hitting the per-user connection limit.
 	for i := 0; i < goroutines; i++ {
+		userID := uint(i + 1)
 		go func() {
 			defer wg.Done()
-			ch := hub.Subscribe(1)
+			ch := hub.Subscribe(userID)
 			time.Sleep(time.Millisecond)
-			hub.Unsubscribe(1, ch)
+			hub.Unsubscribe(userID, ch) // safe even if ch is nil
 		}()
 	}
 
 	// Half goroutines broadcast.
 	for i := 0; i < goroutines; i++ {
+		userID := uint(i + 1)
 		go func() {
 			defer wg.Done()
-			hub.Broadcast(1, SSEEvent{Type: "concurrent", Data: "test"})
+			hub.Broadcast(userID, SSEEvent{Type: "concurrent", Data: "test"})
 		}()
 	}
 

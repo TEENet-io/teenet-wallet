@@ -28,36 +28,37 @@ type ApprovalPolicy struct {
 type ApprovalRequest struct {
 	ID           uint      `json:"id" gorm:"primaryKey;autoIncrement:false"`
 	WalletID     *string   `json:"wallet_id,omitempty" gorm:"size:36;index"`
-	UserID       uint      `json:"user_id" gorm:"not null"`
+	UserID       uint      `json:"user_id" gorm:"not null;index:idx_approval_user_status"`
 	ApprovalType string    `json:"approval_type" gorm:"default:'sign'"` // "sign", "transfer", "contract_call", "contract_add", "contract_update", "policy_change", "addressbook_add", "addressbook_update"
 	Message      string    `json:"message" gorm:"type:text"`            // hex signing hash (ETH) or message bytes (SOL); empty for policy_change
 	TxContext    string    `json:"tx_context" gorm:"type:text"`         // JSON display info for sign/transfer
 	TxParams     string    `json:"tx_params" gorm:"type:text"`          // JSON chain params for broadcast (transfer only)
 	PolicyData   string    `json:"policy_data" gorm:"type:text"`        // JSON proposed ApprovalPolicy (policy_change only)
 	TxHash       string    `json:"tx_hash" gorm:"type:text"`            // filled after approval + broadcast
-	Status       string    `json:"status" gorm:"default:'pending'"`
+	Status       string    `json:"status" gorm:"default:'pending';index:idx_approval_user_status"`
 	Signature    string    `json:"signature" gorm:"type:text"` // filled after sign/transfer approval
 	ApprovedBy   *uint     `json:"approved_by"`                         // PasskeyUserID of approver
 	AuthMode      string    `json:"auth_mode" gorm:"size:16"`                  // "passkey" | "apikey"
 	APIKeyPrefix  string    `json:"api_key_prefix,omitempty" gorm:"size:16"` // prefix of the API key that created this request
 	CreatedAt    time.Time `json:"created_at"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	ExpiresAt    time.Time `json:"expires_at" gorm:"index"`
 }
 
 // BeforeCreate generates a random ID for ApprovalRequest so IDs are not sequential.
-// Uses 8 digits (10000000–99999999) for ~90M possible values. Retries on collision.
+// Uses a 4-byte random uint32 in the range 100,000,000–2,147,483,647 (~2B values)
+// to stay within SQLite's int64 range and avoid negative ID issues.
 func (a *ApprovalRequest) BeforeCreate(db *gorm.DB) error {
 	if a.ID != 0 {
 		return nil
 	}
 	for range 10 {
-		var buf [8]byte
+		var buf [4]byte
 		if _, err := rand.Read(buf[:]); err != nil {
 			return err
 		}
-		id := uint(binary.BigEndian.Uint64(buf[:]))
-		if id < 1000000000 {
-			id += 1000000000
+		id := uint(binary.BigEndian.Uint32(buf[:]))
+		if id < 100000000 {
+			id += 100000000
 		}
 		var count int64
 		db.Model(&ApprovalRequest{}).Where("id = ?", id).Count(&count)

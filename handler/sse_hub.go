@@ -37,23 +37,33 @@ func NewSSEHub() *SSEHub {
 	}
 }
 
-// Subscribe registers a new subscriber for userID and returns a buffered channel
-// that will receive events broadcast to that user.
+const maxSSEConnsPerUser = 5
+
+// Subscribe registers a new subscriber for userID and returns a buffered channel.
+// Returns nil if the user has reached the maximum number of SSE connections.
 func (h *SSEHub) Subscribe(userID uint) chan SSEEvent {
-	ch := make(chan SSEEvent, 16)
 	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.subscribers[userID]) >= maxSSEConnsPerUser {
+		slog.Warn("SSE connection limit reached", "userID", userID, "max", maxSSEConnsPerUser)
+		return nil
+	}
+	ch := make(chan SSEEvent, 16)
 	h.subscribers[userID] = append(h.subscribers[userID], ch)
-	h.mu.Unlock()
 	return ch
 }
 
 // Unsubscribe removes ch from userID's subscriber list and closes the channel.
+// Safe to call with a nil channel (e.g. when Subscribe returned nil due to limit).
 func (h *SSEHub) Unsubscribe(userID uint, ch chan SSEEvent) {
+	if ch == nil {
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	channels := h.subscribers[userID]
-	updated := make([]chan SSEEvent, 0, len(channels)-1)
+	updated := make([]chan SSEEvent, 0, len(channels))
 	for _, c := range channels {
 		if c != ch {
 			updated = append(updated, c)
@@ -65,6 +75,18 @@ func (h *SSEHub) Unsubscribe(userID uint, ch chan SSEEvent) {
 		h.subscribers[userID] = updated
 	}
 	close(ch)
+}
+
+// Stop closes all subscriber channels.
+func (h *SSEHub) Stop() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for userID, channels := range h.subscribers {
+		for _, ch := range channels {
+			close(ch)
+		}
+		delete(h.subscribers, userID)
+	}
 }
 
 // Broadcast sends evt to all subscribers for userID. The send is non-blocking;

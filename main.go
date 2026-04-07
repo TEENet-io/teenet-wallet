@@ -58,6 +58,9 @@ func main() {
 	dataDir := envOrDefault("DATA_DIR", "/data")
 	baseURL := envOrDefault("BASE_URL", "http://localhost:"+port)
 	frontendURL := envOrDefault("FRONTEND_URL", "")
+	if frontendURL == "*" {
+		slog.Warn("CORS: FRONTEND_URL is set to wildcard '*' — any origin can make cross-origin requests. Restrict to a specific origin in production.")
+	}
 	chainsFile := envOrDefault("CHAINS_FILE", "./chains.json")
 	apiKeyRateLimit        := envOrDefaultInt("API_KEY_RATE_LIMIT", 200)       // general: requests per minute per API key
 	walletCreateRateLimit  := envOrDefaultInt("WALLET_CREATE_RATE_LIMIT", 5)  // wallet creation is TEE-DKG-bound
@@ -72,7 +75,7 @@ func main() {
 	model.LoadChains(chainsFile)
 
 	// Init SQLite DB.
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		log.Fatalf("mkdir data dir: %v", err)
 	}
 	dbPath := filepath.Join(dataDir, "wallet.db")
@@ -82,9 +85,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
-	sqlDB, _ := db.DB()
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("get underlying sql.DB: %v", err)
+	}
 	sqlDB.Exec("PRAGMA journal_mode=WAL")
 	sqlDB.Exec("PRAGMA busy_timeout=5000")
+	sqlDB.Exec("PRAGMA foreign_keys=ON")
+	sqlDB.Exec("PRAGMA synchronous=NORMAL")
+	sqlDB.Exec("PRAGMA cache_size=-64000")    // 64 MB
+	sqlDB.Exec("PRAGMA temp_store=MEMORY")
+	sqlDB.Exec("PRAGMA mmap_size=268435456")  // 256 MB
 
 	if err := db.AutoMigrate(
 		&model.User{},
@@ -118,10 +129,12 @@ func main() {
 	sessions := handler.NewSessionStore()
 	defer sessions.Stop()
 	sseHub := handler.NewSSEHub()
+	defer sseHub.Stop()
 
 	// Price service for USD threshold conversion.
 	priceTTL := time.Duration(envOrDefaultInt("PRICE_CACHE_TTL", 60)) * time.Second
 	priceService := handler.NewPriceService(priceTTL)
+	defer priceService.Stop()
 
 	// Router.
 	gin.SetMode(gin.ReleaseMode)
@@ -218,126 +231,19 @@ func main() {
 	passkeyOnly.PATCH("/auth/apikey", authH.RenameAPIKey)
 
 	// Custom chain management (Passkey only — structural change to the wallet service).
-	passkeyOnly.POST("/chains", func(c *gin.Context) {
-		var req struct {
-			Name     string `json:"name"`
-			Label    string `json:"label"`
-			Currency string `json:"currency"`
-			RPCURL   string `json:"rpc_url"`
-			ChainID  uint64 `json:"chain_id"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": "invalid request body"})
-			return
-		}
-
-		// Validate required fields.
-		if req.Name == "" {
-			c.JSON(400, gin.H{"error": "name is required"})
-			return
-		}
-		if req.RPCURL == "" {
-			c.JSON(400, gin.H{"error": "rpc_url is required"})
-			return
-		}
-
-		// SSRF protection: validate the RPC URL is not targeting internal networks.
-		if err := validateExternalURL(req.RPCURL); err != nil {
-			c.JSON(400, gin.H{"error": fmt.Sprintf("invalid rpc_url: %s", err.Error())})
-			return
-		}
-
-		// Only EVM custom chains are supported for now.
-		// (Solana requires different protocol/curve and additional validation.)
-		family := "evm"
-
-		// Reject if it would collide with a built-in chain.
-		if existing, exists := model.GetChain(req.Name); exists && !existing.Custom {
-			c.JSON(409, gin.H{"error": "cannot overwrite a built-in chain"})
-			return
-		}
-		// Reject if a custom chain with this name already exists.
-		if existing, exists := model.GetChain(req.Name); exists && existing.Custom {
-			c.JSON(409, gin.H{"error": "custom chain already exists"})
-			return
-		}
-
-		row := model.CustomChain{
-			Name:     req.Name,
-			Label:    req.Label,
-			Currency: req.Currency,
-			Family:   family,
-			RPCURL:   req.RPCURL,
-			ChainID:  req.ChainID,
-		}
-		if err := db.Create(&row).Error; err != nil {
-			slog.Error("create custom chain", "error", err)
-			c.JSON(500, gin.H{"error": "failed to persist custom chain"})
-			return
-		}
-
-		cfg := model.ChainConfig{
-			Name:     row.Name,
-			Label:    row.Label,
-			Protocol: "ecdsa",
-			Curve:    "secp256k1",
-			Currency: row.Currency,
-			Family:   family,
-			RPCURL:   row.RPCURL,
-			ChainID:  row.ChainID,
-			Custom:   true,
-		}
-		model.SetChain(cfg.Name, cfg)
-
-		slog.Info("custom chain added", "name", cfg.Name, "chain_id", cfg.ChainID)
-		c.JSON(201, gin.H{"success": true, "chain": cfg})
-	})
-
-	passkeyOnly.DELETE("/chains/:name", func(c *gin.Context) {
-		name := c.Param("name")
-
-		existing, exists := model.GetChain(name)
-		if !exists {
-			c.JSON(404, gin.H{"error": "chain not found"})
-			return
-		}
-		if !existing.Custom {
-			c.JSON(403, gin.H{"error": "cannot delete a built-in chain"})
-			return
-		}
-
-		// Refuse if any wallet is using this chain.
-		var count int64
-		if err := db.Model(&model.Wallet{}).Where("chain = ?", name).Count(&count).Error; err != nil {
-			slog.Error("check wallets on chain", "error", err)
-			c.JSON(500, gin.H{"error": "failed to check wallets"})
-			return
-		}
-		if count > 0 {
-			c.JSON(409, gin.H{"error": "chain has existing wallets; delete them first"})
-			return
-		}
-
-		if err := db.Where("name = ?", name).Delete(&model.CustomChain{}).Error; err != nil {
-			slog.Error("delete custom chain", "error", err)
-			c.JSON(500, gin.H{"error": "failed to delete custom chain"})
-			return
-		}
-		model.DeleteChain(name)
-
-		slog.Info("custom chain deleted", "name", name)
-		c.JSON(200, gin.H{"success": true})
-	})
+	chainH := handler.NewChainHandler(db, validateExternalURL)
+	passkeyOnly.POST("/chains", chainH.AddChain)
+	passkeyOnly.DELETE("/chains/:name", chainH.DeleteChain)
 
 	// Contract whitelist (dual-auth for read, Passkey-only for write).
-	contractH := handler.NewContractHandler(db, sdkClient, approvalExpiry)
+	contractH := handler.NewContractHandler(db, sdkClient, baseURL, approvalExpiry)
 	auth.GET("/wallets/:id/contracts", contractH.ListContracts)
 	auth.POST("/wallets/:id/contracts", contractH.AddContract)           // passkey: direct; apikey: pending approval
 	auth.PUT("/wallets/:id/contracts/:cid", contractH.UpdateContract)    // passkey: direct; apikey: pending approval
 	passkeyOnly.DELETE("/wallets/:id/contracts/:cid", contractH.DeleteContract)
 
 	// Address book (dual-auth for read/add/update, Passkey-only for delete).
-	abH := handler.NewAddressBookHandler(db, sdkClient, approvalExpiry)
+	abH := handler.NewAddressBookHandler(db, sdkClient, baseURL, approvalExpiry)
 	auth.GET("/addressbook", abH.ListEntries)
 	auth.POST("/addressbook", abH.AddEntry)
 	auth.PUT("/addressbook/:id", abH.UpdateEntry)
@@ -352,6 +258,9 @@ func main() {
 	walletH.SetPriceService(priceService)
 	walletH.SetMaxWallets(maxWalletsPerUser)
 	walletH.SetIdempotencyStore(idempotencyStore)
+	reaperCtx, reaperCancel := context.WithCancel(context.Background())
+	defer reaperCancel()
+	walletH.StartReaper(reaperCtx)
 	auth.POST("/wallets", handler.UserRateLimitMiddleware(walletRateLimiter), walletH.CreateWallet)
 	auth.GET("/wallets", walletH.ListWallets)
 	auth.GET("/wallets/:id", walletH.GetWallet)
@@ -388,6 +297,7 @@ func main() {
 
 	// Approval routes.
 	approvalH := handler.NewApprovalHandler(db, sdkClient, sseHub)
+	defer approvalH.Stop()
 	approvalH.SetPriceService(priceService)
 	auth.GET("/approvals/pending", approvalH.ListPending)
 	auth.GET("/approvals/:id", approvalH.GetApproval)
@@ -414,7 +324,14 @@ func main() {
 		"max_users", maxUsers,
 	)
 
-	srv := &http.Server{Addr: addr, Handler: r}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "error", err)
@@ -425,6 +342,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	slog.Info("shutting down")
+	// Run SQLite optimize on shutdown to update query planner statistics.
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.Exec("PRAGMA optimize")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -494,6 +415,18 @@ func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
 	}
 }
 
+var privateCIDRs []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+		"169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
+	} {
+		_, network, _ := net.ParseCIDR(cidr)
+		privateCIDRs = append(privateCIDRs, network)
+	}
+}
+
 // validateExternalURL checks that the URL uses http(s) and does not resolve to
 // a private/loopback IP address, preventing SSRF attacks.
 func validateExternalURL(rawURL string) error {
@@ -515,27 +448,12 @@ func validateExternalURL(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("cannot resolve host: %s", host)
 	}
-	privateRanges := []string{
-		"127.0.0.0/8",
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
-		"169.254.0.0/16",
-		"::1/128",
-		"fc00::/7",
-		"fe80::/10",
-	}
-	var cidrs []*net.IPNet
-	for _, cidr := range privateRanges {
-		_, network, _ := net.ParseCIDR(cidr)
-		cidrs = append(cidrs, network)
-	}
 	for _, ipStr := range ips {
 		ip := net.ParseIP(ipStr)
 		if ip == nil {
 			continue
 		}
-		for _, cidr := range cidrs {
+		for _, cidr := range privateCIDRs {
 			if cidr.Contains(ip) {
 				return fmt.Errorf("private/internal IP address is not allowed")
 			}

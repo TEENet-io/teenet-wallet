@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -100,6 +101,8 @@ type PriceService struct {
 
 	refreshMu   sync.Mutex // serialises refresh() calls
 	symbolMapMu sync.Mutex // serialises ensureSymbolMap() calls
+
+	cancel context.CancelFunc
 }
 
 // NewPriceService creates a PriceService with the given cache TTL.
@@ -109,6 +112,7 @@ func NewPriceService(ttl time.Duration) *PriceService {
 
 // NewPriceServiceWithBaseURL creates a PriceService with a custom API base URL (for testing).
 func NewPriceServiceWithBaseURL(ttl time.Duration, baseURL string) *PriceService {
+	ctx, cancel := context.WithCancel(context.Background())
 	ps := &PriceService{
 		prices:         make(map[string]float64),
 		ttl:            ttl,
@@ -117,9 +121,31 @@ func NewPriceServiceWithBaseURL(ttl time.Duration, baseURL string) *PriceService
 		jupiterBaseURL: "https://api.jup.ag",
 		tokenPrices:    make(map[string]float64),
 		tokenExpiry:    make(map[string]time.Time),
+		cancel:         cancel,
 	}
+	// Best-effort initial refresh; if CoinGecko is down, the background goroutine will retry.
 	ps.refresh()
+	// Background goroutine refreshes prices on every TTL interval.
+	go ps.backgroundRefresh(ctx, ttl)
+	slog.Info("price service started", "ttl", ttl, "cached_count", len(ps.prices))
 	return ps
+}
+
+// Stop shuts down the background refresh goroutine.
+func (ps *PriceService) Stop() { ps.cancel() }
+
+// backgroundRefresh periodically calls refresh() at the given interval until ctx is cancelled.
+func (ps *PriceService) backgroundRefresh(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ps.refresh()
+		}
+	}
 }
 
 // SetJupiterBaseURL overrides the Jupiter API base URL (for testing).
@@ -127,6 +153,7 @@ func (ps *PriceService) SetJupiterBaseURL(url string) { ps.jupiterBaseURL = url 
 
 // GetUSDPrice returns the USD price for a currency symbol (e.g. "ETH", "SOL", "USDC").
 // Stablecoins return 1.0. Unknown currencies return an error.
+// Prices are refreshed in the background; this method never blocks on a network call.
 func (ps *PriceService) GetUSDPrice(currency string) (float64, error) {
 	currency = strings.ToUpper(strings.TrimSpace(currency))
 	if stablecoins[currency] {
@@ -138,23 +165,10 @@ func (ps *PriceService) GetUSDPrice(currency string) (float64, error) {
 
 	ps.mu.RLock()
 	price, ok := ps.prices[currency]
-	expired := time.Since(ps.lastUpdate) > ps.ttl
 	ps.mu.RUnlock()
 
-	if ok && !expired {
+	if ok {
 		return price, nil
-	}
-
-	// Refresh (only one goroutine refreshes; others use stale data).
-	ps.refresh()
-
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
-	if p, ok := ps.prices[currency]; ok {
-		return p, nil
-	}
-	if price > 0 {
-		return price, nil // stale but non-zero
 	}
 	return 0, fmt.Errorf("price unavailable for %s", currency)
 }

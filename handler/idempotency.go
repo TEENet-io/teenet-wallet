@@ -39,7 +39,12 @@ func (s *IdempotencyStore) cleanup(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.db.Where("expires_at < ?", time.Now()).Delete(&model.IdempotencyRecord{})
+			for {
+				result := s.db.Where("expires_at < ?", time.Now()).Limit(1000).Delete(&model.IdempotencyRecord{})
+				if result.Error != nil || result.RowsAffected < 1000 {
+					break
+				}
+			}
 		}
 	}
 }

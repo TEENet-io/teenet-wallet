@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"log/slog"
 	"net/http"
@@ -138,11 +140,19 @@ func AuthMiddleware(db *gorm.DB, sessions *SessionStore) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 			return
 		}
-		if hashAPIKeyWithSalt(token, apiKey.KeySalt) != apiKey.KeyHash {
-			safePrefix := token[:4] + "****"
-			slog.Warn("invalid API key", "prefix", safePrefix, "method", c.Request.Method, "path", c.Request.URL.Path, "ip", c.ClientIP())
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
-			return
+		hmacHash := hashAPIKeyWithSalt(token, apiKey.KeySalt)
+		if subtle.ConstantTimeCompare([]byte(hmacHash), []byte(apiKey.KeyHash)) != 1 {
+			// Fall back to legacy SHA-256 hash for keys created before the HMAC migration.
+			legacyHash := hashAPIKeyLegacy(token, apiKey.KeySalt)
+			if subtle.ConstantTimeCompare([]byte(legacyHash), []byte(apiKey.KeyHash)) != 1 {
+				safePrefix := token[:4] + "****"
+				slog.Warn("invalid API key", "prefix", safePrefix, "method", c.Request.Method, "path", c.Request.URL.Path, "ip", c.ClientIP())
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
+				return
+			}
+			// Auto-migrate: re-hash with HMAC so future lookups use the new algorithm.
+			db.Model(&apiKey).Update("key_hash", hmacHash)
+			slog.Info("API key auto-migrated to HMAC", "prefix", apiKey.Prefix)
 		}
 		c.Set("userID", apiKey.UserID)
 		c.Set("authMode", "apikey")
@@ -166,7 +176,7 @@ func CSRFMiddleware() gin.HandlerFunc {
 		}
 		token := c.GetHeader("X-CSRF-Token")
 		expected := c.GetString("csrfToken")
-		if token == "" || token != expected {
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(expected)) != 1 {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "invalid CSRF token"})
 			return
 		}
@@ -197,6 +207,13 @@ func extractBearer(c *gin.Context) string {
 }
 
 func hashAPIKeyWithSalt(key, salt string) string {
+	mac := hmac.New(sha256.New, []byte(salt))
+	mac.Write([]byte(key))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// hashAPIKeyLegacy computes the old SHA-256(salt || key) hash for backward compatibility.
+func hashAPIKeyLegacy(key, salt string) string {
 	h := sha256.New()
 	h.Write([]byte(salt))
 	h.Write([]byte(key))

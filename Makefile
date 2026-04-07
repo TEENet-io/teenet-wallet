@@ -1,10 +1,14 @@
-.PHONY: build test lint docker frontend clean
+.PHONY: build test lint docker frontend clean coverage
 
 build:
-	CGO_ENABLED=1 go build -o teenet-wallet .
+	CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o teenet-wallet .
 
 test:
 	go test ./... -v -race
+
+coverage:
+	go test ./... -race -coverprofile=coverage.out
+	go tool cover -func=coverage.out
 
 lint:
 	go vet ./...
@@ -24,4 +28,5 @@ docker:
 
 clean:
 	rm -f teenet-wallet
+	rm -f coverage.out
 	rm -rf frontend

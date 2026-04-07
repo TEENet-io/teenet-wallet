@@ -5,7 +5,13 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"time"
 )
+
+type nonceEntry struct {
+	nonce    uint64
+	lastUsed time.Time
+}
 
 // NonceManager tracks per-address nonces to avoid concurrent nonce collisions.
 // When multiple transactions are built concurrently for the same address, fetching
@@ -14,10 +20,28 @@ import (
 // after each acquisition so concurrent callers get sequential nonces.
 type NonceManager struct {
 	mu     sync.Mutex
-	nonces map[string]uint64
+	nonces map[string]*nonceEntry
 }
 
-var nonceMgr = &NonceManager{nonces: make(map[string]uint64)}
+var nonceMgr = &NonceManager{nonces: make(map[string]*nonceEntry)}
+
+func init() {
+	go nonceMgr.cleanup()
+}
+
+func (nm *NonceManager) cleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	for range ticker.C {
+		nm.mu.Lock()
+		cutoff := time.Now().Add(-30 * time.Minute)
+		for key, entry := range nm.nonces {
+			if entry.lastUsed.Before(cutoff) {
+				delete(nm.nonces, key)
+			}
+		}
+		nm.mu.Unlock()
+	}
+}
 
 // AcquireNonce returns the next nonce for the given address. On the first call
 // (or after a reset) it fetches the pending nonce from the chain. Subsequent
@@ -26,15 +50,17 @@ func (nm *NonceManager) AcquireNonce(rpcURL, address string) (uint64, error) {
 	key := rpcURL + ":" + address
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
-	if n, ok := nm.nonces[key]; ok {
-		nm.nonces[key] = n + 1
+	if entry, ok := nm.nonces[key]; ok {
+		entry.lastUsed = time.Now()
+		n := entry.nonce
+		entry.nonce++
 		return n, nil
 	}
 	onChainNonce, err := fetchNonceFromChain(rpcURL, address)
 	if err != nil {
 		return 0, err
 	}
-	nm.nonces[key] = onChainNonce + 1
+	nm.nonces[key] = &nonceEntry{nonce: onChainNonce + 1, lastUsed: time.Now()}
 	return onChainNonce, nil
 }
 

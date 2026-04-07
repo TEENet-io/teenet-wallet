@@ -2,7 +2,7 @@
 // SSE listener for approval events.
 // On approval resolution, notifies the original session via subagent.run().
 
-import type { WalletAPI } from "./api-client.ts";
+import type { WalletAPI } from "./api-client.js";
 
 export interface ApprovalEvent {
   approval_id: number;
@@ -120,17 +120,21 @@ export class ApprovalWatcher {
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const messages = buffer.split("\n\n");
-        buffer = messages.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const messages = buffer.split("\n\n");
+          buffer = messages.pop() || "";
 
-        for (const msg of messages) {
-          this.handleSSEMessage(msg);
+          for (const msg of messages) {
+            this.handleSSEMessage(msg);
+          }
         }
+      } finally {
+        reader.releaseLock();
       }
     } catch (err) {
       if (this.abortController?.signal.aborted) return;

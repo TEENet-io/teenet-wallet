@@ -19,7 +19,7 @@ import (
 func addressbookRouter(db *gorm.DB, userID uint) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := handler.NewAddressBookHandler(db, nil)
+	h := handler.NewAddressBookHandler(db, nil, "")
 
 	injectUser := func(c *gin.Context) {
 		c.Set("userID", userID)
@@ -686,7 +686,7 @@ func TestUpdateEntry_MemoTooLong(t *testing.T) {
 func addressbookRouterAPIKey(db *gorm.DB, userID uint) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := handler.NewAddressBookHandler(db, nil)
+	h := handler.NewAddressBookHandler(db, nil, "")
 
 	r.Use(func(c *gin.Context) {
 		c.Set("userID", userID)
@@ -719,8 +719,8 @@ func TestAddEntry_APIKey_Returns202(t *testing.T) {
 	}
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["pending"] != true {
-		t.Errorf("expected pending=true, got %v", resp["pending"])
+	if resp["status"] != "pending_approval" {
+		t.Errorf("expected status=pending_approval, got %v", resp["status"])
 	}
 	if resp["approval_id"] == nil {
 		t.Error("expected approval_id in response")
@@ -754,8 +754,8 @@ func TestUpdateEntry_APIKey_Returns202(t *testing.T) {
 	}
 	var resp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["pending"] != true {
-		t.Errorf("expected pending=true")
+	if resp["status"] != "pending_approval" {
+		t.Errorf("expected status=pending_approval, got %v", resp["status"])
 	}
 
 	// Entry should NOT be updated yet.

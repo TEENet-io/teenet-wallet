@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,6 +32,10 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	ch := h.hub.Subscribe(userID)
+	if ch == nil {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many SSE connections"})
+		return
+	}
 	defer h.hub.Unsubscribe(userID, ch)
 
 	slog.Info("SSE client connected", "userID", userID)

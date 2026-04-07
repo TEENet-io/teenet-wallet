@@ -23,7 +23,14 @@ func init() {
 	}
 }
 
-var httpClient = &http.Client{Timeout: rpcTimeout}
+var httpClient = &http.Client{
+	Timeout: rpcTimeout,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
 
 // BalanceResult holds a balance query response.
 type BalanceResult struct {
@@ -111,11 +118,11 @@ func getSOLBalance(address, rpcURL, chainName, currency string) (*BalanceResult,
 	default:
 		return nil, fmt.Errorf("unexpected lamport value type: %T", valueRaw)
 	}
-	sol := float64(lamports) / 1e9
+	solBig := new(big.Float).Quo(new(big.Float).SetInt64(lamports), big.NewFloat(1e9))
 	return &BalanceResult{
 		Chain:    chainName,
 		Address:  address,
-		Balance:  fmt.Sprintf("%.9f", sol),
+		Balance:  solBig.Text('f', 9),
 		Currency: currency,
 		Raw:      fmt.Sprintf("%d", lamports),
 	}, nil

@@ -1,10 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
 import type { ApprovalWatcher } from "../approval-watcher.js";
-import { jsonResult, approvalOrResult } from "./tool-result.js";
+import { jsonResult, approvalOrResult, type RegisterTool, type ToolContext } from "./tool-result.js";
 
 export function registerPolicyTools(
-  registerTool: (tool: any) => void,
+  registerTool: RegisterTool,
   api: WalletAPI,
   getApprovalUrl: (id: number) => string,
   watcher: ApprovalWatcher,
@@ -20,7 +20,7 @@ export function registerPolicyTools(
     },
   });
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_set_policy",
     description: "Set the transfer approval policy for a wallet. Transfers exceeding the threshold_usd will require Passkey approval. May return pending_approval if the policy change itself requires approval.",
     parameters: Type.Object({

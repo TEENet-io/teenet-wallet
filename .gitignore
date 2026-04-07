@@ -20,6 +20,9 @@ Thumbs.db
 .env
 .env.*
 
+# Claude Code
+.claude/
+
 # Local-only docs 
 docs/zh/skill-onboarding-feature.md
 docs/zh/skill-context-optimization.md

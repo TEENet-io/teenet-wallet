@@ -1,10 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
 import type { ApprovalWatcher } from "../approval-watcher.js";
-import { jsonResult, approvalOrResult } from "./tool-result.js";
+import { jsonResult, approvalOrResult, type RegisterTool, type ToolContext } from "./tool-result.js";
 
 export function registerAddressBookTools(
-  registerTool: (tool: any) => void,
+  registerTool: RegisterTool,
   api: WalletAPI,
   getApprovalUrl: (id: number) => string,
   watcher: ApprovalWatcher,
@@ -21,7 +21,7 @@ export function registerAddressBookTools(
     },
   });
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_add_contact",
     description: "Add a new contact to the address book. May return pending_approval if the operation requires Passkey approval.",
     parameters: Type.Object({
@@ -36,7 +36,7 @@ export function registerAddressBookTools(
     },
   }));
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_update_contact",
     description: "Update an existing address book contact by ID. May return pending_approval if the change requires Passkey approval.",
     parameters: Type.Object({

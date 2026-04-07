@@ -20,15 +20,16 @@ import (
 type ContractHandler struct {
 	db             *gorm.DB
 	sdk            *sdk.Client
+	baseURL        string
 	approvalExpiry time.Duration
 }
 
-func NewContractHandler(db *gorm.DB, sdkClient *sdk.Client, approvalExpiry ...time.Duration) *ContractHandler {
+func NewContractHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, approvalExpiry ...time.Duration) *ContractHandler {
 	expiry := 30 * time.Minute
 	if len(approvalExpiry) > 0 && approvalExpiry[0] > 0 {
 		expiry = approvalExpiry[0]
 	}
-	return &ContractHandler{db: db, sdk: sdkClient, approvalExpiry: expiry}
+	return &ContractHandler{db: db, sdk: sdkClient, baseURL: baseURL, approvalExpiry: expiry}
 }
 
 // AddContract whitelists a contract address for a wallet.
@@ -103,13 +104,8 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 		}
 		writeAuditCtx(h.db, c, "contract_add", "pending", &wallet.ID, map[string]interface{}{
 			"contract": addr, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label, "approval_id": approval.ID,
-		})
-		c.JSON(http.StatusAccepted, gin.H{
-			"success":     true,
-			"pending":     true,
-			"approval_id": approval.ID,
-			"message":     "Contract whitelist request submitted for approval",
-		})
+		}, approval.ID)
+		respondPendingApproval(c, h.baseURL, approval.ID, "Contract whitelist request submitted for approval")
 		return
 	}
 
@@ -209,13 +205,8 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 		}
 		writeAuditCtx(h.db, c, "contract_update", "pending", &wallet.ID, map[string]interface{}{
 			"contract_id": cid, "contract": existing.ContractAddress, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label, "approval_id": approval.ID,
-		})
-		c.JSON(http.StatusAccepted, gin.H{
-			"success":     true,
-			"pending":     true,
-			"approval_id": approval.ID,
-			"message":     "Contract whitelist update submitted for approval",
-		})
+		}, approval.ID)
+		respondPendingApproval(c, h.baseURL, approval.ID, "Contract whitelist update submitted for approval")
 		return
 	}
 

@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,10 +19,9 @@ import (
 )
 
 func testHashKeyWithSalt(raw, salt string) string {
-	h := sha256.New()
-	h.Write([]byte(salt))
-	h.Write([]byte(raw))
-	return hex.EncodeToString(h.Sum(nil))
+	mac := hmac.New(sha256.New, []byte(salt))
+	mac.Write([]byte(raw))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

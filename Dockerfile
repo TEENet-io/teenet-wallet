@@ -13,11 +13,13 @@ FROM golang:1.24-alpine AS builder
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 
 WORKDIR /build
+# Cache Go module downloads separately from source changes
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
 # Replace frontend-src with built static files
 COPY --from=frontend /app/dist ./frontend
-RUN go mod download \
-    && CGO_ENABLED=1 GOOS=linux go build -o wallet-app .
+RUN CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w" -o wallet-app .
 
 # ── Stage 3: Runtime image ────────────────────────────────
 FROM alpine:3.19
@@ -34,7 +36,12 @@ COPY --from=builder /build/chains.json .
 
 RUN mkdir -p /data && chown app:app /data
 
+VOLUME /data
+
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -qO- http://localhost:8080/api/health || exit 1
 
 ENV HOST=0.0.0.0 \
     PORT=8080 \

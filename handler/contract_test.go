@@ -84,7 +84,7 @@ func seedWallet(t *testing.T, db *gorm.DB) (model.User, model.Wallet) {
 func contractRouter(db *gorm.DB, userID uint) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	ch := handler.NewContractHandler(db, nil)
+	ch := handler.NewContractHandler(db, nil, "")
 
 	injectUser := func(c *gin.Context) {
 		c.Set("userID", userID)
@@ -249,8 +249,8 @@ func TestAddContract_WrongWallet(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for wrong wallet owner, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for wrong wallet owner, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -398,9 +398,9 @@ func TestDeleteContract_WrongWallet(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// 403 because wallet belongs to another user; contract itself should not be deleted.
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	// 404 because wallet belongs to another user (combined user_id+id query).
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
 	}
 	var count int64
 	db.Model(&model.AllowedContract{}).Where("id = ?", contract.ID).Count(&count)

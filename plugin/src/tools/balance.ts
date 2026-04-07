@@ -1,9 +1,9 @@
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
-import { jsonResult } from "./tool-result.js";
+import { jsonResult, type RegisterTool } from "./tool-result.js";
 
 export function registerBalanceTools(
-  registerTool: (tool: any) => void,
+  registerTool: RegisterTool,
   api: WalletAPI,
 ) {
   registerTool({

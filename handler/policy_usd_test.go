@@ -314,8 +314,8 @@ func TestSetPolicy_APIKey_CreatesPendingApproval(t *testing.T) {
 		t.Fatalf("expected 202 for API key policy change, got %d: %s", w.Code, w.Body.String())
 	}
 	resp := respJSON(w)
-	if resp["pending"] != true {
-		t.Errorf("expected pending=true, got %v", resp["pending"])
+	if resp["status"] != "pending_approval" {
+		t.Errorf("expected status=pending_approval, got %v", resp["status"])
 	}
 	if resp["approval_id"] == nil {
 		t.Error("expected approval_id")
@@ -352,9 +352,9 @@ func TestTransfer_DailySpent_RollbackOnSigningFailure(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Should have failed at signing (502)
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502 signing failure, got %d: %s", w.Code, w.Body.String())
+	// Should have failed at signing (422)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 signing failure, got %d: %s", w.Code, w.Body.String())
 	}
 
 	// Key assertion: daily_spent_usd should be rolled back to 0

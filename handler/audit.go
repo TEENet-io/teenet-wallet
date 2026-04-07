@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -71,7 +70,8 @@ func (h *AuditHandler) ListLogs(c *gin.Context) {
 // ─── Audit helpers ─────────────────────────────────────────────────────────────
 
 // writeAuditLog writes a best-effort audit entry. Errors are logged to stdout but not returned.
-func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *string, details interface{}, apiKeyPrefix string) {
+// The optional approvalID parameter sets the ApprovalID column for indexed lookup.
+func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string, walletID *string, details interface{}, apiKeyPrefix string, approvalID ...uint) {
 	entry := model.AuditLog{
 		UserID:       userID,
 		Action:       action,
@@ -81,6 +81,9 @@ func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string
 		WalletID:     walletID,
 		APIKeyPrefix: apiKeyPrefix,
 		CreatedAt:   time.Now(),
+	}
+	if len(approvalID) > 0 && approvalID[0] > 0 {
+		entry.ApprovalID = &approvalID[0]
 	}
 	if details != nil {
 		b, _ := json.Marshal(details)
@@ -96,9 +99,7 @@ func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string
 // This avoids creating two separate records for the same approval flow.
 func updateAuditByApprovalID(db *gorm.DB, approvalID uint, newStatus string, extraDetails map[string]interface{}) {
 	var log model.AuditLog
-	// Match on details JSON containing this approval_id AND status=pending.
-	pattern := fmt.Sprintf("%%\"approval_id\":%d%%", approvalID)
-	if err := db.Where("status = ? AND details LIKE ?", "pending", pattern).First(&log).Error; err != nil {
+	if err := db.Where("approval_id = ? AND status = ?", approvalID, "pending").First(&log).Error; err != nil {
 		slog.Error("audit update: pending log not found", "approval_id", approvalID, "error", err)
 		return
 	}
@@ -127,11 +128,12 @@ func updateAuditByApprovalID(db *gorm.DB, approvalID uint, newStatus string, ext
 }
 
 // writeAuditCtx is a convenience wrapper that extracts userID/authMode/IP from the gin context.
-func writeAuditCtx(db *gorm.DB, c *gin.Context, action, status string, walletID *string, details interface{}) {
+// The optional approvalID parameter sets the ApprovalID column for indexed lookup.
+func writeAuditCtx(db *gorm.DB, c *gin.Context, action, status string, walletID *string, details interface{}, approvalID ...uint) {
 	userID := mustUserID(c)
 	if c.IsAborted() {
 		return
 	}
 	authMode, apiKeyPrefix := authInfo(c)
-	writeAuditLog(db, userID, action, status, authMode, c.ClientIP(), walletID, details, apiKeyPrefix)
+	writeAuditLog(db, userID, action, status, authMode, c.ClientIP(), walletID, details, apiKeyPrefix, approvalID...)
 }

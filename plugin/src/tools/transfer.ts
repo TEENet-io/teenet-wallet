@@ -1,16 +1,16 @@
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
 import type { ApprovalWatcher } from "../approval-watcher.js";
-import { jsonResult, approvalOrResult } from "./tool-result.js";
+import { jsonResult, approvalOrResult, type RegisterTool, type ToolContext } from "./tool-result.js";
 
 export function registerTransferTools(
-  registerTool: (tool: any) => void,
+  registerTool: RegisterTool,
   api: WalletAPI,
   getApprovalUrl: (id: number) => string,
   watcher: ApprovalWatcher,
 ) {
   // Use a tool factory so we get sessionKey from the context.
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_transfer",
     description:
       "Send crypto (native or token) from a wallet. If the amount exceeds the wallet's approval threshold, returns pending_approval with an approval URL — the user must approve via Passkey in the browser. The system will automatically notify you when approval completes (no need to poll).",

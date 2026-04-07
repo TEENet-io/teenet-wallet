@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 )
 
 // systemProgramID is the Solana system program address (all zeros).
@@ -36,7 +37,10 @@ func BuildSOLTx(rpcURL, fromAddr, toAddr string, amountSOL float64) (*SOLTxData,
 	if rpcURL == "" {
 		rpcURL = "https://api.mainnet-beta.solana.com"
 	}
-	lamports := uint64(amountSOL * 1e9)
+	lamportsBig := new(big.Float).SetFloat64(amountSOL)
+	lamportsBig.Mul(lamportsBig, new(big.Float).SetFloat64(1e9))
+	lamportsInt, _ := lamportsBig.Uint64()
+	lamports := lamportsInt
 	if lamports == 0 {
 		return nil, fmt.Errorf("amount too small (rounds to 0 lamports)")
 	}
@@ -606,7 +610,10 @@ func BuildSOLWrapTx(rpcURL, ownerAddr string, amountSOL float64) (*SOLWrapTxData
 	if rpcURL == "" {
 		rpcURL = "https://api.mainnet-beta.solana.com"
 	}
-	lamports := uint64(amountSOL * 1e9)
+	lamportsBig := new(big.Float).SetFloat64(amountSOL)
+	lamportsBig.Mul(lamportsBig, new(big.Float).SetFloat64(1e9))
+	lamportsInt, _ := lamportsBig.Uint64()
+	lamports := lamportsInt
 	if lamports == 0 {
 		return nil, fmt.Errorf("amount too small (rounds to 0 lamports)")
 	}

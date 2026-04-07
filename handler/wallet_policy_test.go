@@ -123,8 +123,8 @@ func TestSetPolicy_WrongWallet_Returns403(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -185,8 +185,8 @@ func TestGetPolicy_WrongWallet_Returns403(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for another user's wallet, got %d", w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for another user's wallet, got %d", w.Code)
 	}
 }
 

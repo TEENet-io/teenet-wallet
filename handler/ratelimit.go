@@ -48,12 +48,14 @@ func (rl *RateLimiter) Allow(key string) bool {
 
 	// Slide the window: discard timestamps older than the cutoff.
 	prev := rl.windows[key]
-	valid := make([]time.Time, 0, len(prev))
+	n := 0
 	for _, t := range prev {
 		if t.After(cutoff) {
-			valid = append(valid, t)
+			prev[n] = t
+			n++
 		}
 	}
+	valid := prev[:n]
 
 	if len(valid) >= rl.limit {
 		rl.windows[key] = valid
@@ -141,7 +143,7 @@ func (l *IPRateLimiter) Exceeded(ip string) bool {
 	}
 
 	// Slide the window: discard timestamps older than the cutoff.
-	valid := make([]time.Time, 0, len(entry.times))
+	valid := entry.times[:0]
 	for _, t := range entry.times {
 		if t.After(cutoff) {
 			valid = append(valid, t)

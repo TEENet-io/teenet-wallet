@@ -1,10 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
 import type { ApprovalWatcher } from "../approval-watcher.js";
-import { jsonResult, approvalOrResult } from "./tool-result.js";
+import { jsonResult, approvalOrResult, type RegisterTool, type ToolContext } from "./tool-result.js";
 
 export function registerContractTools(
-  registerTool: (tool: any) => void,
+  registerTool: RegisterTool,
   api: WalletAPI,
   getApprovalUrl: (id: number) => string,
   watcher: ApprovalWatcher,
@@ -16,7 +16,7 @@ export function registerContractTools(
     async execute(_id: string, params: any) { return jsonResult(await api.listContracts(params.wallet_id)); },
   });
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_add_contract",
     description: "Add a token contract to the wallet's whitelist. May return pending_approval if the operation requires Passkey approval.",
     parameters: Type.Object({
@@ -33,7 +33,7 @@ export function registerContractTools(
     },
   }));
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_update_contract",
     description: "Update a whitelisted contract's metadata (label, symbol, decimals). May return pending_approval.",
     parameters: Type.Object({
@@ -53,7 +53,7 @@ export function registerContractTools(
     },
   }));
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_contract_call",
     description: "Call a smart contract function (state-changing). Supports EVM and Solana. May return pending_approval.",
     parameters: Type.Object({
@@ -83,7 +83,7 @@ export function registerContractTools(
 
 
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_approve_token",
     description: "Approve a spender to spend tokens on behalf of the wallet (ERC-20 approve). May return pending_approval.",
     parameters: Type.Object({
@@ -99,7 +99,7 @@ export function registerContractTools(
     },
   }));
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_revoke_approval",
     description: "Revoke a previously granted token approval by setting the allowance to zero. May return pending_approval.",
     parameters: Type.Object({

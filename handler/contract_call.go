@@ -292,7 +292,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
 		writeAuditCtx(h.db, c, "contract_call", "pending", &wallet.ID, map[string]interface{}{
 			"approval_id": approval.ID, "tx_context": txContext,
-		})
+		}, approval.ID)
 		c.JSON(http.StatusAccepted, gin.H{
 			"status":       "pending_approval",
 			"approval_id":  approval.ID,
@@ -452,7 +452,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
 		writeAuditCtx(h.db, c, "contract_call", "pending", &wallet.ID, map[string]interface{}{
 			"approval_id": approval.ID, "tx_context": txContext,
-		})
+		}, approval.ID)
 		c.JSON(http.StatusAccepted, gin.H{
 			"status":       "pending_approval",
 			"approval_id":  approval.ID,
@@ -674,7 +674,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
 		writeAuditCtx(h.db, c, auditAction, "pending", &wallet.ID, map[string]interface{}{
 			"approval_id": approval.ID, "tx_context": txContext,
-		})
+		}, approval.ID)
 		c.JSON(http.StatusAccepted, gin.H{
 			"status":       "pending_approval",
 			"approval_id":  approval.ID,

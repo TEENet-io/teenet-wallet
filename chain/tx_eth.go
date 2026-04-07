@@ -6,11 +6,32 @@ import (
 	"log/slog"
 	"math/big"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 )
+
+// chainID is immutable per RPC endpoint, so we cache it to avoid a redundant
+// network round-trip on every transaction.
+var (
+	chainIDCache   = make(map[string]uint64)
+	chainIDCacheMu sync.RWMutex
+)
+
+func getCachedChainID(rpcURL string) (uint64, bool) {
+	chainIDCacheMu.RLock()
+	defer chainIDCacheMu.RUnlock()
+	id, ok := chainIDCache[rpcURL]
+	return id, ok
+}
+
+func setCachedChainID(rpcURL string, id uint64) {
+	chainIDCacheMu.Lock()
+	defer chainIDCacheMu.Unlock()
+	chainIDCache[rpcURL] = id
+}
 
 const ethDefaultGasLimit = uint64(21000)
 
@@ -118,40 +139,76 @@ func fetchETHChainParamsFresh(rpcURL, fromAddr string) (*ethChainParams, error) 
 }
 
 // fetchGasFeesAndChainID queries maxPriorityFeePerGas, baseFee (via latest block), and chain ID.
+// The two gas-fee RPC calls are issued concurrently. ChainID is served from an
+// in-process cache (immutable per endpoint) and only fetched once per process lifetime.
 func fetchGasFeesAndChainID(rpcURL string) (maxFee, priorityFee, chainID *big.Int, err error) {
-	// 1. Get max priority fee (tip).
-	tipRaw, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
-		"jsonrpc": "2.0", "method": "eth_maxPriorityFeePerGas", "params": []interface{}{}, "id": 1,
-	})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("get max priority fee: %w", err)
+	// Results from the two concurrent gas-fee calls.
+	type priorityFeeResult struct {
+		hex string
+		err error
 	}
-	tipHex, ok := tipRaw["result"].(string)
-	if !ok || tipHex == "" {
-		return nil, nil, nil, fmt.Errorf("unexpected max priority fee response: %v", tipRaw["result"])
-	}
-	priorityFee, ok = new(big.Int).SetString(strings.TrimPrefix(tipHex, "0x"), 16)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("invalid max priority fee: %s", tipHex)
+	type baseFeeResult struct {
+		hex string
+		err error
 	}
 
-	// 2. Get base fee from latest block.
-	blockRaw, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
-		"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": []interface{}{"latest", false}, "id": 1,
-	})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("get latest block: %w", err)
-	}
-	blockResult, ok := blockRaw["result"].(map[string]interface{})
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("unexpected block response")
-	}
-	baseFeeHex, _ := blockResult["baseFeePerGas"].(string)
-	baseFee := big.NewInt(0)
-	if baseFeeHex != "" {
-		baseFee, ok = new(big.Int).SetString(strings.TrimPrefix(baseFeeHex, "0x"), 16)
+	priorityCh := make(chan priorityFeeResult, 1)
+	baseFeeCh := make(chan baseFeeResult, 1)
+
+	// 1a. Get max priority fee (tip) — concurrent.
+	go func() {
+		raw, e := jsonRPCWithRetry(rpcURL, map[string]interface{}{
+			"jsonrpc": "2.0", "method": "eth_maxPriorityFeePerGas", "params": []interface{}{}, "id": 1,
+		})
+		if e != nil {
+			priorityCh <- priorityFeeResult{err: fmt.Errorf("get max priority fee: %w", e)}
+			return
+		}
+		h, ok := raw["result"].(string)
+		if !ok || h == "" {
+			priorityCh <- priorityFeeResult{err: fmt.Errorf("unexpected max priority fee response: %v", raw["result"])}
+			return
+		}
+		priorityCh <- priorityFeeResult{hex: h}
+	}()
+
+	// 1b. Get base fee from latest block — concurrent.
+	go func() {
+		raw, e := jsonRPCWithRetry(rpcURL, map[string]interface{}{
+			"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": []interface{}{"latest", false}, "id": 1,
+		})
+		if e != nil {
+			baseFeeCh <- baseFeeResult{err: fmt.Errorf("get latest block: %w", e)}
+			return
+		}
+		blockResult, ok := raw["result"].(map[string]interface{})
 		if !ok {
-			return nil, nil, nil, fmt.Errorf("invalid base fee: %s", baseFeeHex)
+			baseFeeCh <- baseFeeResult{err: fmt.Errorf("unexpected block response")}
+			return
+		}
+		h, _ := blockResult["baseFeePerGas"].(string)
+		baseFeeCh <- baseFeeResult{hex: h}
+	}()
+
+	// Collect concurrent results.
+	prRes := <-priorityCh
+	if prRes.err != nil {
+		return nil, nil, nil, prRes.err
+	}
+	priorityFee, ok := new(big.Int).SetString(strings.TrimPrefix(prRes.hex, "0x"), 16)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("invalid max priority fee: %s", prRes.hex)
+	}
+
+	bfRes := <-baseFeeCh
+	if bfRes.err != nil {
+		return nil, nil, nil, bfRes.err
+	}
+	baseFee := big.NewInt(0)
+	if bfRes.hex != "" {
+		baseFee, ok = new(big.Int).SetString(strings.TrimPrefix(bfRes.hex, "0x"), 16)
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("invalid base fee: %s", bfRes.hex)
 		}
 	}
 
@@ -163,26 +220,34 @@ func fetchGasFeesAndChainID(rpcURL string) (maxFee, priorityFee, chainID *big.In
 	minPriority := big.NewInt(1_000_000_000) // 1 gwei
 	if priorityFee.Cmp(minPriority) < 0 {
 		priorityFee = minPriority
-		// Recalculate maxFee with the minimum priority
+		// Recalculate maxFee with the minimum priority.
 		maxFee = new(big.Int).Mul(baseFee, big.NewInt(2))
 		maxFee.Add(maxFee, priorityFee)
 	}
 
-	// 3. Get chain ID.
-	chainIDRaw, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
-		"jsonrpc": "2.0", "method": "eth_chainId", "params": []interface{}{}, "id": 1,
-	})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("get chain id: %w", err)
+	// 2. Get chain ID — served from cache when available.
+	var chainIDUint64 uint64
+	if cached, hit := getCachedChainID(rpcURL); hit {
+		chainIDUint64 = cached
+	} else {
+		chainIDRaw, e := jsonRPCWithRetry(rpcURL, map[string]interface{}{
+			"jsonrpc": "2.0", "method": "eth_chainId", "params": []interface{}{}, "id": 1,
+		})
+		if e != nil {
+			return nil, nil, nil, fmt.Errorf("get chain id: %w", e)
+		}
+		chainIDHex, ok2 := chainIDRaw["result"].(string)
+		if !ok2 || chainIDHex == "" {
+			return nil, nil, nil, fmt.Errorf("unexpected chain id response: %v", chainIDRaw["result"])
+		}
+		parsed, ok3 := new(big.Int).SetString(strings.TrimPrefix(chainIDHex, "0x"), 16)
+		if !ok3 {
+			return nil, nil, nil, fmt.Errorf("invalid chain id: %s", chainIDHex)
+		}
+		chainIDUint64 = parsed.Uint64()
+		setCachedChainID(rpcURL, chainIDUint64)
 	}
-	chainIDHex, ok := chainIDRaw["result"].(string)
-	if !ok || chainIDHex == "" {
-		return nil, nil, nil, fmt.Errorf("unexpected chain id response: %v", chainIDRaw["result"])
-	}
-	chainID, ok = new(big.Int).SetString(strings.TrimPrefix(chainIDHex, "0x"), 16)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("invalid chain id: %s", chainIDHex)
-	}
+	chainID = new(big.Int).SetUint64(chainIDUint64)
 
 	return maxFee, priorityFee, chainID, nil
 }

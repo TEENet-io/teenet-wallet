@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
@@ -27,7 +28,6 @@ func lockApproval(id uint) func() {
 	mu.(*sync.Mutex).Lock()
 	return func() {
 		mu.(*sync.Mutex).Unlock()
-		approvalMu.Delete(id)
 	}
 }
 
@@ -37,10 +37,32 @@ type ApprovalHandler struct {
 	sdk    *sdk.Client
 	prices *PriceService
 	sseHub *SSEHub
+	cancel context.CancelFunc
 }
 
 func NewApprovalHandler(db *gorm.DB, sdkClient *sdk.Client, sseHub *SSEHub) *ApprovalHandler {
-	return &ApprovalHandler{db: db, sdk: sdkClient, sseHub: sseHub}
+	ctx, cancel := context.WithCancel(context.Background())
+	h := &ApprovalHandler{db: db, sdk: sdkClient, sseHub: sseHub, cancel: cancel}
+	go h.expireLoop(ctx)
+	return h
+}
+
+// Stop cancels the background expiry goroutine.
+func (h *ApprovalHandler) Stop() { h.cancel() }
+
+func (h *ApprovalHandler) expireLoop(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.db.Model(&model.ApprovalRequest{}).
+				Where("status = ? AND expires_at < ?", "pending", time.Now()).
+				Update("status", "expired")
+		}
+	}
 }
 
 // SetPriceService sets the USD price service used for daily spent conversion.
@@ -75,13 +97,8 @@ func (h *ApprovalHandler) ListPending(c *gin.Context) {
 	if c.IsAborted() {
 		return
 	}
-	// Batch-expire all stale pending requests for this user in a single UPDATE.
-	h.db.Model(&model.ApprovalRequest{}).
-		Where("user_id = ? AND status = ? AND expires_at < ?", userID, "pending", time.Now()).
-		Update("status", "expired")
-
 	var pending []model.ApprovalRequest
-	if err := h.db.Where("user_id = ? AND status = ?", userID, "pending").
+	if err := h.db.Where("user_id = ? AND status = ? AND expires_at > ?", userID, "pending", time.Now()).
 		Order("created_at desc").Find(&pending).Error; err != nil {
 		slog.Error("list pending approvals failed", "user_id", userID, "error", err)
 		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "list_pending", "user_id": userID})

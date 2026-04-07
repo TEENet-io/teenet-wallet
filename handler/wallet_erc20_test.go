@@ -88,8 +88,8 @@ func TestTransfer_ERC20_Whitelisted_FailsAtRPC(t *testing.T) {
 	if w.Code == http.StatusForbidden {
 		t.Fatal("got 403 for a whitelisted contract — whitelist check should have passed")
 	}
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502 (RPC not configured), got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 (build tx failure), got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -115,8 +115,8 @@ func TestTransfer_NativeETH_SkipsContractCheck(t *testing.T) {
 	if w.Code == http.StatusForbidden {
 		t.Fatal("native transfer should not trigger contract whitelist check")
 	}
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502 (RPC not configured), got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 (build tx failure), got %d: %s", w.Code, w.Body.String())
 	}
 }
 
