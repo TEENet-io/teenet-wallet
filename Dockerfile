@@ -8,7 +8,7 @@ COPY frontend-src/ .
 RUN npm run build
 
 # ── Stage 2: Build Go backend ─────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 
