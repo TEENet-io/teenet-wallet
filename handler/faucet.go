@@ -33,8 +33,9 @@ func NewFaucetHandler(db *gorm.DB, faucetURL string) *FaucetHandler {
 
 // chainToFaucetChain maps wallet chain names to faucet-robot chain IDs.
 var chainToFaucetChain = map[string]string{
-	"sepolia":      "eth_sepolia",
-	"base-sepolia": "base_sepolia",
+	"sepolia":       "eth_sepolia",
+	"base-sepolia":  "base_sepolia",
+	"solana-devnet": "solana_devnet",
 }
 
 // Claim handles POST /api/faucet — requests test tokens for a wallet.

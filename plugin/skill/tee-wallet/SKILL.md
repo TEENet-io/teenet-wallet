@@ -320,9 +320,9 @@ Transaction: `{explorer}/tx/{hash}` · Address: `{explorer}/address/{addr}` (EVM
 | Chain | Source |
 |-------|--------|
 | Sepolia / Base Sepolia ETH | Built-in: `teenet_wallet_faucet` |
+| Solana Devnet SOL | Built-in: `teenet_wallet_faucet` |
 | Holesky ETH | [`https://holesky-faucet.pk910.de`](https://holesky-faucet.pk910.de) |
 | BSC Testnet tBNB | [`https://www.bnbchain.org/en/testnet-faucet`](https://www.bnbchain.org/en/testnet-faucet) |
-| Solana Devnet | [`https://faucet.solana.com`](https://faucet.solana.com) |
 | Sepolia USDC | [`https://faucet.circle.com`](https://faucet.circle.com) |
 
 ## Quick Commands
