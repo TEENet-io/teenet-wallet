@@ -148,7 +148,7 @@ Say "run the test flow" and the agent will walk you through:
 | Contracts | `list_contracts`, `add_contract`, `update_contract`, `contract_call`, `approve_token`, `revoke_approval` | Whitelist and interact with smart contracts |
 | Policy | `get_policy`, `set_policy`, `daily_spent` | Approval thresholds and spending limits |
 | Address Book | `list_contacts`, `add_contact`, `update_contact` | Save and use address nicknames |
-| Approvals | `pending_approvals`, `check_approval`, `wait_approval` | Monitor and wait for approvals |
+| Approvals | `pending_approvals`, `check_approval` | Monitor approval status |
 | Utility | `list_chains`, `health`, `faucet`, `audit_logs`, `prices`, `get_pubkey` | Chain info, testing, and diagnostics |
 
 All tool names are prefixed with `teenet_wallet_` (e.g. `teenet_wallet_transfer`).

@@ -51,19 +51,73 @@ Call `teenet_wallet_create`. Warn: EVM wallets take 1-2 minutes (ECDSA key gener
 
 ## Guided Test Flow
 
-When the user asks to test the wallet, walk through these steps interactively on a **testnet** wallet (Sepolia, Base Sepolia, or Solana Devnet). Create one first if needed.
+When the user runs `/test-wallets` or asks to test the wallet, walk them through these steps **interactively**. The user must have at least one wallet on a **testnet** (Sepolia, Base Sepolia, or Solana Devnet) — if not, create one first.
 
-**For EVERY step:** explain what it does before running, show result after.
+**IMPORTANT: For EVERY step:**
+1. **BEFORE**: explain what the step does and why
+2. **AFTER**: show the result immediately
+3. **When approval is needed**: show the result + approval link together, then wait for the **system notification** before proceeding
 
-1. **Check balance** → `teenet_wallet_balance`
-2. **Get test tokens** → `teenet_wallet_faucet` (wait 15s for confirmation, skip if balance sufficient)
-3. **Send 0.0001 ETH to self** → `teenet_wallet_transfer` (tests TEE distributed signing)
-4. **Set $1 USD approval threshold** → `teenet_wallet_set_policy` (returns pending_approval → show link, use `teenet_wallet_wait_approval`)
-5. **Send 0.0001 ETH (below $1, no approval)** → `teenet_wallet_transfer`
-6. **Send 0.001 ETH (above $1, needs approval)** → `teenet_wallet_transfer` (returns pending_approval → show link, wait)
-7. **Add USDC to whitelist** → `teenet_wallet_add_contract` (returns pending_approval → show link, wait)
+Never skip showing results. Every step gets output. Never leave the user wondering what happened.
 
-Use **blocking mode** (`teenet_wallet_wait_approval`) for this flow since each step depends on the previous.
+---
+
+**Steps 1-3 — Basic Tests**
+
+> **Step 1: Check wallet balance**
+> ✅ **Result:** Balance **{amount} ETH**
+>
+> **Step 2: Get test tokens from faucet (wait 15s for confirmation, skip if balance is enough)**
+> ✅ **Result:** Received **{amount} ETH** — [**View transaction**]({explorer}/tx/{tx_hash_S2})
+>
+> **Step 3: Send 0.0001 ETH to self to test TEE signing**
+> ✅ **Result:** TEE signing successful — [**View transaction**]({explorer}/tx/{tx_hash_S3})
+>
+> **Step 4: Set $1 USD approval threshold**
+> 🔐 **Result:** Needs approval! Approval ID: {approval_id}
+> 👉 → [Approve $1 threshold policy]({approval_url})
+
+After system notification confirms Step 4 approved:
+> **Step 4: Set $1 USD approval threshold**
+> ✅ **Result:** Approval policy set! Threshold: **$1 USD**
+>
+> **Step 5: Send 0.0001 ETH (below $1, no approval needed)** ⚠️ Note: 0.0001 not 0.001
+> ✅ **Result:** Transfer successful! Amount: **0.0001 ETH** (~$0.20) — [**View transaction**]({explorer}/tx/{tx_hash_S5})
+>
+> **Step 6: Send 0.001 ETH (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
+> 🔐 **Result:** Needs approval! Approval ID: {approval_id}
+> 👉 → [Approve this 0.001 ETH transfer]({approval_url})
+
+After system notification confirms Step 6 approved:
+> **Step 6: Send 0.001 ETH (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
+> ✅ **Result:** Transfer approved! TX: {tx_hash_S6} — [**View transaction**]({explorer}/tx/{tx_hash_S6})
+>
+> **Step 7: Add USDC to whitelist**
+> 🔐 **Result:** Needs approval! Approval ID: {approval_id}
+> 👉 → [Approve adding USDC to whitelist]({approval_url})
+
+After system notification confirms Step 7 approved:
+> **Step 7: Add USDC to whitelist**
+> ✅ **Result:** USDC added to whitelist! Contract: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
+> 💡 Get test USDC from [Circle Faucet](https://faucet.circle.com)
+
+---
+
+**Completion**
+
+> 🎉 **All tests passed! Wallet is fully functional.**
+>
+> 1. ✅ Balance check
+> 2. ✅ Faucet tokens received
+> 3. ✅ TEE distributed signing
+> 4. ✅ Approval policy ($1 threshold)
+> 5. ✅ Small transfer (no approval)
+> 6. ✅ Large transfer (Passkey approval)
+> 7. ✅ Token whitelist
+>
+> Type `/wallets` to see wallets or `/balance` to check balances.
+
+**This flow is sequential** — run steps in order, one at a time. When a step returns `pending_approval`, show the approval link and wait for the **system notification** before proceeding to the next step. Do NOT ask the user to "let you know" or "tell you" when they've approved — the system notifies you automatically.
 
 ## Tool Overview
 
@@ -109,7 +163,6 @@ Use **blocking mode** (`teenet_wallet_wait_approval`) for this flow since each s
 | `teenet_wallet_daily_spent` | Check today's USD spend |
 | `teenet_wallet_pending_approvals` | List pending approvals |
 | `teenet_wallet_check_approval` | Check status of a specific approval |
-| `teenet_wallet_wait_approval` | **Block and wait** for approval (use in multi-step flows) |
 
 ### Utility
 | Tool | When to use |
@@ -133,39 +186,36 @@ Wallet IDs are UUIDs — never show raw IDs in chat. Use list indices instead.
 
 When a tool returns `pending_approval`, the operation needs Passkey hardware approval.
 
-**Default behavior (non-blocking):**
-1. Show the `approval_url` to the user
-2. Tell the user you will be notified automatically when they approve
-3. When you receive a system notification about the approval result, inform the user and continue
+**When a tool returns `pending_approval`:**
+1. Tell the user what operation needs approval (e.g. "Setting approval threshold to $1")
+2. Show the `approval_url`
+3. Do NOT ask the user to "tell you" or "let you know" when they've approved
+4. Do NOT say "reply done/ok when ready" or "I'll continue after you approve"
+5. The system will notify you automatically when the approval resolves
+
+**CRITICAL — When you receive a system message starting with "System: Approval #...":**
+You MUST immediately respond to the user with the result. This is NOT optional. The user is waiting to know what happened. Always:
+1. Tell the user the approval result (approved / rejected / expired)
+2. Explain what it means (e.g. "Your transfer of 0.001 ETH was sent", "Policy is now active")
+3. Include explorer link if there's a tx_hash
+4. Continue with the next step if in a multi-step flow
 
 This applies to ALL write operations: `transfer`, `set_policy`, `add_contract`, `contract_call`, `approve_token`, `add_contact`, etc.
 
-**Blocking mode (only for guided test flows where each step depends on the previous):**
-Call `teenet_wallet_wait_approval` to block until the approval resolves. Only use this when you need the result before proceeding to the next step in a sequential flow.
+**Example — sending the approval link:**
+> Setting the approval threshold to **$1 USD**. This needs Passkey approval:
+> 👉 [approve link]
 
-**Pattern (non-blocking, default):**
-```
-result = call tool(...)
-if result.status == "pending_approval":
-    show approval_url to user
-    tell user "I'll be notified when you approve"
-    // DONE — system will notify you automatically via a system message
-```
+**Example — after receiving system notification "System: Approval #123 approved (policy_change).":**
+> ✅ Approved! Approval threshold is now set to $1 USD.
 
-**Pattern (blocking, guided test only):**
-```
-result = call tool(...)
-if result.status == "pending_approval":
-    show approval_url to user
-    final = wait_approval(result.approval_id)
-    if final.status == "approved": continue
-    else: stop and notify
-```
+**Example — after receiving "System: Approval #456 approved. Transaction broadcast: 0xabc...":**
+> ✅ Transfer approved! TX: [explorer link]
 
-**System notifications:** If you receive a system message about an approval (e.g. "Approval #123 approved"), interpret and notify the user. This happens when the user approves asynchronously while you are idle. Use the conversation history to understand what operation was in progress and continue it if appropriate:
-- "Approval #123 approved (policy_change)." → policy is now active
-- "Approval #456 approved. Transaction broadcast: 0xabc..." → transfer succeeded, include explorer link
-- "Approval #789 was rejected." → no action taken
+System notification formats you will receive:
+- "System: Approval #123 approved (policy_change)." → policy is now active
+- "System: Approval #456 approved. Transaction broadcast: 0xabc..." → transfer succeeded
+- "System: Approval #789 was rejected." → no action taken
 
 ## Transfer Rules
 
@@ -282,7 +332,7 @@ Natural language works ("send 0.1 ETH to alice"), but users may also type:
 | Command | Action |
 |---------|--------|
 | `/start` | Run onboarding flow |
-| `/test` | Run guided test flow |
+| `/test-wallets` | Run the **Guided Test Flow** (see section above) — step-by-step walkthrough of all wallet features on a testnet |
 | `/wallets` | List wallets |
 | `/balance` | Check all balances |
 | `/transfer 0.1 ETH to alice` | Send crypto |
@@ -300,7 +350,7 @@ Natural language works ("send 0.1 ETH to alice"), but users may also type:
 3. **No chat confirmation for transfers** — backend approval policy is the safety net
 4. **Smart Wallet Selection always** — never ask for wallet ID; use numbered list indices
 5. **Token transfers MUST include `token` fields** — omitting sends native ETH/SOL (irreversible)
-6. **Token balances and read-only queries** — use web_fetch to call public RPCs directly (`eth_call balanceOf`, `allowance`, etc.) instead of going through the backend
+6. **Read-only contract queries MUST use web_fetch, NEVER contract_call** — `balanceOf`, `allowance`, `decimals`, `symbol`, and any other read-only (`eth_call`) queries go through web_fetch to public RPCs directly. `contract_call` is ONLY for state-changing transactions (swap, approve, etc.). Using `contract_call` for reads wastes gas and may trigger unnecessary approvals
 7. **Never call DELETE APIs** — destructive operations require Passkey via Web UI
 8. **All API Key write operations may need Passkey approval** — show the approval link
 9. **Dynamic chains** — never hardcode chain names; use `teenet_wallet_list_chains`

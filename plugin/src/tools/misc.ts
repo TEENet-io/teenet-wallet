@@ -1,10 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
 import type { ApprovalWatcher } from "../approval-watcher.js";
-import { jsonResult, approvalOrResult } from "./tool-result.js";
+import { jsonResult, approvalOrResult, type RegisterTool, type ToolContext } from "./tool-result.js";
 
 export function registerMiscTools(
-  registerTool: (tool: any) => void,
+  registerTool: RegisterTool,
   api: WalletAPI,
   getApprovalUrl: (id: number) => string,
   watcher: ApprovalWatcher,
@@ -84,7 +84,7 @@ export function registerMiscTools(
     },
   });
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_wrap_sol",
     description: "Wrap native SOL into wSOL (wrapped SOL) for use in Solana DeFi protocols. May return pending_approval.",
     parameters: Type.Object({
@@ -98,7 +98,7 @@ export function registerMiscTools(
     },
   }));
 
-  registerTool((ctx: any) => ({
+  registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_unwrap_sol",
     description: "Unwrap all wSOL back to native SOL in a Solana wallet. May return pending_approval.",
     parameters: Type.Object({
@@ -110,43 +110,6 @@ export function registerMiscTools(
       return approvalOrResult(result, getApprovalUrl, watcher, ctx?.sessionKey, context);
     },
   }));
-
-  registerTool({
-    name: "teenet_wallet_wait_approval",
-    description:
-      "Block and wait for a specific approval to be resolved via Passkey. Use this in multi-step flows (e.g. guided test) where you need the approval result before proceeding to the next step. For single operations, prefer the non-blocking approach (the system will notify you automatically).",
-    parameters: Type.Object({
-      approval_id: Type.Number({ description: "Approval ID to wait for" }),
-      timeout_seconds: Type.Optional(Type.Number({ description: "Max seconds to wait (default 1800 = 30 min)" })),
-    }),
-    async execute(
-      _id: string,
-      params: { approval_id: number; timeout_seconds?: number },
-    ) {
-      const timeoutMs = (params.timeout_seconds ?? 1800) * 1000;
-      try {
-        const event = await watcher.waitForApproval(params.approval_id, timeoutMs);
-        return jsonResult({
-          approval_id: event.approval_id,
-          status: event.status,
-          approval_type: event.approval_type,
-          ...(event.tx_hash ? { tx_hash: event.tx_hash } : {}),
-          ...(event.wallet_id ? { wallet_id: event.wallet_id } : {}),
-          message: event.status === "approved"
-            ? `Approved.${event.tx_hash ? ` TX: ${event.tx_hash}` : ""}`
-            : event.status === "rejected"
-              ? "Rejected. No action was taken."
-              : `Status: ${event.status}`,
-        });
-      } catch {
-        return jsonResult({
-          approval_id: params.approval_id,
-          status: "timeout",
-          message: "Timed out waiting for approval.",
-        });
-      }
-    },
-  });
 
   registerTool({
     name: "teenet_wallet_get_pubkey",

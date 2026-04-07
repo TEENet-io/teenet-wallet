@@ -1,7 +1,6 @@
 // plugin/src/approval-watcher.ts
-// SSE listener for approval events. Two modes:
-//   A (blocking): waitForApproval() — Promise resolves on SSE event
-//   B (subagent): onApprovalResolved() → subagent.run() in original session
+// SSE listener for approval events.
+// On approval resolution, notifies the original session via subagent.run().
 
 import type { WalletAPI } from "./api-client.ts";
 
@@ -20,8 +19,6 @@ export type SubagentRun = (opts: {
   idempotencyKey?: string;
 }) => Promise<{ runId: string }>;
 
-type Resolver = (event: ApprovalEvent) => void;
-
 type PluginLogger = {
   info?: (message: string, meta?: Record<string, unknown>) => void;
   error?: (message: string, meta?: Record<string, unknown>) => void;
@@ -37,9 +34,7 @@ export class ApprovalWatcher {
   private connected = false;
   private reconnectDelay = 5000;
 
-  // Mode A: Promise-based waiters.
-  private pending: Map<number, Resolver[]> = new Map();
-  // Mode B: approval_id → { sessionKey, context, createdAt } for subagent routing.
+  // approval_id → { sessionKey, context, createdAt } for subagent routing.
   private sessionMap: Map<number, { sessionKey: string; context?: string; createdAt: number }> = new Map();
 
   constructor(api: WalletAPI) {
@@ -93,35 +88,10 @@ export class ApprovalWatcher {
       this.abortController = null;
     }
     this.connected = false;
-    for (const [id, resolvers] of this.pending) {
-      for (const resolve of resolvers) {
-        resolve({ approval_id: id, status: "error", approval_type: "unknown" });
-      }
-    }
-    this.pending.clear();
   }
 
   get isConnected(): boolean {
     return this.connected;
-  }
-
-  /** Mode A: block until approval resolves. */
-  waitForApproval(approvalId: number, timeoutMs: number = 30 * 60 * 1000): Promise<ApprovalEvent> {
-    return new Promise<ApprovalEvent>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.removeResolver(approvalId, wrappedResolve);
-        reject(new Error(`Approval ${approvalId} timed out after ${timeoutMs / 1000}s`));
-      }, timeoutMs);
-
-      const wrappedResolve = (event: ApprovalEvent) => {
-        clearTimeout(timer);
-        resolve(event);
-      };
-
-      const resolvers = this.pending.get(approvalId) || [];
-      resolvers.push(wrappedResolve);
-      this.pending.set(approvalId, resolvers);
-    });
   }
 
   // ── SSE connection ────────────────────────────────────────────────
@@ -200,16 +170,7 @@ export class ApprovalWatcher {
   // ── Event handling ────────────────────────────────────────────────
 
   private onApprovalResolved(event: ApprovalEvent): void {
-    // Mode A: resolve blocking waiters.
-    const resolvers = this.pending.get(event.approval_id);
-    if (resolvers) {
-      for (const resolve of resolvers) {
-        resolve(event);
-      }
-      this.pending.delete(event.approval_id);
-    }
-
-    // Mode B: notify via subagent in the original session.
+    // Notify via subagent in the original session.
     const tracked = this.sessionMap.get(event.approval_id);
     if (tracked) {
       this.sessionMap.delete(event.approval_id);
@@ -268,15 +229,6 @@ export class ApprovalWatcher {
       if (r.status === "rejected") {
         this.log("reconcile.error", { error: String(r.reason) });
       }
-    }
-  }
-
-  private removeResolver(approvalId: number, resolver: Resolver): void {
-    const resolvers = this.pending.get(approvalId);
-    if (resolvers) {
-      const idx = resolvers.indexOf(resolver);
-      if (idx >= 0) resolvers.splice(idx, 1);
-      if (resolvers.length === 0) this.pending.delete(approvalId);
     }
   }
 

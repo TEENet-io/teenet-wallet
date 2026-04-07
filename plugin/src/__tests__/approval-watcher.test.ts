@@ -29,34 +29,6 @@ describe("ApprovalWatcher", () => {
     watcher.stop(); // should not throw
   });
 
-  it("waitForApproval resolves when approval event arrives", async () => {
-    const watcher = new ApprovalWatcher(mockApi());
-
-    const promise = watcher.waitForApproval(42, 5000);
-
-    (watcher as any).onApprovalResolved({
-      approval_id: 42,
-      status: "approved",
-      approval_type: "transfer",
-      tx_hash: "0xdeadbeef",
-    });
-
-    const event = await promise;
-    assert.equal(event.approval_id, 42);
-    assert.equal(event.status, "approved");
-    assert.equal(event.tx_hash, "0xdeadbeef");
-  });
-
-  it("waitForApproval times out", async () => {
-    const watcher = new ApprovalWatcher(mockApi());
-    try {
-      await watcher.waitForApproval(99, 100); // 100ms timeout
-      assert.fail("should have thrown");
-    } catch (err: any) {
-      assert.ok(err.message.includes("timed out"));
-    }
-  });
-
   it("notifies via subagent on approval resolved", async () => {
     const watcher = new ApprovalWatcher(mockApi());
     const subagent = mockSubagentRun();
@@ -128,12 +100,4 @@ describe("ApprovalWatcher", () => {
     assert.equal(subagent.calls.length, 0);
   });
 
-  it("stop resolves pending waiters with error", async () => {
-    const watcher = new ApprovalWatcher(mockApi());
-    const promise = watcher.waitForApproval(10, 30000);
-    watcher.stop();
-    const event = await promise;
-    assert.equal(event.status, "error");
-    assert.equal(event.approval_id, 10);
-  });
 });
