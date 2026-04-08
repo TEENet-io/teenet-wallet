@@ -1,6 +1,6 @@
 module github.com/TEENet-io/teenet-wallet
 
-go 1.25.8
+go 1.25.9
 
 require (
 	filippo.io/edwards25519 v1.2.0

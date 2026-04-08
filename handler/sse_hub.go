@@ -1,3 +1,6 @@
+// Copyright (C) 2026 TEENet Technology (Hong Kong) Limited. All rights reserved.
+// SPDX-License-Identifier: GPL-3.0-only
+
 package handler
 
 import (

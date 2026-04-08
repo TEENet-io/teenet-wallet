@@ -1,3 +1,6 @@
+// Copyright (C) 2026 TEENet Technology (Hong Kong) Limited. All rights reserved.
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { WalletAPI } from "./src/api-client.js";
 import { ApprovalWatcher } from "./src/approval-watcher.js";

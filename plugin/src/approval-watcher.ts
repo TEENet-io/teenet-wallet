@@ -1,3 +1,6 @@
+// Copyright (C) 2026 TEENet Technology (Hong Kong) Limited. All rights reserved.
+// SPDX-License-Identifier: GPL-3.0-only
+
 // plugin/src/approval-watcher.ts
 // SSE listener for approval events.
 // On approval resolution, notifies the original session via subagent.run().

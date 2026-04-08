@@ -20,9 +20,15 @@ Thumbs.db
 .env
 .env.*
 
+# Test & build artifacts
+coverage.out
+*.coverprofile
+*.log
+vendor/
+__debug_bin*
+*.pem
+*.key
+
 # Claude Code
 .claude/
 
-# Local-only docs 
-docs/zh/skill-onboarding-feature.md
-docs/zh/skill-context-optimization.md

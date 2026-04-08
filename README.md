@@ -100,7 +100,7 @@ AI Agent / App                       User (Browser)
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.25+
 - SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
 - A running TEENet mesh node with app-comm-consensus on port 8089
 
@@ -380,6 +380,12 @@ Two ways to use this wallet with [OpenClaw](https://openclaw.ai) AI agents:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
+## Disclaimer
+
+This software is experimental and provided "as is" without warranty. Cryptocurrency transactions are final and irreversible. TEENet is not responsible for any loss of digital assets. See [DISCLAIMER.md](DISCLAIMER.md) for full details.
+
 ## License
 
-MIT -- see [LICENSE](LICENSE)
+Copyright (C) 2026 TEENet Technology (Hong Kong) Limited.
+
+GPL-3.0 -- see [LICENSE](LICENSE)

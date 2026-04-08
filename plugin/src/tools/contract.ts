@@ -1,3 +1,6 @@
+// Copyright (C) 2026 TEENet Technology (Hong Kong) Limited. All rights reserved.
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { Type } from "@sinclair/typebox";
 import type { WalletAPI } from "../api-client.js";
 import type { ApprovalWatcher } from "../approval-watcher.js";

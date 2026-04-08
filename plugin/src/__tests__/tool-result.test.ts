@@ -1,3 +1,6 @@
+// Copyright (C) 2026 TEENet Technology (Hong Kong) Limited. All rights reserved.
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { jsonResult, approvalOrResult } from "../tools/tool-result.js";
