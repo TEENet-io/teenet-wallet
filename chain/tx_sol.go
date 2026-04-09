@@ -40,6 +40,9 @@ func BuildSOLTx(rpcURL, fromAddr, toAddr string, amountSOL float64) (*SOLTxData,
 	if rpcURL == "" {
 		rpcURL = "https://api.mainnet-beta.solana.com"
 	}
+	if amountSOL < 0 {
+		return nil, fmt.Errorf("amount must not be negative")
+	}
 	lamportsBig := new(big.Float).SetFloat64(amountSOL)
 	lamportsBig.Mul(lamportsBig, new(big.Float).SetFloat64(1e9))
 	lamportsInt, _ := lamportsBig.Uint64()
@@ -69,6 +72,39 @@ func BuildSOLTx(rpcURL, fromAddr, toAddr string, amountSOL float64) (*SOLTxData,
 		return nil, err
 	}
 
+	return &SOLTxData{
+		Params:       SOLTxParams{From: fromAddr, To: toAddr, Lamports: lamports, Blockhash: blockhash},
+		MessageBytes: msgBytes,
+	}, nil
+}
+
+// BuildSOLTxFromLamports constructs a Solana system transfer message using a pre-computed
+// lamports value, avoiding float64 precision loss.
+func BuildSOLTxFromLamports(rpcURL, fromAddr, toAddr string, lamports uint64) (*SOLTxData, error) {
+	if rpcURL == "" {
+		rpcURL = "https://api.mainnet-beta.solana.com"
+	}
+	if lamports == 0 {
+		return nil, fmt.Errorf("amount must be positive")
+	}
+	result, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
+		"jsonrpc": "2.0", "id": 1,
+		"method":  "getLatestBlockhash",
+		"params":  []interface{}{map[string]interface{}{"commitment": "finalized"}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get blockhash: %w", err)
+	}
+	resMap, _ := result["result"].(map[string]interface{})
+	valMap, _ := resMap["value"].(map[string]interface{})
+	blockhash, _ := valMap["blockhash"].(string)
+	if blockhash == "" {
+		return nil, fmt.Errorf("empty blockhash from RPC")
+	}
+	msgBytes, err := buildSOLMessage(fromAddr, toAddr, blockhash, lamports)
+	if err != nil {
+		return nil, err
+	}
 	return &SOLTxData{
 		Params:       SOLTxParams{From: fromAddr, To: toAddr, Lamports: lamports, Blockhash: blockhash},
 		MessageBytes: msgBytes,
@@ -106,6 +142,9 @@ func AssembleAndBroadcastSOL(rpcURL string, params SOLTxParams, sig []byte) (str
 		return "", fmt.Errorf("broadcast: %w", err)
 	}
 	txSig, _ := result["result"].(string)
+	if txSig == "" {
+		return "", fmt.Errorf("broadcast returned empty transaction signature")
+	}
 	return txSig, nil
 }
 
@@ -241,6 +280,9 @@ func AssembleAndBroadcastSOLToken(rpcURL string, params SOLTokenTransferParams, 
 		return "", fmt.Errorf("broadcast: %w", err)
 	}
 	txSig, _ := result["result"].(string)
+	if txSig == "" {
+		return "", fmt.Errorf("broadcast returned empty transaction signature")
+	}
 	return txSig, nil
 }
 
@@ -435,6 +477,9 @@ func AssembleAndBroadcastSOLProgram(rpcURL string, params SOLProgramCallParams, 
 		return "", fmt.Errorf("broadcast: %w", err)
 	}
 	txSig, _ := result["result"].(string)
+	if txSig == "" {
+		return "", fmt.Errorf("broadcast returned empty transaction signature")
+	}
 	return txSig, nil
 }
 
@@ -646,6 +691,39 @@ func BuildSOLWrapTx(rpcURL, ownerAddr string, amountSOL float64) (*SOLWrapTxData
 	}, nil
 }
 
+// BuildSOLWrapTxFromLamports constructs a wrap-SOL transaction using a pre-computed
+// lamports value, avoiding float64 precision loss.
+func BuildSOLWrapTxFromLamports(rpcURL, ownerAddr string, lamports uint64) (*SOLWrapTxData, error) {
+	if rpcURL == "" {
+		rpcURL = "https://api.mainnet-beta.solana.com"
+	}
+	if lamports == 0 {
+		return nil, fmt.Errorf("amount must be positive")
+	}
+	result, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
+		"jsonrpc": "2.0", "id": 1,
+		"method": "getLatestBlockhash",
+		"params": []interface{}{map[string]interface{}{"commitment": "finalized"}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get blockhash: %w", err)
+	}
+	resMap, _ := result["result"].(map[string]interface{})
+	valMap, _ := resMap["value"].(map[string]interface{})
+	blockhash, _ := valMap["blockhash"].(string)
+	if blockhash == "" {
+		return nil, fmt.Errorf("empty blockhash from RPC")
+	}
+	msgBytes, err := buildSOLWrapMessage(ownerAddr, lamports, blockhash)
+	if err != nil {
+		return nil, err
+	}
+	return &SOLWrapTxData{
+		Params:       SOLWrapParams{From: ownerAddr, Lamports: lamports, Blockhash: blockhash, Wrap: true},
+		MessageBytes: msgBytes,
+	}, nil
+}
+
 // buildSOLWrapMessage constructs the message for wrapping SOL → wSOL.
 //
 // Accounts (7):
@@ -805,10 +883,45 @@ func buildSOLUnwrapMessage(ownerAddr string, blockhash string) ([]byte, error) {
 	return msg, nil
 }
 
+// buildSOLWrapTxFromLamports fetches a fresh blockhash and builds a wrap transaction using
+// lamports directly, avoiding float64 precision loss in RebuildSOLWrapTx.
+func buildSOLWrapTxFromLamports(rpcURL, ownerAddr string, lamports uint64) (*SOLWrapTxData, error) {
+	if rpcURL == "" {
+		rpcURL = "https://api.mainnet-beta.solana.com"
+	}
+	if lamports == 0 {
+		return nil, fmt.Errorf("amount too small (rounds to 0 lamports)")
+	}
+
+	result, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
+		"jsonrpc": "2.0", "id": 1,
+		"method": "getLatestBlockhash",
+		"params": []interface{}{map[string]interface{}{"commitment": "finalized"}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get blockhash: %w", err)
+	}
+	resMap, _ := result["result"].(map[string]interface{})
+	valMap, _ := resMap["value"].(map[string]interface{})
+	blockhash, _ := valMap["blockhash"].(string)
+	if blockhash == "" {
+		return nil, fmt.Errorf("empty blockhash from RPC")
+	}
+
+	msgBytes, err := buildSOLWrapMessage(ownerAddr, lamports, blockhash)
+	if err != nil {
+		return nil, err
+	}
+	return &SOLWrapTxData{
+		Params:       SOLWrapParams{From: ownerAddr, Lamports: lamports, Blockhash: blockhash, Wrap: true},
+		MessageBytes: msgBytes,
+	}, nil
+}
+
 // RebuildSOLWrapTx refreshes the blockhash for a wrap/unwrap transaction.
 func RebuildSOLWrapTx(rpcURL string, params SOLWrapParams) (*SOLWrapTxData, error) {
 	if params.Wrap {
-		return BuildSOLWrapTx(rpcURL, params.From, float64(params.Lamports)/1e9)
+		return buildSOLWrapTxFromLamports(rpcURL, params.From, params.Lamports)
 	}
 	return BuildSOLUnwrapTx(rpcURL, params.From)
 }
@@ -848,12 +961,18 @@ func AssembleAndBroadcastSOLWrap(rpcURL string, params SOLWrapParams, sig []byte
 		return "", fmt.Errorf("broadcast: %w", err)
 	}
 	txSig, _ := result["result"].(string)
+	if txSig == "" {
+		return "", fmt.Errorf("broadcast returned empty transaction signature")
+	}
 	return txSig, nil
 }
 
 // compactU16 encodes an integer as Solana compact-u16.
 // Values 0–127 use 1 byte; 128–16383 use 2 bytes.
 func compactU16(v int) []byte {
+	if v < 0 || v > 0xFFFF {
+		panic(fmt.Sprintf("compactU16: value %d out of range [0, 65535]", v))
+	}
 	if v <= 0x7f {
 		return []byte{byte(v)}
 	}

@@ -47,7 +47,7 @@ ENV HOST=0.0.0.0 \
     PORT=8080 \
     DATA_DIR=/data \
     CONSENSUS_URL=http://localhost:8089 \
-    FAUCET_URL=https://test.teenet.io/instance/faucet
+    FAUCET_URL=""
 
 USER app
 

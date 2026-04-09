@@ -5,6 +5,7 @@ package handler
 
 import (
 	"bufio"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,28 +64,37 @@ func TestSSEStream_ReceivesApprovalEvent(t *testing.T) {
 		})
 	}()
 
-	// Read the event lines.
+	// Read the event lines using a goroutine with context timeout.
+	type sseResult struct {
+		eventType string
+		data      string
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resultCh := make(chan sseResult, 1)
+	go func() {
+		var eventType, data string
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "event: ") {
+				eventType = strings.TrimPrefix(line, "event: ")
+			}
+			if strings.HasPrefix(line, "data: ") {
+				data = strings.TrimPrefix(line, "data: ")
+				resultCh <- sseResult{eventType, data}
+				return
+			}
+		}
+	}()
+
 	var eventType, data string
-	deadline := time.After(3 * time.Second)
-	done := false
-	for !done {
-		select {
-		case <-deadline:
-			t.Fatal("timeout waiting for SSE event")
-			return
-		default:
-		}
-		if !scanner.Scan() {
-			break
-		}
-		line := scanner.Text()
-		if strings.HasPrefix(line, "event: ") {
-			eventType = strings.TrimPrefix(line, "event: ")
-		}
-		if strings.HasPrefix(line, "data: ") {
-			data = strings.TrimPrefix(line, "data: ")
-			done = true
-		}
+	select {
+	case res := <-resultCh:
+		eventType = res.eventType
+		data = res.data
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for SSE event")
 	}
 
 	if eventType != "approval_resolved" {
@@ -134,27 +144,36 @@ func TestSSEStream_ReceivesRejectedEvent(t *testing.T) {
 		})
 	}()
 
+	type sseResult2 struct {
+		eventType string
+		data      string
+	}
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel2()
+
+	resultCh2 := make(chan sseResult2, 1)
+	go func() {
+		var eventType, data string
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "event: ") {
+				eventType = strings.TrimPrefix(line, "event: ")
+			}
+			if strings.HasPrefix(line, "data: ") {
+				data = strings.TrimPrefix(line, "data: ")
+				resultCh2 <- sseResult2{eventType, data}
+				return
+			}
+		}
+	}()
+
 	var eventType, data string
-	deadline := time.After(3 * time.Second)
-	done := false
-	for !done {
-		select {
-		case <-deadline:
-			t.Fatal("timeout waiting for SSE event")
-			return
-		default:
-		}
-		if !scanner.Scan() {
-			break
-		}
-		line := scanner.Text()
-		if strings.HasPrefix(line, "event: ") {
-			eventType = strings.TrimPrefix(line, "event: ")
-		}
-		if strings.HasPrefix(line, "data: ") {
-			data = strings.TrimPrefix(line, "data: ")
-			done = true
-		}
+	select {
+	case res := <-resultCh2:
+		eventType = res.eventType
+		data = res.data
+	case <-ctx2.Done():
+		t.Fatal("timed out waiting for SSE event")
 	}
 
 	if eventType != "approval_resolved" {
@@ -211,23 +230,25 @@ func TestSSEStream_UserIsolation(t *testing.T) {
 	}()
 
 	// User 42 should receive approval_id=2 (not 1).
+	ctx3, cancel3 := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel3()
+
+	dataCh3 := make(chan string, 1)
+	go func() {
+		for scanner42.Scan() {
+			line := scanner42.Text()
+			if strings.HasPrefix(line, "data: ") {
+				dataCh3 <- strings.TrimPrefix(line, "data: ")
+				return
+			}
+		}
+	}()
+
 	var data string
-	deadline := time.After(3 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timeout")
-			return
-		default:
-		}
-		if !scanner42.Scan() {
-			break
-		}
-		line := scanner42.Text()
-		if strings.HasPrefix(line, "data: ") {
-			data = strings.TrimPrefix(line, "data: ")
-			break
-		}
+	select {
+	case data = <-dataCh3:
+	case <-ctx3.Done():
+		t.Fatal("timed out waiting for SSE event for user 42")
 	}
 
 	if !strings.Contains(data, `"approval_id":2`) {

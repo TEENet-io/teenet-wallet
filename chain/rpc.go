@@ -33,6 +33,9 @@ var httpClient = &http.Client{
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
 }
 
 // BalanceResult holds a balance query response.
@@ -194,7 +197,9 @@ func jsonRPC(url string, payload interface{}) (map[string]interface{}, error) {
 	}
 
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber()
+	if err := dec.Decode(&result); err != nil {
 		return nil, fmt.Errorf("rpc decode failed: %w", err)
 	}
 	if errField, ok := result["error"]; ok && errField != nil {

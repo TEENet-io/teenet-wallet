@@ -292,3 +292,48 @@ func TestUnwrapSOL_FailsAtRPC(t *testing.T) {
 		t.Fatalf("should not get 400 with valid request: %s", w.Body.String())
 	}
 }
+
+// ─── Self-transfer rejection ─────────────────────────────────────────────────
+
+func TestTransfer_SelfTransfer_Rejected(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedSolWallet(t, db)
+
+	r := solTransferRouter(db, user.ID, nil, "")
+
+	// Use the wallet's own address as the recipient.
+	body := jsonBody(map[string]interface{}{
+		"to":     wallet.Address,
+		"amount": "1",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for self-transfer, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ─── Native SOL transfer: invalid address ───────────────────────────────────
+
+func TestTransfer_SOL_NativeInvalidAddress(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedSolWallet(t, db)
+
+	r := solTransferRouter(db, user.ID, nil, "")
+
+	body := jsonBody(map[string]interface{}{
+		"to":     "not-valid-base58!!!",
+		"amount": "1",
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid Solana address, got %d: %s", w.Code, w.Body.String())
+	}
+}

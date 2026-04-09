@@ -6,6 +6,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -86,7 +87,9 @@ func (s *IdempotencyStore) Save(c *gin.Context, key string, userID uint, statusC
 		ExpiresAt:  time.Now().Add(idempotencyTTL),
 		CreatedAt:  time.Now(),
 	}
-	s.db.Create(&rec)
+	if result := s.db.Create(&rec); result.Error != nil {
+		slog.Warn("idempotency save conflict", "key", key, "error", result.Error)
+	}
 }
 
 // IdempotencyKey extracts the Idempotency-Key header from the request.

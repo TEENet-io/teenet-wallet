@@ -14,17 +14,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// CustomChain persists user-added EVM chains across restarts.
-type CustomChain struct {
-	ID       uint   `json:"id" gorm:"primaryKey;autoIncrement"`
-	Name     string `json:"name" gorm:"size:50;uniqueIndex"`
-	Label    string `json:"label" gorm:"size:100"`
-	Currency string `json:"currency" gorm:"size:10"`
-	Family   string `json:"family" gorm:"size:10"` // "evm" only for now
-	RPCURL   string `json:"rpc_url" gorm:"size:500"`
-	ChainID  uint64 `json:"chain_id"` // EVM chain ID for replay protection
-}
-
 // Wallet represents a chain wallet backed by a TEE-DAO key pair.
 // The private key never exists outside TEE hardware.
 type Wallet struct {
@@ -59,21 +48,20 @@ type ChainConfig struct {
 	Family   string `json:"family"`   // "evm" | "solana"
 	RPCURL   string `json:"rpc_url"`  // JSON-RPC endpoint
 	ChainID  uint64 `json:"chain_id"` // EVM chain ID (0 for non-EVM)
-	Custom   bool   `json:"custom"`   // true if user-added at runtime
 }
 
-// Chains is the active chain registry, loaded at startup.
+// chains is the active chain registry, loaded at startup.
 // Use GetChain/SetChain/DeleteChain/GetAllChains for concurrent access.
 var (
 	chainsMu sync.RWMutex
-	Chains   map[string]ChainConfig
+	chains   map[string]ChainConfig
 )
 
 // GetChain returns the ChainConfig for the given name and whether it exists.
 func GetChain(name string) (ChainConfig, bool) {
 	chainsMu.RLock()
 	defer chainsMu.RUnlock()
-	c, ok := Chains[name]
+	c, ok := chains[name]
 	return c, ok
 }
 
@@ -81,22 +69,16 @@ func GetChain(name string) (ChainConfig, bool) {
 func SetChain(name string, cfg ChainConfig) {
 	chainsMu.Lock()
 	defer chainsMu.Unlock()
-	Chains[name] = cfg
+	chains[name] = cfg
 }
 
-// DeleteChain removes a chain from the registry.
-func DeleteChain(name string) {
-	chainsMu.Lock()
-	defer chainsMu.Unlock()
-	delete(Chains, name)
-}
 
 // GetAllChains returns a snapshot copy of the chain registry.
 func GetAllChains() map[string]ChainConfig {
 	chainsMu.RLock()
 	defer chainsMu.RUnlock()
-	cp := make(map[string]ChainConfig, len(Chains))
-	for k, v := range Chains {
+	cp := make(map[string]ChainConfig, len(chains))
+	for k, v := range chains {
 		cp[k] = v
 	}
 	return cp
@@ -106,7 +88,7 @@ func GetAllChains() map[string]ChainConfig {
 func ChainsLen() int {
 	chainsMu.RLock()
 	defer chainsMu.RUnlock()
-	return len(Chains)
+	return len(chains)
 }
 
 // defaultChains is the fallback when no chains.json is present.
@@ -126,11 +108,11 @@ var defaultChains = []ChainConfig{
 func LoadChains(path string) {
 	chainsMu.Lock()
 	defer chainsMu.Unlock()
-	Chains = make(map[string]ChainConfig)
+	chains = make(map[string]ChainConfig)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		useDefaultChains()
-		slog.Info("using built-in default chains", "count", len(Chains))
+		slog.Info("using built-in default chains", "count", len(chains))
 		return
 	}
 	var list []ChainConfig
@@ -140,47 +122,14 @@ func LoadChains(path string) {
 		return
 	}
 	for _, c := range list {
-		Chains[c.Name] = c
+		chains[c.Name] = c
 	}
-	slog.Info("chains loaded", "count", len(Chains), "path", path)
+	slog.Info("chains loaded", "count", len(chains), "path", path)
 }
 
 func useDefaultChains() {
 	for _, c := range defaultChains {
-		Chains[c.Name] = c
+		chains[c.Name] = c
 	}
 }
 
-// LoadCustomChains reads all CustomChain rows from the DB and merges them into
-// the Chains registry. Built-in chain names are never overwritten.
-func LoadCustomChains(db *gorm.DB) {
-	var rows []CustomChain
-	if err := db.Find(&rows).Error; err != nil {
-		slog.Warn("failed to load custom chains from db", "error", err)
-		return
-	}
-	chainsMu.Lock()
-	defer chainsMu.Unlock()
-	added := 0
-	for _, row := range rows {
-		if _, exists := Chains[row.Name]; exists {
-			// Built-in chain — skip silently.
-			continue
-		}
-		Chains[row.Name] = ChainConfig{
-			Name:     row.Name,
-			Label:    row.Label,
-			Protocol: "ecdsa",
-			Curve:    "secp256k1",
-			Currency: row.Currency,
-			Family:   row.Family,
-			RPCURL:   row.RPCURL,
-			ChainID:  row.ChainID,
-			Custom:   true,
-		}
-		added++
-	}
-	if added > 0 {
-		slog.Info("custom chains loaded from db", "count", added)
-	}
-}

@@ -168,3 +168,36 @@ func TestTransfer_WalletNotReady(t *testing.T) {
 		t.Fatalf("expected 400 for non-ready wallet, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// ─── ERC-20 uint256 overflow ──────────────────────────────────────────────────
+
+func TestTransfer_ERC20_Uint256Overflow(t *testing.T) {
+	db := testDB(t)
+	const uid uint = 15
+	db.Create(&model.User{ID: uid, Username: "overflowuser"})
+	wallet := model.Wallet{UserID: uid, Chain: "ethereum", KeyName: "k-overflow", Status: "ready"}
+	db.Create(&wallet)
+
+	contractAddr := "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb49"
+	db.Create(&model.AllowedContract{
+		UserID: uid, Chain: wallet.Chain, ContractAddress: contractAddr, Symbol: "USDC", Decimals: 6,
+	})
+
+	r := ethTransferRouter(db, uid, nil, "")
+
+	// Amount larger than 2^256 — will produce a tokenUnits value whose byte
+	// representation exceeds 32 bytes and must be rejected.
+	body := jsonBody(map[string]interface{}{
+		"to":     "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		"amount": "999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+		"token":  map[string]interface{}{"contract": contractAddr, "symbol": "USDC", "decimals": 6},
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/transfer", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for uint256 overflow, got %d: %s", w.Code, w.Body.String())
+	}
+}

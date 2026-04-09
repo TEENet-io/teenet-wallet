@@ -29,11 +29,6 @@ func testHashKeyWithSalt(raw, salt string) string {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-func testHashKey(raw string) string {
-	h := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(h[:])
-}
-
 func authRouter(db *gorm.DB, sessions *handler.SessionStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -275,7 +270,7 @@ func TestAPIKey_MaxLimit(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	// Create 10 keys.
+	// Create 10 keys directly in DB.
 	for i := 0; i < 10; i++ {
 		apiKey := model.APIKey{
 			UserID:  user.ID,
@@ -296,12 +291,32 @@ func TestAPIKey_MaxLimit(t *testing.T) {
 		t.Fatalf("expected 10 keys, got %d", count)
 	}
 
-	// 11th key creation should be blocked by handler (tested at DB level here).
-	// The actual enforcement is in GenerateAPIKey handler, but we verify the
-	// count check logic works.
-	if count >= 10 {
-		// This is what the handler checks — we verify the condition is correct.
-		t.Log("correctly detected limit reached")
+	// Attempt to create an 11th key through the HTTP handler and verify it is
+	// rejected. In gin.TestMode with a nil SDK client, verifyFreshPasskeyParsed
+	// returns true, allowing us to exercise the limit-enforcement code path.
+	gin.SetMode(gin.TestMode)
+	authH := handler.NewAuthHandler(db, nil, handler.NewSessionStore(), "http://localhost")
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("userID", user.ID)
+		c.Set("authMode", "passkey")
+		c.Next()
+	})
+	r.POST("/api/auth/apikey/generate", authH.GenerateAPIKey)
+
+	body := jsonBody(map[string]interface{}{
+		"label":            "overflow-key",
+		"login_session_id": 1,
+		"credential":       map[string]interface{}{"type": "test"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/apikey/generate", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict when creating 11th API key, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

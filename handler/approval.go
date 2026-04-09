@@ -53,9 +53,25 @@ func NewApprovalHandler(db *gorm.DB, sdkClient *sdk.Client, sseHub *SSEHub) *App
 // Stop cancels the background expiry goroutine.
 func (h *ApprovalHandler) Stop() { h.cancel() }
 
+func cleanupApprovalMu(db *gorm.DB) {
+	approvalMu.Range(func(key, value interface{}) bool {
+		id, ok := key.(uint)
+		if !ok {
+			return true
+		}
+		var count int64
+		db.Model(&model.ApprovalRequest{}).Where("id = ? AND status = ?", id, "pending").Count(&count)
+		if count == 0 {
+			approvalMu.Delete(key)
+		}
+		return true
+	})
+}
+
 func (h *ApprovalHandler) expireLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
+	var tickCount int
 	for {
 		select {
 		case <-ctx.Done():
@@ -64,6 +80,10 @@ func (h *ApprovalHandler) expireLoop(ctx context.Context) {
 			h.db.Model(&model.ApprovalRequest{}).
 				Where("status = ? AND expires_at < ?", "pending", time.Now()).
 				Update("status", "expired")
+			tickCount++
+			if tickCount%10 == 0 {
+				cleanupApprovalMu(h.db)
+			}
 		}
 	}
 }
@@ -100,9 +120,21 @@ func (h *ApprovalHandler) ListPending(c *gin.Context) {
 	if c.IsAborted() {
 		return
 	}
+	limit := 100
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
 	var pending []model.ApprovalRequest
 	if err := h.db.Where("user_id = ? AND status = ? AND expires_at > ?", userID, "pending", time.Now()).
-		Order("created_at desc").Find(&pending).Error; err != nil {
+		Order("created_at desc").Limit(limit).Offset(offset).Find(&pending).Error; err != nil {
 		slog.Error("list pending approvals failed", "user_id", userID, "error", err)
 		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "list_pending", "user_id": userID})
 		return
@@ -443,6 +475,48 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	sig := "0x" + hex.EncodeToString(result.Signature)
 	approverPasskeyID := passkeyUserIDFromCtx(c)
 
+	// Before broadcast, pre-deduct from the daily spend limit so we don't execute a
+	// transaction that would push the wallet over its configured daily USD ceiling.
+	// On broadcast failure below, releaseDailySpentUSD rolls this back.
+	// The post-broadcast addDailySpentUSD call is skipped when preDeductedUSD is set
+	// (the deduction already occurred here).
+	var preDeductedUSD string   // non-empty when we pre-deducted
+	var preDeductWalletID string
+	if txParamsToUse != "" && approval.WalletID != nil && h.prices != nil {
+		var policy model.ApprovalPolicy
+		if h.db.Where("wallet_id = ? AND enabled = ?", *approval.WalletID, true).First(&policy).Error == nil {
+			if policy.DailyLimitUSD != "" {
+				var txCtxPre map[string]interface{}
+				_ = json.Unmarshal([]byte(approval.TxContext), &txCtxPre)
+				if txCtxPre != nil {
+					amount, currency := extractAmountCurrency(txCtxPre)
+					if amount != "" && currency != "" {
+						var usdPrice float64
+						if p, err := h.prices.GetUSDPrice(currency); err == nil && p > 0 {
+							usdPrice = p
+						}
+						if usdPrice > 0 {
+							if a, ok := new(big.Float).SetString(amount); ok {
+								f, _ := a.Float64()
+								amountUSDStr := new(big.Float).SetFloat64(f * usdPrice).Text('f', 6)
+								exceeded, msg, limitErr := checkAndDeductDailyLimitUSD(h.db, *approval.WalletID, amountUSDStr)
+								if limitErr != nil {
+									slog.Error("daily limit check error on approve", "approval_id", approval.ID, "error", limitErr)
+								}
+								if exceeded {
+									jsonError(c, http.StatusBadRequest, msg)
+									return
+								}
+								preDeductedUSD = amountUSDStr
+								preDeductWalletID = *approval.WalletID
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// If TxParams is set, this was a /transfer approval: assemble and broadcast.
 	var txHash string
 	if txParamsToUse != "" {
@@ -450,6 +524,9 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		txHash, broadcastErr = broadcastSigned(wallet, txParamsToUse, result.Signature)
 		if broadcastErr != nil {
 			slog.Error("broadcast failed", "approval_id", approval.ID, "wallet_id", wallet.ID, "address", wallet.Address, "error", broadcastErr)
+			if preDeductedUSD != "" {
+				releaseDailySpentUSD(h.db, preDeductWalletID, preDeductedUSD)
+			}
 			h.db.Model(&approval).Update("status", "failed")
 			h.broadcastApproval(approval, "failed", "broadcast error: "+broadcastErr.Error())
 			respondBroadcastErrorDetails(c, broadcastErr, gin.H{
@@ -491,13 +568,33 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	updateAuditByApprovalID(h.db, approval.ID, "success", auditExtra)
 
 	// Update daily USD spent counter for /transfer approvals that were successfully broadcast.
-	if txHash != "" && txCtx != nil && h.prices != nil {
+	// Skip when preDeductedUSD is set — the deduction already occurred in the pre-check above.
+	if txHash != "" && txCtx != nil && h.prices != nil && preDeductedUSD == "" {
 		amount, currency := extractAmountCurrency(txCtx)
 		if amount != "" && currency != "" {
-			if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
+			var usdPrice float64
+			if p, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && p > 0 {
+				usdPrice = p
+			} else {
+				// Fallback for token transfers: try token-specific price lookups.
+				if contract, ok := txCtx["contract"].(string); ok && contract != "" {
+					chainName := ""
+					if cn, ok := txCtx["chain"].(string); ok {
+						chainName = cn
+					}
+					if tokenPrice, tpErr := h.prices.GetTokenUSDPrice(chainName, contract); tpErr == nil && tokenPrice > 0 {
+						usdPrice = tokenPrice
+					} else if jupPrice, jpErr := h.prices.GetJupiterPrice(contract); jpErr == nil && jupPrice > 0 {
+						usdPrice = jupPrice
+					} else if symPrice, spErr := h.prices.GetPriceBySymbol(currency); spErr == nil && symPrice > 0 {
+						usdPrice = symPrice
+					}
+				}
+			}
+			if usdPrice > 0 {
 				if a, ok := new(big.Float).SetString(amount); ok {
 					f, _ := a.Float64()
-					amountUSD := new(big.Float).SetFloat64(f * usdPrice).Text('f', 2)
+					amountUSD := new(big.Float).SetFloat64(f * usdPrice).Text('f', 6)
 					if approval.WalletID != nil {
 						addDailySpentUSD(h.db, *approval.WalletID, amountUSD)
 					}
@@ -532,10 +629,21 @@ func (h *ApprovalHandler) Reject(c *gin.Context) {
 	if !ok {
 		return
 	}
+
+	unlock := lockApproval(approval.ID)
+	defer unlock()
+
+	// Re-read approval under lock to prevent TOCTOU race
+	if err := h.db.First(&approval, approval.ID).Error; err != nil {
+		jsonError(c, http.StatusInternalServerError, "failed to reload approval")
+		return
+	}
+
 	if approval.Status != "pending" {
 		jsonError(c, http.StatusBadRequest, "approval is not pending")
 		return
 	}
+
 	if err := h.db.Model(&approval).Update("status", "rejected").Error; err != nil {
 		slog.Error("reject approval update failed", "approval_id", approval.ID, "error", err)
 		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "reject_approval", "approval_id": approval.ID})

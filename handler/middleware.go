@@ -69,7 +69,7 @@ func (s *SessionStore) GetCSRF(token string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	entry, ok := s.sessions[token]
-	if !ok {
+	if !ok || time.Now().After(entry.expiresAt) {
 		return ""
 	}
 	return entry.csrfToken

@@ -4,6 +4,7 @@
 package chain
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"strings"
@@ -28,21 +29,38 @@ type NonceManager struct {
 
 var nonceMgr = &NonceManager{nonces: make(map[string]*nonceEntry)}
 
+var nonceCleanupCancel context.CancelFunc
+
 func init() {
-	go nonceMgr.cleanup()
+	ctx, cancel := context.WithCancel(context.Background())
+	nonceCleanupCancel = cancel
+	go nonceMgr.cleanup(ctx)
 }
 
-func (nm *NonceManager) cleanup() {
+// StopNonceCleanup cancels the background nonce cleanup goroutine.
+func StopNonceCleanup() {
+	if nonceCleanupCancel != nil {
+		nonceCleanupCancel()
+	}
+}
+
+func (nm *NonceManager) cleanup(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Minute)
-	for range ticker.C {
-		nm.mu.Lock()
-		cutoff := time.Now().Add(-30 * time.Minute)
-		for key, entry := range nm.nonces {
-			if entry.lastUsed.Before(cutoff) {
-				delete(nm.nonces, key)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			nm.mu.Lock()
+			cutoff := time.Now().Add(-30 * time.Minute)
+			for key, entry := range nm.nonces {
+				if entry.lastUsed.Before(cutoff) {
+					delete(nm.nonces, key)
+				}
 			}
+			nm.mu.Unlock()
 		}
-		nm.mu.Unlock()
 	}
 }
 

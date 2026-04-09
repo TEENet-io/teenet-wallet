@@ -27,6 +27,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"github.com/TEENet-io/teenet-wallet/chain"
 	"github.com/TEENet-io/teenet-wallet/handler"
 	"github.com/TEENet-io/teenet-wallet/model"
 )
@@ -63,6 +64,10 @@ func main() {
 	frontendURL := envOrDefault("FRONTEND_URL", "")
 	if frontendURL == "*" {
 		slog.Warn("CORS: FRONTEND_URL is set to wildcard '*' — any origin can make cross-origin requests. Restrict to a specific origin in production.")
+		if os.Getenv("GIN_MODE") == "release" {
+			slog.Error("CORS wildcard '*' is not allowed in production mode. Set FRONTEND_URL to a specific origin.")
+			log.Fatal("refusing to start with FRONTEND_URL=* in release mode")
+		}
 	}
 	chainsFile := envOrDefault("CHAINS_FILE", "./chains.json")
 	apiKeyRateLimit        := envOrDefaultInt("API_KEY_RATE_LIMIT", 200)       // general: requests per minute per API key
@@ -92,13 +97,29 @@ func main() {
 	if err != nil {
 		log.Fatalf("get underlying sql.DB: %v", err)
 	}
-	sqlDB.Exec("PRAGMA journal_mode=WAL")
-	sqlDB.Exec("PRAGMA busy_timeout=5000")
-	sqlDB.Exec("PRAGMA foreign_keys=ON")
-	sqlDB.Exec("PRAGMA synchronous=NORMAL")
-	sqlDB.Exec("PRAGMA cache_size=-64000")    // 64 MB
-	sqlDB.Exec("PRAGMA temp_store=MEMORY")
-	sqlDB.Exec("PRAGMA mmap_size=268435456")  // 256 MB
+	defer sqlDB.Close()
+	defer chain.StopNonceCleanup()
+	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		slog.Warn("failed to set WAL mode", "error", err)
+	}
+	if _, err := sqlDB.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		slog.Warn("failed to set busy_timeout", "error", err)
+	}
+	if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		slog.Warn("failed to set foreign_keys", "error", err)
+	}
+	if _, err := sqlDB.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		slog.Warn("failed to set synchronous", "error", err)
+	}
+	if _, err := sqlDB.Exec("PRAGMA cache_size=-64000"); err != nil { // 64 MB
+		slog.Warn("failed to set cache_size", "error", err)
+	}
+	if _, err := sqlDB.Exec("PRAGMA temp_store=MEMORY"); err != nil {
+		slog.Warn("failed to set temp_store", "error", err)
+	}
+	if _, err := sqlDB.Exec("PRAGMA mmap_size=268435456"); err != nil { // 256 MB
+		slog.Warn("failed to set mmap_size", "error", err)
+	}
 
 	if err := db.AutoMigrate(
 		&model.User{},
@@ -109,14 +130,10 @@ func main() {
 		&model.AllowedContract{},
 		&model.AuditLog{},
 		&model.IdempotencyRecord{},
-		&model.CustomChain{},
 		&model.AddressBookEntry{},
 	); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
-
-	// Merge persisted custom chains into the registry now that the DB is ready.
-	model.LoadCustomChains(db)
 
 	// Init TEENet SDK.
 	opts := &sdk.ClientOptions{
@@ -142,6 +159,8 @@ func main() {
 	// Router.
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	// Only trust X-Forwarded-* headers from a local reverse proxy (e.g. nginx on the same host).
+	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 	r.Use(func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20) // 1 MB
 		c.Next()
@@ -213,10 +232,12 @@ func main() {
 	r.POST("/api/auth/passkey/register/verify", ipRL, authH.PasskeyRegistrationVerify) // registration only
 
 	// Protected routes (dual auth: API Key or Passkey session).
-	rateLimiter       := handler.NewRateLimiter(apiKeyRateLimit, time.Minute)
+	rateLimiter          := handler.NewRateLimiter(apiKeyRateLimit, time.Minute)
 	defer rateLimiter.Stop()
-	walletRateLimiter := handler.NewRateLimiter(walletCreateRateLimit, time.Minute)
+	walletRateLimiter    := handler.NewRateLimiter(walletCreateRateLimit, time.Minute)
 	defer walletRateLimiter.Stop()
+	transferRateLimiter  := handler.NewRateLimiter(20, time.Minute) // 20 fund-moving ops/min per user
+	defer transferRateLimiter.Stop()
 	auth := r.Group("/api")
 	auth.Use(handler.AuthMiddleware(db, sessions))
 	auth.Use(handler.CSRFMiddleware())
@@ -232,11 +253,6 @@ func main() {
 	passkeyOnly.GET("/auth/apikey/list", authH.ListAPIKeys)
 	passkeyOnly.DELETE("/auth/apikey", authH.RevokeAPIKey)
 	passkeyOnly.PATCH("/auth/apikey", authH.RenameAPIKey)
-
-	// Custom chain management (Passkey only — structural change to the wallet service).
-	chainH := handler.NewChainHandler(db, validateExternalURL)
-	passkeyOnly.POST("/chains", chainH.AddChain)
-	passkeyOnly.DELETE("/chains/:name", chainH.DeleteChain)
 
 	// Contract whitelist (dual-auth for read, Passkey-only for write).
 	contractH := handler.NewContractHandler(db, sdkClient, baseURL, approvalExpiry)
@@ -273,12 +289,13 @@ func main() {
 	// General contract call (API Key or Passkey, with security layers).
 	contractCallH := handler.NewContractCallHandler(db, sdkClient, baseURL, approvalExpiry)
 	contractCallH.SetPriceService(priceService)
-	auth.POST("/wallets/:id/contract-call", contractCallH.ContractCall)
-	auth.POST("/wallets/:id/approve-token", contractCallH.ApproveToken)
-	auth.POST("/wallets/:id/revoke-approval", contractCallH.RevokeApproval)
-	auth.POST("/wallets/:id/transfer", walletH.Transfer) // backend builds+broadcasts tx
-	auth.POST("/wallets/:id/wrap-sol", walletH.WrapSOL)
-	auth.POST("/wallets/:id/unwrap-sol", walletH.UnwrapSOL)
+	transferRL := handler.UserRateLimitMiddleware(transferRateLimiter)
+	auth.POST("/wallets/:id/contract-call", transferRL, contractCallH.ContractCall)
+	auth.POST("/wallets/:id/approve-token", transferRL, contractCallH.ApproveToken)
+	auth.POST("/wallets/:id/revoke-approval", transferRL, contractCallH.RevokeApproval)
+	auth.POST("/wallets/:id/transfer", transferRL, walletH.Transfer) // backend builds+broadcasts tx
+	auth.POST("/wallets/:id/wrap-sol", transferRL, walletH.WrapSOL)
+	auth.POST("/wallets/:id/unwrap-sol", transferRL, walletH.UnwrapSOL)
 	auth.GET("/wallets/:id/pubkey", walletH.GetPubkey)
 	auth.GET("/wallets/:id/policy", walletH.GetPolicy)        // read: API Key or Passkey
 	auth.PUT("/wallets/:id/policy", walletH.SetPolicy)        // passkey: apply directly; API key: creates approval
@@ -345,15 +362,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	slog.Info("shutting down")
-	// Run SQLite optimize on shutdown to update query planner statistics.
-	if sqlDB, err := db.DB(); err == nil {
-		sqlDB.Exec("PRAGMA optimize")
-	}
+	// Shutdown HTTP server first — waits for in-flight requests to complete.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("forced shutdown", "error", err)
 		os.Exit(1)
+	}
+	// Run SQLite optimize on shutdown to update query planner statistics.
+	// Background goroutines (nonce cleanup, DB) are stopped via defers above.
+	if _, err := db.DB(); err == nil {
+		sqlDB.Exec("PRAGMA optimize")
 	}
 	slog.Info("shutdown complete")
 }
@@ -422,6 +441,7 @@ var privateCIDRs []*net.IPNet
 
 func init() {
 	for _, cidr := range []string{
+		"0.0.0.0/8",
 		"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
 		"169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
 	} {

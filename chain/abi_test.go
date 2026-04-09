@@ -45,7 +45,10 @@ func TestEncodeCall_MatchesERC20Transfer(t *testing.T) {
 	addr := "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
 	amount := big.NewInt(1_000_000)
 
-	want := EncodeERC20Transfer(addr, amount)
+	want, err := EncodeERC20Transfer(addr, amount)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := EncodeCall("transfer(address,uint256)", []interface{}{addr, amount})
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +62,10 @@ func TestEncodeCall_MatchesERC20Approve(t *testing.T) {
 	addr := "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
 	amount, _ := new(big.Int).SetString("115792089237316195423570985008687907853269984665640564039457584007913129639935", 10) // max uint256
 
-	want := EncodeERC20Approve(addr, amount)
+	want, err := EncodeERC20Approve(addr, amount)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := EncodeCall("approve(address,uint256)", []interface{}{addr, amount})
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +126,10 @@ func TestEncodeCall_Uint256FromString(t *testing.T) {
 	amount := "1000000"
 	amountBig := big.NewInt(1_000_000)
 
-	want := EncodeERC20Transfer(addr, amountBig)
+	want, err := EncodeERC20Transfer(addr, amountBig)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := EncodeCall("transfer(address,uint256)", []interface{}{addr, amount})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +144,10 @@ func TestEncodeCall_Uint256FromFloat64(t *testing.T) {
 	amount := float64(1000000)
 	amountBig := big.NewInt(1_000_000)
 
-	want := EncodeERC20Transfer(addr, amountBig)
+	want, err := EncodeERC20Transfer(addr, amountBig)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := EncodeCall("transfer(address,uint256)", []interface{}{addr, amount})
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +162,10 @@ func TestEncodeCall_Uint256FromJsonNumber(t *testing.T) {
 	amount := json.Number("1000000")
 	amountBig := big.NewInt(1_000_000)
 
-	want := EncodeERC20Transfer(addr, amountBig)
+	want, err := EncodeERC20Transfer(addr, amountBig)
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := EncodeCall("transfer(address,uint256)", []interface{}{addr, amount})
 	if err != nil {
 		t.Fatal(err)
@@ -323,5 +338,53 @@ func TestEncodeCall_FixedArrayDynamic(t *testing.T) {
 	// selector(4) + offset-to-array(32) + [head: 2*32 offset words] + [tail: 2*(32 len + 32 data)]
 	if len(data) <= 4 {
 		t.Fatal("expected encoded data longer than 4 bytes")
+	}
+}
+
+// ─── Static tuple + dynamic sibling (headSize fix) ───────────────────────────
+
+func TestEncodeCall_StaticTupleWithDynamicSibling(t *testing.T) {
+	// foo((uint256,address),string) — static tuple (64 bytes inline) + dynamic string
+	// Head should be: 64 bytes (tuple inline) + 32 bytes (string offset) = 96 bytes
+	// String offset should point to byte 96
+	sig := "foo((uint256,address),string)"
+	addr := "0x0000000000000000000000000000000000000001"
+	tuple := []interface{}{"42", addr}
+	args := []interface{}{tuple, "hello"}
+
+	result, err := EncodeCall(sig, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// selector(4) + uint256(32) + address(32) + offset(32) + string_length(32) + string_data(32) = 164 min
+	if len(result) < 4+32+32+32+32+32 {
+		t.Fatalf("result too short: %d bytes", len(result))
+	}
+	// The string offset is at bytes [4+64 : 4+64+32] and should equal 96 (= 64+32)
+	offsetBytes := result[4+64 : 4+64+32]
+	offset := new(big.Int).SetBytes(offsetBytes).Int64()
+	if offset != 96 {
+		t.Errorf("string offset = %d, want 96 (tuple takes 64 bytes + 32 byte offset pointer)", offset)
+	}
+}
+
+// ─── toBigInt edge cases ─────────────────────────────────────────────────────
+
+func TestToBigInt_LargeFloat64(t *testing.T) {
+	// 1e18 fits in float64 but exceeds int64 max range for the old int64(val) cast
+	v, err := toBigInt(float64(1e18))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, _ := new(big.Int).SetString("1000000000000000000", 10)
+	if v.Cmp(expected) != 0 {
+		t.Errorf("got %s, want %s", v, expected)
+	}
+}
+
+func TestToBigInt_NonIntegerFloat64Error(t *testing.T) {
+	_, err := toBigInt(float64(1.5))
+	if err == nil {
+		t.Error("expected error for non-integer float64 1.5")
 	}
 }

@@ -123,11 +123,15 @@ func mockSOLRPCServer(t *testing.T) *httptest.Server {
 
 // contractCallRouter wires a minimal gin router for ContractCall tests.
 // rpcURL overrides the "ethereum" chain's RPC endpoint for the duration of the test.
-func contractCallRouter(db *gorm.DB, userID uint, authMode string, rpcURL string) *gin.Engine {
+func contractCallRouter(t *testing.T, db *gorm.DB, userID uint, authMode string, rpcURL string) *gin.Engine {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	if rpcURL != "" {
 		// Patch the in-memory chain registry so the handler uses our mock RPC.
+		// Save the original config and restore it after the test completes.
 		if cfg, ok := model.GetChain("ethereum"); ok {
+			original := cfg
+			t.Cleanup(func() { model.SetChain("ethereum", original) })
 			cfg.RPCURL = rpcURL
 			model.SetChain("ethereum", cfg)
 		}
@@ -170,7 +174,7 @@ func TestContractCall_NotWhitelisted(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 	// No AllowedContract record created — contract is NOT whitelisted.
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		"func_sig": "transfer(address,uint256)",
@@ -196,7 +200,7 @@ func TestContractCall_APIKey_RequiresApproval(t *testing.T) {
 	// Start a mock RPC so BuildETHContractCallTx can complete.
 	rpc := mockETHRPCServer(t)
 
-	r := contractCallRouter(db, user.ID, "apikey", rpc.URL) // API key auth
+	r := contractCallRouter(t, db, user.ID, "apikey", rpc.URL) // API key auth
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "approve(address,uint256)",
@@ -256,7 +260,7 @@ func TestContractCall_ApprovalStoresETHTxParams(t *testing.T) {
 
 	rpc := mockETHRPCServer(t)
 
-	r := contractCallRouter(db, user.ID, "apikey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "apikey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "transfer(address,uint256)",
@@ -318,7 +322,7 @@ func TestContractCall_SolanaInvalidProgramID(t *testing.T) {
 	}
 	db.Create(&wallet)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	// Send an EVM address as program ID — should fail base58 validation.
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
@@ -353,7 +357,7 @@ func TestContractCall_SolanaNotWhitelisted(t *testing.T) {
 	}
 	db.Create(&wallet)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	// Valid base58 program ID, but not whitelisted.
 	body := jsonBody(map[string]interface{}{
 		"contract": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -396,7 +400,7 @@ func TestContractCall_SolanaNoAccounts(t *testing.T) {
 	}
 	db.Create(&contract)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	body := jsonBody(map[string]interface{}{
 		"contract": programID,
 		"accounts": []map[string]interface{}{},
@@ -444,7 +448,7 @@ func TestContractCall_Solana_APIKey_RequiresApproval(t *testing.T) {
 		model.SetChain("solana", cfg)
 	}
 
-	r := contractCallRouter(db, user.ID, "apikey", "")
+	r := contractCallRouter(t, db, user.ID, "apikey", "")
 	// Any Solana contract call via API Key requires approval.
 	body := jsonBody(map[string]interface{}{
 		"contract": programID,
@@ -484,7 +488,7 @@ func TestContractCall_EVMRequiresFuncSig(t *testing.T) {
 	db := testDB(t)
 	user, wallet, _ := seedWalletWithContract(t, db)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	// Missing func_sig — should fail for EVM.
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
@@ -513,7 +517,7 @@ func TestContractCall_WalletNotReady(t *testing.T) {
 	}
 	db.Create(&wallet)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "transfer(address,uint256)",
@@ -536,7 +540,7 @@ func TestApproveToken_NotWhitelisted(t *testing.T) {
 	user, wallet := seedWallet(t, db)
 	// No AllowedContract record created — contract is NOT whitelisted.
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
 		"spender":  "0x1234567890123456789012345678901234567890",
@@ -561,7 +565,7 @@ func TestApproveToken_APIKey_PendingApproval(t *testing.T) {
 
 	rpc := mockETHRPCServer(t)
 
-	r := contractCallRouter(db, user.ID, "apikey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "apikey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"spender":  "0x1234567890123456789012345678901234567890",
@@ -598,7 +602,7 @@ func TestApproveToken_MissingFields(t *testing.T) {
 	db := testDB(t)
 	user, wallet := seedWallet(t, db)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	// Missing spender field.
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
@@ -622,7 +626,7 @@ func TestRevokeApproval_APIKey_PendingApproval(t *testing.T) {
 
 	rpc := mockETHRPCServer(t)
 
-	r := contractCallRouter(db, user.ID, "apikey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "apikey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"spender":  "0x1234567890123456789012345678901234567890",
@@ -658,7 +662,7 @@ func TestRevokeApproval_MissingFields(t *testing.T) {
 	db := testDB(t)
 	user, wallet := seedWallet(t, db)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	// Missing contract field.
 	body := jsonBody(map[string]interface{}{
 		"spender": "0x1234567890123456789012345678901234567890",
@@ -680,7 +684,7 @@ func TestContractCall_InvalidFuncSig(t *testing.T) {
 	// Whitelist the contract first so we pass layer 1.
 	user, wallet, _ := seedWalletWithContract(t, db)
 
-	r := contractCallRouter(db, user.ID, "passkey", "")
+	r := contractCallRouter(t, db, user.ID, "passkey", "")
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "notavalidsignature", // missing parentheses
@@ -700,7 +704,7 @@ func TestContractCall_EstimateGasRevert_PropagatesReason(t *testing.T) {
 	db := testDB(t)
 	user, wallet, _ := seedWalletWithContract(t, db)
 	rpc := mockETHRPCServerEstimateRevert(t, "Too little received")
-	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "passkey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "approve(address,uint256)",
@@ -725,7 +729,7 @@ func TestContractCall_PasskeyAuth_DirectExecution(t *testing.T) {
 	db := testDB(t)
 	user, wallet, _ := seedWalletWithContract(t, db)
 	rpc := mockETHRPCServer(t)
-	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "passkey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"func_sig": "approve(address,uint256)",
@@ -747,7 +751,7 @@ func TestApproveToken_PasskeyAuth_DirectExecution(t *testing.T) {
 	user, wallet, _ := seedWalletWithContract(t, db)
 	rpc := mockETHRPCServer(t)
 	// Passkey auth — should bypass approval even for approve-token
-	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "passkey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"spender":  "0x1234567890123456789012345678901234567890",
@@ -769,7 +773,7 @@ func TestRevokeApproval_PasskeyAuth_DirectExecution(t *testing.T) {
 	db := testDB(t)
 	user, wallet, _ := seedWalletWithContract(t, db)
 	rpc := mockETHRPCServer(t)
-	r := contractCallRouter(db, user.ID, "passkey", rpc.URL)
+	r := contractCallRouter(t, db, user.ID, "passkey", rpc.URL)
 	body := jsonBody(map[string]interface{}{
 		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 		"spender":  "0x1234567890123456789012345678901234567890",

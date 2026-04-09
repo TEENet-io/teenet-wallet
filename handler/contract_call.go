@@ -129,7 +129,7 @@ func respondContractCallStageError(c *gin.Context, status int, stage string, msg
 func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Wallet, chainCfg model.ChainConfig) {
 	var req ContractCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		jsonErrorDetails(c, http.StatusBadRequest, err.Error(), gin.H{"stage": "bind_json"})
+		jsonErrorDetails(c, http.StatusBadRequest, "invalid request body", gin.H{"stage": "bind_json"})
 		return
 	}
 
@@ -162,7 +162,8 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	// Encode calldata (validation only — no RPC yet).
 	calldata, encErr := chain.EncodeCall(req.FuncSig, req.Args)
 	if encErr != nil {
-		respondContractCallStageError(c, http.StatusBadRequest, "encode_calldata", "encode calldata: "+encErr.Error(), wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, "", 0, encErr)
+		slog.Error("contract-call encode calldata failed", "func_sig", req.FuncSig, "error", encErr.Error())
+		respondContractCallStageError(c, http.StatusBadRequest, "encode_calldata", "failed to encode calldata", wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, "", 0, encErr)
 		return
 	}
 
@@ -187,6 +188,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 	// consistent with how /transfer works.
 	txData, buildErr := chain.BuildETHContractCallTx(chainCfg.RPCURL, wallet.Address, contractAddr, calldata, valueWei)
 	if buildErr != nil {
+		chain.ResetNonceForChain(chainCfg.RPCURL, wallet.Address)
 		selector := ""
 		if len(calldata) >= 4 {
 			selector = "0x" + hex.EncodeToString(calldata[:4])
@@ -205,7 +207,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			"revert_reason", revertReason,
 			"error", buildErr.Error(),
 		)
-		respondContractCallStageError(c, http.StatusUnprocessableEntity, "estimate_gas", "build contract tx: "+buildErr.Error(), wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, selector, len(calldata), buildErr)
+		respondContractCallStageError(c, http.StatusUnprocessableEntity, "estimate_gas", "failed to build contract call transaction", wallet, contractAddr, methodName, req.FuncSig, req.Args, req.Value, selector, len(calldata), buildErr)
 		return
 	}
 
@@ -306,6 +308,26 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		return
 	}
 
+	// Check daily spend limit for value transfers.
+	if effectiveUSD > 0 {
+		var policy model.ApprovalPolicy
+		if h.db.Where("wallet_id = ? AND enabled = ?", wallet.ID, true).First(&policy).Error == nil {
+			if policy.DailyLimitUSD != "" {
+				deductedUSDStr := new(big.Float).SetFloat64(effectiveUSD).Text('f', 6)
+				exceeded, msg, limitErr := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
+				if limitErr != nil {
+					slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", limitErr)
+					jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
+					return
+				}
+				if exceeded {
+					jsonError(c, http.StatusBadRequest, msg)
+					return
+				}
+			}
+		}
+	}
+
 	result, signErr := h.sdk.Sign(c.Request.Context(), signingMsg, wallet.KeyName)
 	if signErr != nil || !result.Success {
 		errMsg := "signing failed"
@@ -356,7 +378,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wallet, chainCfg model.ChainConfig) {
 	var req ContractCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		jsonError(c, http.StatusBadRequest, err.Error())
+		jsonError(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -399,7 +421,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 			"wallet_id", wallet.ID, "chain", wallet.Chain,
 			"program_id", programID, "error", buildErr.Error(),
 		)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "build program call tx: "+buildErr.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build program call transaction", gin.H{
 			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"program_id": programID,
 		})
@@ -531,7 +553,7 @@ type RevokeApprovalRequest struct {
 func (h *ContractCallHandler) ApproveToken(c *gin.Context) {
 	var req ApproveTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		jsonError(c, http.StatusBadRequest, err.Error())
+		jsonError(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	h.executeApprove(c, req.Contract, req.Spender, req.Amount, "approve_token")
@@ -545,7 +567,7 @@ func (h *ContractCallHandler) ApproveToken(c *gin.Context) {
 func (h *ContractCallHandler) RevokeApproval(c *gin.Context) {
 	var req RevokeApprovalRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		jsonError(c, http.StatusBadRequest, err.Error())
+		jsonError(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	h.executeApprove(c, req.Contract, req.Spender, "0", "revoke_approval")
@@ -610,19 +632,27 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 	}
 
 	// Encode calldata via ERC-20 approve(spender, amount).
-	calldata := chain.EncodeERC20Approve(spenderAddr, tokenAmount)
+	calldata, encodeErr := chain.EncodeERC20Approve(spenderAddr, tokenAmount)
+	if encodeErr != nil {
+		slog.Error("encode ERC-20 approve failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", encodeErr)
+		jsonErrorDetails(c, http.StatusBadRequest, "failed to encode approve calldata", gin.H{
+			"stage": "encode_calldata", "wallet_id": wallet.ID, "chain": wallet.Chain,
+		})
+		return
+	}
 
 	// Build tx (hits RPC).
 	rpcURL := chainCfg.RPCURL
 	walletAddr := wallet.Address
 	txData, buildErr := chain.BuildETHContractCallTx(rpcURL, walletAddr, contractAddr, calldata, nil)
 	if buildErr != nil {
+		chain.ResetNonceForChain(rpcURL, walletAddr)
 		slog.Error("approve-token build tx failed",
 			"wallet_id", wallet.ID, "chain", wallet.Chain,
 			"contract", contractAddr, "spender", spenderAddr,
 			"action", auditAction, "error", buildErr.Error(),
 		)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "build approve tx: "+buildErr.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build approve transaction", gin.H{
 			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
 			"revert_reason": extractRevertReason(buildErr),

@@ -55,7 +55,7 @@ func NewWalletHandler(db *gorm.DB, sdkClient *sdk.Client, baseURL string, approv
 	if len(approvalExpiry) > 0 && approvalExpiry[0] > 0 {
 		expiry = approvalExpiry[0]
 	}
-	return &WalletHandler{db: db, sdk: sdkClient, baseURL: baseURL, approvalExpiry: expiry, maxWallets: 20}
+	return &WalletHandler{db: db, sdk: sdkClient, baseURL: baseURL, approvalExpiry: expiry, maxWallets: 10}
 }
 
 // SetMaxWallets sets the maximum number of wallets a user can create.
@@ -110,8 +110,9 @@ func (h *WalletHandler) CreateWallet(c *gin.Context) {
 	}
 
 	// Enforce per-user wallet limit to prevent TEE DKG abuse.
+	// Exclude wallets in "error" status — they are non-functional and should not count.
 	var count int64
-	h.db.Model(&model.Wallet{}).Where("user_id = ?", userID).Count(&count)
+	h.db.Model(&model.Wallet{}).Where("user_id = ? AND status != ?", userID, "error").Count(&count)
 	if count >= int64(h.maxWallets) {
 		jsonError(c, http.StatusBadRequest, fmt.Sprintf("wallet limit reached (max %d)", h.maxWallets))
 		return
@@ -391,6 +392,8 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 	}
 
 	// Passkey path: require a fresh hardware assertion before applying.
+	// IMPORTANT: Use verifyFreshPasskeyParsed (not verifyFreshPasskey) because
+	// c.ShouldBindJSON already consumed the request body above.
 	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential, h.db) {
 		return
 	}
@@ -489,7 +492,7 @@ func (h *WalletHandler) DailySpent(c *gin.Context) {
 			if rem.Sign() < 0 {
 				rem = new(big.Float)
 			}
-			remaining = rem.Text('f', 2)
+			remaining = rem.Text('f', 6)
 		}
 	}
 
@@ -637,6 +640,11 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		req.To = resolved
 	}
 
+	if strings.EqualFold(req.To, wallet.Address) {
+		jsonError(c, http.StatusBadRequest, "cannot transfer to the same wallet address")
+		return
+	}
+
 	switch chainCfg.Family {
 	case "evm":
 		// Validate and normalize recipient address.
@@ -667,12 +675,23 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 				jsonError(c, http.StatusBadRequest, "amount must be positive")
 				return
 			}
+			if len(tokenUnits.Bytes()) > 32 {
+				jsonError(c, http.StatusBadRequest, "token amount exceeds uint256 range")
+				return
+			}
 
-			callData := chain.EncodeERC20Transfer(req.To, tokenUnits)
+			callData, encodeErr := chain.EncodeERC20Transfer(req.To, tokenUnits)
+			if encodeErr != nil {
+				slog.Error("encode ERC-20 transfer failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", encodeErr)
+				jsonErrorDetails(c, http.StatusBadRequest, "failed to encode transfer", gin.H{
+					"stage": "encode_calldata", "wallet_id": wallet.ID, "chain": wallet.Chain,
+				})
+				return
+			}
 			txData, err := chain.BuildETHContractCallTx(rpcURL, wallet.Address, tokenContractAddr, callData, nil)
 			if err != nil {
 				slog.Error("build ERC-20 tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_url", rpcURL, "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "build contract tx: "+err.Error(), gin.H{
+				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "contract": tokenContractAddr,
 				})
@@ -694,7 +713,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			txData, err := chain.BuildETHTx(rpcURL, wallet.Address, req.To, amount)
 			if err != nil {
 				slog.Error("build ETH tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_url", rpcURL, "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "build tx: "+err.Error(), gin.H{
+				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "amount": req.Amount,
 				})
@@ -745,7 +764,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			txData, err := chain.BuildSOLTokenTransferTx(rpcURL, wallet.Address, req.To, mintAddr, tokenUnits.Uint64(), decimals)
 			if err != nil {
 				slog.Error("build SPL token tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "mint", mintAddr, "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "build SPL token tx: "+err.Error(), gin.H{
+				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "mint": mintAddr, "amount": req.Amount,
 				})
@@ -761,11 +780,20 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			txType = "spl_transfer"
 			tokenContractAddr = mintAddr
 		} else {
-			amountF, _ := amount.Float64()
-			txData, err := chain.BuildSOLTx(rpcURL, wallet.Address, req.To, amountF)
+			if _, err := chain.Base58Decode(req.To); err != nil {
+				jsonError(c, http.StatusBadRequest, "invalid Solana address")
+				return
+			}
+			lamportsBF := new(big.Float).SetPrec(128).Mul(amount, new(big.Float).SetFloat64(1e9))
+			lamports, _ := lamportsBF.Uint64()
+			if lamports == 0 {
+				jsonError(c, http.StatusBadRequest, "amount too small")
+				return
+			}
+			txData, err := chain.BuildSOLTxFromLamports(rpcURL, wallet.Address, req.To, lamports)
 			if err != nil {
 				slog.Error("build SOL tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_url", rpcURL, "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "build tx: "+err.Error(), gin.H{
+				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "amount": req.Amount,
 				})
@@ -853,7 +881,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 	// Check daily spend limit in USD atomically (pre-deduct, rollback on failure).
 	var deductedUSDStr string // non-empty if we pre-deducted
 	if policyFound && policy.DailyLimitUSD != "" && amountUSD > 0 {
-		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 2)
+		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 6)
 		exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
 		if err != nil {
 			slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
@@ -897,7 +925,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			})
 		} else {
 			slog.Error("TEE signing failed", "wallet_id", wallet.ID, "key", wallet.KeyName, "error", sbErr)
-			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+sbErr.Error(), gin.H{
+			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed", gin.H{
 				"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
 				"to": req.To, "amount": req.Amount,
 			})
@@ -924,6 +952,15 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 // WrapSOL wraps native SOL into wSOL (SPL Wrapped SOL).
 // POST /api/wallets/:id/wrap-sol  { "amount": "0.1" }
 func (h *WalletHandler) WrapSOL(c *gin.Context) {
+	userID := mustUserID(c)
+	if c.IsAborted() {
+		return
+	}
+	idemKey := IdempotencyKey(c)
+	if CheckIdempotency(c, h.idempotency, idemKey, userID) {
+		return
+	}
+
 	wallet, ok := loadUserWallet(c, h.db)
 	if !ok {
 		return
@@ -954,12 +991,16 @@ func (h *WalletHandler) WrapSOL(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "invalid amount")
 		return
 	}
-	amountF, _ := amount.Float64()
-
-	txData, err := chain.BuildSOLWrapTx(chainCfg.RPCURL, wallet.Address, amountF)
+	lamportsBF := new(big.Float).SetPrec(128).Mul(amount, new(big.Float).SetFloat64(1e9))
+	lamports, _ := lamportsBF.Uint64()
+	if lamports == 0 {
+		jsonError(c, http.StatusBadRequest, "amount too small")
+		return
+	}
+	txData, err := chain.BuildSOLWrapTxFromLamports(chainCfg.RPCURL, wallet.Address, lamports)
 	if err != nil {
 		slog.Error("build wrap-sol tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", err)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "build wrap tx: "+err.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain, "amount": req.Amount,
 		})
 		return
@@ -981,14 +1022,15 @@ func (h *WalletHandler) WrapSOL(c *gin.Context) {
 	var amountUSD float64
 	if policyFound && h.prices != nil {
 		if usdPrice, priceErr := h.prices.GetUSDPrice(currency); priceErr == nil && usdPrice > 0 {
-			amountUSD = amountF * usdPrice
+			f, _ := amount.Float64()
+			amountUSD = f * usdPrice
 		}
 	}
 
 	// Check daily spend limit.
 	var deductedUSDStr string
 	if policyFound && policy.DailyLimitUSD != "" && amountUSD > 0 {
-		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 2)
+		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 6)
 		exceeded, msg, limitErr := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
 		if limitErr != nil {
 			slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", limitErr)
@@ -1029,7 +1071,7 @@ func (h *WalletHandler) WrapSOL(c *gin.Context) {
 			})
 		} else {
 			slog.Error("wrap-sol signing failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", sbErr)
-			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+sbErr.Error(), gin.H{
+			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed", gin.H{
 				"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain, "amount": req.Amount,
 			})
 		}
@@ -1039,19 +1081,29 @@ func (h *WalletHandler) WrapSOL(c *gin.Context) {
 	writeAuditCtx(h.db, c, "wrap_sol", "success", &wallet.ID, map[string]interface{}{
 		"amount": req.Amount, "chain": wallet.Chain, "tx_hash": sbResult.txHash,
 	})
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"status":  "completed",
 		"tx_hash": sbResult.txHash,
 		"chain":   wallet.Chain,
 		"from":    wallet.Address,
 		"amount":  req.Amount,
 		"action":  "wrap",
-	})
+	}
+	respondWithIdempotency(c, h.idempotency, idemKey, userID, http.StatusOK, resp)
 }
 
 // UnwrapSOL unwraps all wSOL back to native SOL by closing the wSOL ATA.
 // POST /api/wallets/:id/unwrap-sol
 func (h *WalletHandler) UnwrapSOL(c *gin.Context) {
+	userID := mustUserID(c)
+	if c.IsAborted() {
+		return
+	}
+	idemKey := IdempotencyKey(c)
+	if CheckIdempotency(c, h.idempotency, idemKey, userID) {
+		return
+	}
+
 	wallet, ok := loadUserWallet(c, h.db)
 	if !ok {
 		return
@@ -1073,7 +1125,7 @@ func (h *WalletHandler) UnwrapSOL(c *gin.Context) {
 	txData, err := chain.BuildSOLUnwrapTx(chainCfg.RPCURL, wallet.Address)
 	if err != nil {
 		slog.Error("build unwrap-sol tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", err)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "build unwrap tx: "+err.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 		})
 		return
@@ -1110,7 +1162,7 @@ func (h *WalletHandler) UnwrapSOL(c *gin.Context) {
 			})
 		} else {
 			slog.Error("unwrap-sol signing failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", sbErr)
-			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+sbErr.Error(), gin.H{
+			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed", gin.H{
 				"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			})
 		}
@@ -1120,13 +1172,14 @@ func (h *WalletHandler) UnwrapSOL(c *gin.Context) {
 	writeAuditCtx(h.db, c, "unwrap_sol", "success", &wallet.ID, map[string]interface{}{
 		"chain": wallet.Chain, "tx_hash": sbResult.txHash,
 	})
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"status":  "completed",
 		"tx_hash": sbResult.txHash,
 		"chain":   wallet.Chain,
 		"from":    wallet.Address,
 		"action":  "unwrap",
-	})
+	}
+	respondWithIdempotency(c, h.idempotency, idemKey, userID, http.StatusOK, resp)
 }
 
 // signBroadcastResult holds the result of a sign-and-broadcast operation.
@@ -1189,7 +1242,7 @@ func broadcastSigned(wallet model.Wallet, txParamsJSON string, sig []byte) (stri
 		}
 		txHash, err := chain.AssembleAndBroadcastETH(cfg.RPCURL, params, sig, wallet.Address)
 		if err != nil {
-			chain.ResetNonce(wallet.Address)
+			chain.ResetNonceForChain(cfg.RPCURL, wallet.Address)
 			return "", err
 		}
 		return txHash, nil
@@ -1341,7 +1394,7 @@ func checkAndDeductDailyLimitUSD(db *gorm.DB, walletID string, amountUSD string)
 	}
 
 	if err := db.Model(&policy).Updates(map[string]interface{}{
-		"daily_spent_usd": newSpent.Text('f', 2),
+		"daily_spent_usd": newSpent.Text('f', 6),
 		"daily_reset_at":  resetAt,
 	}).Error; err != nil {
 		return false, "", fmt.Errorf("failed to update daily spent: %w", err)
@@ -1379,7 +1432,7 @@ func releaseDailySpentUSD(db *gorm.DB, walletID string, amountUSD string) {
 	if newSpent.Sign() < 0 {
 		newSpent = new(big.Float)
 	}
-	db.Model(&policy).Update("daily_spent_usd", newSpent.Text('f', 2))
+	db.Model(&policy).Update("daily_spent_usd", newSpent.Text('f', 6))
 }
 
 // addDailySpentUSD increments the daily USD spend counter after a successful broadcast.
@@ -1411,7 +1464,7 @@ func addDailySpentUSD(db *gorm.DB, walletID string, amountUSD string) {
 	}
 	newSpent := new(big.Float).Add(spent, amountF)
 	db.Model(&policy).Updates(map[string]interface{}{
-		"daily_spent_usd": newSpent.Text('f', 2),
+		"daily_spent_usd": newSpent.Text('f', 6),
 		"daily_reset_at":  resetAt,
 	})
 }

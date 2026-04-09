@@ -190,27 +190,42 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_verify"})
 		return
 	}
-	// Enforce user limit.
-	if h.maxUsers > 0 {
-		var userCount int64
-		h.db.Model(&model.User{}).Count(&userCount)
-		if userCount >= int64(h.maxUsers) {
-			jsonError(c, http.StatusConflict, "registration is closed — maximum number of users reached")
-			return
-		}
-	}
 	// Use DisplayName from the passkey system as the username.
 	username := strings.TrimSpace(res.DisplayName)
 	if username == "" {
 		username = "user"
 	}
-	user := model.User{
-		Username:      username,
-		PasskeyUserID: res.PasskeyUserID,
-	}
-	if err := h.db.Create(&user).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "create user failed", gin.H{"stage": "user_create"})
+	if len(username) > 100 {
+		jsonError(c, http.StatusBadRequest, "username too long (max 100 characters)")
 		return
+	}
+	var user model.User
+	if h.maxUsers > 0 {
+		var createErr error
+		createErr = h.db.Transaction(func(tx *gorm.DB) error {
+			var userCount int64
+			tx.Model(&model.User{}).Count(&userCount)
+			if userCount >= int64(h.maxUsers) {
+				return fmt.Errorf("max_users_reached")
+			}
+			user = model.User{Username: username, PasskeyUserID: res.PasskeyUserID}
+			return tx.Create(&user).Error
+		})
+		if createErr != nil {
+			if createErr.Error() == "max_users_reached" {
+				jsonError(c, http.StatusForbidden, "maximum number of users reached")
+				return
+			}
+			jsonError(c, http.StatusInternalServerError, "failed to create user")
+			return
+		}
+	} else {
+		// no max check needed
+		user = model.User{Username: username, PasskeyUserID: res.PasskeyUserID}
+		if err := h.db.Create(&user).Error; err != nil {
+			jsonError(c, http.StatusInternalServerError, "failed to create user")
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "user_id": user.ID, "username": user.Username})
 }
@@ -254,27 +269,41 @@ func (h *AuthHandler) PasskeyVerify(c *gin.Context) {
 	// UMS is the auth authority — a valid passkey login means the user is legitimate.
 	var user model.User
 	if err := h.db.Where("passkey_user_id = ?", passkeyUserID).First(&user).Error; err != nil {
-		// Enforce user limit before auto-creating.
+		displayName, _ := res.Data["display_name"].(string)
+		autoUsername := strings.TrimSpace(displayName)
+		if autoUsername == "" {
+			autoUsername = fmt.Sprintf("user_%d", passkeyUserID)
+		}
 		if h.maxUsers > 0 {
-			var userCount int64
-			h.db.Model(&model.User{}).Count(&userCount)
-			if userCount >= int64(h.maxUsers) {
-				jsonError(c, http.StatusConflict, "registration is closed — maximum number of users reached")
+			var createErr error
+			createErr = h.db.Transaction(func(tx *gorm.DB) error {
+				var userCount int64
+				tx.Model(&model.User{}).Count(&userCount)
+				if userCount >= int64(h.maxUsers) {
+					return fmt.Errorf("max_users_reached")
+				}
+				user = model.User{Username: autoUsername, PasskeyUserID: uint(passkeyUserID)}
+				return tx.Create(&user).Error
+			})
+			if createErr != nil {
+				if createErr.Error() == "max_users_reached" {
+					jsonError(c, http.StatusForbidden, "maximum number of users reached")
+					return
+				}
+				slog.Error("auto-create user failed", "passkey_user_id", passkeyUserID, "error", createErr)
+				jsonError(c, http.StatusInternalServerError, "failed to create user")
+				return
+			}
+		} else {
+			// no max check needed
+			user = model.User{Username: autoUsername, PasskeyUserID: uint(passkeyUserID)}
+			if err := h.db.Create(&user).Error; err != nil {
+				slog.Error("auto-create user failed", "passkey_user_id", passkeyUserID, "error", err)
+				jsonErrorDetails(c, http.StatusInternalServerError, "failed to create user", gin.H{"stage": "user_auto_create"})
 				return
 			}
 		}
-		displayName, _ := res.Data["display_name"].(string)
-		username := strings.TrimSpace(displayName)
-		if username == "" {
-			username = fmt.Sprintf("user_%d", passkeyUserID)
-		}
-		user = model.User{Username: username, PasskeyUserID: uint(passkeyUserID)}
-		if err := h.db.Create(&user).Error; err != nil {
-			slog.Error("auto-create user failed", "passkey_user_id", passkeyUserID, "error", err)
-			jsonErrorDetails(c, http.StatusInternalServerError, "failed to create user", gin.H{"stage": "user_auto_create"})
-			return
-		}
-		slog.Info("auto-created local user", "user_id", user.ID, "passkey_user_id", passkeyUserID, "username", username)
+		slog.Info("auto-created local user", "user_id", user.ID, "passkey_user_id", passkeyUserID, "username", autoUsername)
 	}
 
 	// Generate a local session token (ps_ prefix)
@@ -463,15 +492,27 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	// Delete all related data, wallets, then user in a transaction.
 	if err := h.db.Transaction(func(tx *gorm.DB) error {
 		if len(walletIDs) > 0 {
-			tx.Where("user_id = ?", userID).Delete(&model.AllowedContract{})
-			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalPolicy{})
-			tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalRequest{})
+			if err := tx.Where("user_id = ?", userID).Delete(&model.AllowedContract{}).Error; err != nil {
+				return fmt.Errorf("delete contracts: %w", err)
+			}
+			if err := tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalPolicy{}).Error; err != nil {
+				return fmt.Errorf("delete approval policies: %w", err)
+			}
+			if err := tx.Where("wallet_id IN ?", walletIDs).Delete(&model.ApprovalRequest{}).Error; err != nil {
+				return fmt.Errorf("delete approval requests: %w", err)
+			}
 		}
-		tx.Where("user_id = ?", userID).Delete(&model.AddressBookEntry{})
-		tx.Where("user_id = ?", userID).Delete(&model.AuditLog{})
-		tx.Where("user_id = ?", userID).Delete(&model.APIKey{})
+		if err := tx.Where("user_id = ?", userID).Delete(&model.AddressBookEntry{}).Error; err != nil {
+			return fmt.Errorf("delete address book: %w", err)
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&model.AuditLog{}).Error; err != nil {
+			return fmt.Errorf("delete audit logs: %w", err)
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&model.APIKey{}).Error; err != nil {
+			return fmt.Errorf("delete api keys: %w", err)
+		}
 		if err := tx.Where("user_id = ?", userID).Delete(&model.Wallet{}).Error; err != nil {
-			return err
+			return fmt.Errorf("delete wallets: %w", err)
 		}
 		return tx.Delete(&model.User{}, userID).Error
 	}); err != nil {
@@ -542,11 +583,16 @@ func (h *AuthHandler) RevokeAPIKey(c *gin.Context) {
 func mustUserID(c *gin.Context) uint {
 	v, ok := c.Get("userID")
 	if !ok {
-		slog.Error("BUG: mustUserID called without userID in context")
+		slog.Error("userID not in context", "path", c.Request.URL.Path)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return 0
+	}
+	id, ok := v.(uint)
+	if !ok {
+		slog.Error("userID has wrong type in context", "type", fmt.Sprintf("%T", v), "path", c.Request.URL.Path)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal auth error"})
 		return 0
 	}
-	id, _ := v.(uint)
 	return id
 }
 

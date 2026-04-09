@@ -41,12 +41,25 @@ func NewSSEHub() *SSEHub {
 }
 
 const maxSSEConnsPerUser = 5
+const maxGlobalSSEConns = 2000
 
 // Subscribe registers a new subscriber for userID and returns a buffered channel.
-// Returns nil if the user has reached the maximum number of SSE connections.
+// Returns nil if the user has reached the maximum number of SSE connections or the
+// global limit has been reached.
 func (h *SSEHub) Subscribe(userID uint) chan SSEEvent {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	// Check global connection limit.
+	total := 0
+	for _, chans := range h.subscribers {
+		total += len(chans)
+	}
+	if total >= maxGlobalSSEConns {
+		slog.Warn("SSE global connection limit reached", "total", total, "max", maxGlobalSSEConns)
+		return nil
+	}
+
 	if len(h.subscribers[userID]) >= maxSSEConnsPerUser {
 		slog.Warn("SSE connection limit reached", "userID", userID, "max", maxSSEConnsPerUser)
 		return nil

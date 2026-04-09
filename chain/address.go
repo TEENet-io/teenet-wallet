@@ -48,7 +48,9 @@ func deriveEthAddress(compressed []byte) (string, error) {
 func deriveSolAddress(pubBytes []byte) (string, error) {
 	raw := pubBytes
 	if len(raw) == 33 {
-		// strip the compression prefix; Ed25519 is always on the curve
+		if raw[0] != 0x02 && raw[0] != 0x03 {
+			return "", fmt.Errorf("unexpected 33-byte key prefix: 0x%02x", raw[0])
+		}
 		raw = pubBytes[1:]
 	}
 	if len(raw) != 32 {
@@ -59,21 +61,23 @@ func deriveSolAddress(pubBytes []byte) (string, error) {
 
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-// base58Decode decodes a base58-encoded string using Bitcoin/Solana alphabet.
-func base58Decode(s string) ([]byte, error) {
-	// Build reverse lookup table.
-	reverseAlphabet := [256]int{}
-	for i := range reverseAlphabet {
-		reverseAlphabet[i] = -1
+var reverseBase58 [256]int
+
+func init() {
+	for i := range reverseBase58 {
+		reverseBase58[i] = -1
 	}
 	for i, c := range []byte(base58Alphabet) {
-		reverseAlphabet[c] = i
+		reverseBase58[c] = i
 	}
+}
 
+// base58Decode decodes a base58-encoded string using Bitcoin/Solana alphabet.
+func base58Decode(s string) ([]byte, error) {
 	n := new(big.Int)
 	base := big.NewInt(58)
 	for _, c := range []byte(s) {
-		val := reverseAlphabet[c]
+		val := reverseBase58[c]
 		if val < 0 {
 			return nil, fmt.Errorf("invalid base58 character %q", c)
 		}
@@ -172,7 +176,7 @@ func base58Encode(input []byte) string {
 	}
 
 	// Convert to big integer, then to base-58.
-	digits := []int{0}
+	var digits []int
 	for _, b := range input {
 		carry := int(b)
 		for i := range digits {

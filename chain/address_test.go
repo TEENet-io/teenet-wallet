@@ -179,3 +179,27 @@ func TestBase58Decode_InvalidChar(t *testing.T) {
 		}
 	}
 }
+
+// ─── base58Encode edge cases ──────────────────────────────────────────────────
+
+func TestBase58Encode_SingleZeroByte(t *testing.T) {
+	got := base58Encode([]byte{0})
+	if got != "1" {
+		t.Errorf("base58Encode([]byte{0}) = %q, want %q", got, "1")
+	}
+}
+
+func TestBase58Encode_MultipleZeroBytes(t *testing.T) {
+	got := base58Encode([]byte{0, 0, 0})
+	if got != "111" {
+		t.Errorf("base58Encode([]byte{0,0,0}) = %q, want %q", got, "111")
+	}
+}
+
+func TestBase58Encode_ZeroPrefixedValue(t *testing.T) {
+	// [0, 1] should encode as "12" (one leading '1' + base58 of 1)
+	got := base58Encode([]byte{0, 1})
+	if got != "12" {
+		t.Errorf("base58Encode([]byte{0,1}) = %q, want %q", got, "12")
+	}
+}

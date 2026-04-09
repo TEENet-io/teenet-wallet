@@ -363,7 +363,7 @@ func TestTransfer_DailySpent_RollbackOnSigningFailure(t *testing.T) {
 	// Key assertion: daily_spent_usd should be rolled back to 0
 	var pol model.ApprovalPolicy
 	db.Where("wallet_id = ?", wallet.ID).First(&pol)
-	if pol.DailySpentUSD != "0" && pol.DailySpentUSD != "0.00" {
+	if pol.DailySpentUSD != "0" && pol.DailySpentUSD != "0.00" && pol.DailySpentUSD != "0.000000" {
 		t.Errorf("expected daily_spent_usd to be rolled back to 0, got %s", pol.DailySpentUSD)
 	}
 }
@@ -396,7 +396,7 @@ func TestTransfer_DailySpent_RollbackOnApprovalPath(t *testing.T) {
 	// Key assertion: daily_spent_usd should NOT have been deducted (rolled back for approval path)
 	var pol model.ApprovalPolicy
 	db.Where("wallet_id = ?", wallet.ID).First(&pol)
-	if pol.DailySpentUSD != "0" && pol.DailySpentUSD != "0.00" {
+	if pol.DailySpentUSD != "0" && pol.DailySpentUSD != "0.00" && pol.DailySpentUSD != "0.000000" {
 		t.Errorf("expected daily_spent_usd=0 (rolled back for approval path), got %s", pol.DailySpentUSD)
 	}
 }
@@ -609,7 +609,7 @@ func TestDailySpent_CrossDayReset(t *testing.T) {
 	if resp["daily_spent_usd"] != "0" {
 		t.Errorf("expected daily_spent_usd=0 after day reset, got %v", resp["daily_spent_usd"])
 	}
-	if resp["remaining_usd"] != "1000.00" {
-		t.Errorf("expected remaining_usd=1000.00, got %v", resp["remaining_usd"])
+	if resp["remaining_usd"] != "1000.000000" {
+		t.Errorf("expected remaining_usd=1000.000000, got %v", resp["remaining_usd"])
 	}
 }

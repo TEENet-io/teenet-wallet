@@ -237,11 +237,7 @@ func APIKeyRateLimitMiddleware(rl *RateLimiter) gin.HandlerFunc {
 			return
 		}
 
-		userID := mustUserID(c)
-		if c.IsAborted() {
-			return
-		}
-		key := fmt.Sprintf("apikey:%d", userID)
+		key := fmt.Sprintf("apikey:%s", c.GetString("apiKeyPrefix"))
 		if !rl.Allow(key) {
 			c.Header("Retry-After", "60")
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{

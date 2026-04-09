@@ -247,3 +247,43 @@ func TestBuildSOLWrapMessage_Deterministic(t *testing.T) {
 		}
 	}
 }
+
+// ─── compactU16 ───────────────────────────────────────────────────────────────
+
+func TestCompactU16_ValidValues(t *testing.T) {
+	tests := []struct {
+		input int
+		want  int // expected byte length
+	}{
+		{0, 1},
+		{127, 1},
+		{128, 2},
+		{16383, 2},
+		{16384, 3},
+		{65535, 3},
+	}
+	for _, tt := range tests {
+		got := compactU16(tt.input)
+		if len(got) != tt.want {
+			t.Errorf("compactU16(%d): got %d bytes, want %d", tt.input, len(got), tt.want)
+		}
+	}
+}
+
+func TestCompactU16_PanicsOnNegative(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic for negative value")
+		}
+	}()
+	compactU16(-1)
+}
+
+func TestCompactU16_PanicsOnOverflow(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic for value > 65535")
+		}
+	}()
+	compactU16(0x10000)
+}

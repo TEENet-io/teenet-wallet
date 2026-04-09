@@ -67,6 +67,9 @@ func parseParamTypes(funcSig string) ([]string, error) {
 	if openParen < 0 || closeParen < 0 || closeParen <= openParen {
 		return nil, fmt.Errorf("invalid function signature: %s", funcSig)
 	}
+	if closeParen != len(funcSig)-1 {
+		return nil, fmt.Errorf("invalid function signature: unexpected characters after closing paren: %s", funcSig)
+	}
 	inner := funcSig[openParen+1 : closeParen]
 	if inner == "" {
 		return nil, nil
@@ -206,7 +209,17 @@ func encodeArgs(types []string, args []interface{}) ([]byte, error) {
 	}
 
 	// Calculate offsets for dynamic types.
-	headSize := 32 * len(types)
+	// headSize must account for the actual head size of each argument:
+	// dynamic types contribute a 32-byte offset pointer; static tuples may
+	// be larger than 32 bytes and are inlined (not pointer-referenced).
+	headSize := 0
+	for i := range types {
+		if tails[i] != nil {
+			headSize += 32 // offset pointer for dynamic types
+		} else {
+			headSize += len(heads[i]) // actual encoded size (static tuples may be >32 bytes)
+		}
+	}
 	tailOffset := headSize
 	for i := range types {
 		if tails[i] != nil {
@@ -526,7 +539,12 @@ func toBigInt(v interface{}) (*big.Int, error) {
 		}
 		return n, nil
 	case float64:
-		return big.NewInt(int64(val)), nil
+		bf := new(big.Float).SetFloat64(val)
+		bi, accuracy := bf.Int(nil)
+		if accuracy != big.Exact {
+			return nil, fmt.Errorf("float64 value %v is not an exact integer", val)
+		}
+		return bi, nil
 	case int:
 		return big.NewInt(int64(val)), nil
 	case int64:

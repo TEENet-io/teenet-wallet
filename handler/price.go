@@ -20,6 +20,7 @@ var coinGeckoIDs = map[string]string{
 	"ETH":  "ethereum",
 	"SOL":  "solana",
 	"BNB":  "binancecoin",
+	"TBNB": "binancecoin", // BSC testnet uses the same price as BNB
 	"POL":  "matic-network",
 	"AVAX": "avalanche-2",
 }
@@ -152,7 +153,18 @@ func (ps *PriceService) backgroundRefresh(ctx context.Context, interval time.Dur
 }
 
 // SetJupiterBaseURL overrides the Jupiter API base URL (for testing).
-func (ps *PriceService) SetJupiterBaseURL(url string) { ps.jupiterBaseURL = url }
+func (ps *PriceService) SetJupiterBaseURL(u string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.jupiterBaseURL = u
+}
+
+// getJupiterBaseURL reads the Jupiter base URL under a read lock.
+func (ps *PriceService) getJupiterBaseURL() string {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	return ps.jupiterBaseURL
+}
 
 // GetUSDPrice returns the USD price for a currency symbol (e.g. "ETH", "SOL", "USDC").
 // Stablecoins return 1.0. Unknown currencies return an error.
@@ -264,7 +276,7 @@ func (ps *PriceService) GetJupiterPrice(mintAddress string) (float64, error) {
 	}
 	ps.mu.RUnlock()
 
-	url := ps.jupiterBaseURL + "/price/v2?ids=" + addr
+	url := ps.getJupiterBaseURL() + "/price/v2?ids=" + addr
 	resp, err := ps.client.Get(url)
 	if err != nil {
 		return 0, fmt.Errorf("jupiter price fetch failed: %w", err)

@@ -27,6 +27,5 @@ docker:
 	docker build -t teenet-wallet:latest .
 
 clean:
-	rm -f teenet-wallet
-	rm -f coverage.out
-	rm -rf frontend
+	rm -f teenet-wallet coverage.out teenet-wallet.tar.gz
+	rm -rf frontend/

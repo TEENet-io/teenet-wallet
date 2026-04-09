@@ -15,14 +15,20 @@ import (
 // ─── EncodeERC20Transfer ──────────────────────────────────────────────────────
 
 func TestEncodeERC20Transfer_Length(t *testing.T) {
-	data := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	data, err := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(data) != 68 {
 		t.Fatalf("expected 68 bytes (4 selector + 32 addr + 32 amount), got %d", len(data))
 	}
 }
 
 func TestEncodeERC20Transfer_Selector(t *testing.T) {
-	data := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	data, err := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := crypto.Keccak256([]byte("transfer(address,uint256)"))[:4]
 	if !bytes.Equal(data[:4], want) {
 		t.Fatalf("selector mismatch: got %x, want %x", data[:4], want)
@@ -31,7 +37,10 @@ func TestEncodeERC20Transfer_Selector(t *testing.T) {
 
 func TestEncodeERC20Transfer_AddressPadding(t *testing.T) {
 	addr := "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-	data := EncodeERC20Transfer(addr, big.NewInt(1))
+	data, err := EncodeERC20Transfer(addr, big.NewInt(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Bytes 4..15 must be zero (12-byte left-pad of 20-byte address).
 	for i := 4; i < 16; i++ {
@@ -49,7 +58,10 @@ func TestEncodeERC20Transfer_AddressPadding(t *testing.T) {
 
 func TestEncodeERC20Transfer_AmountPadding(t *testing.T) {
 	amount := big.NewInt(1_000_000) // 1 USDC with 6 decimals
-	data := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", amount)
+	data, err := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", amount)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	want := make([]byte, 32)
 	ab := amount.Bytes()
@@ -63,7 +75,10 @@ func TestEncodeERC20Transfer_AmountPadding(t *testing.T) {
 func TestEncodeERC20Transfer_LargeAmount(t *testing.T) {
 	// 1 WETH = 1e18 wei — 18-byte big.Int, fits in 32-byte padding
 	weth, _ := new(big.Int).SetString("1000000000000000000", 10)
-	data := EncodeERC20Transfer("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", weth)
+	data, err := EncodeERC20Transfer("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", weth)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(data) != 68 {
 		t.Fatalf("expected 68 bytes, got %d", len(data))
@@ -78,7 +93,10 @@ func TestEncodeERC20Transfer_LargeAmount(t *testing.T) {
 
 func TestEncodeERC20Transfer_ZeroAmount(t *testing.T) {
 	// Zero is a valid calldata value (uint256 = 0x00...00).
-	data := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(0))
+	data, err := EncodeERC20Transfer("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(0))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(data) != 68 {
 		t.Fatalf("expected 68 bytes, got %d", len(data))
 	}
@@ -93,14 +111,20 @@ func TestEncodeERC20Transfer_ZeroAmount(t *testing.T) {
 // ─── EncodeERC20Approve ───────────────────────────────────────────────────────
 
 func TestEncodeERC20Approve_Length(t *testing.T) {
-	data := EncodeERC20Approve("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	data, err := EncodeERC20Approve("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(data) != 68 {
 		t.Fatalf("expected 68 bytes, got %d", len(data))
 	}
 }
 
 func TestEncodeERC20Approve_Selector(t *testing.T) {
-	data := EncodeERC20Approve("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	data, err := EncodeERC20Approve("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", big.NewInt(1))
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := crypto.Keccak256([]byte("approve(address,uint256)"))[:4]
 	if !bytes.Equal(data[:4], want) {
 		t.Fatalf("approve selector mismatch: got %x, want %x", data[:4], want)
@@ -110,8 +134,14 @@ func TestEncodeERC20Approve_Selector(t *testing.T) {
 func TestEncodeERC20Approve_DifferFromTransfer(t *testing.T) {
 	addr := "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
 	amount := big.NewInt(999)
-	transfer := EncodeERC20Transfer(addr, amount)
-	approve := EncodeERC20Approve(addr, amount)
+	transfer, err := EncodeERC20Transfer(addr, amount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approve, err := EncodeERC20Approve(addr, amount)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Selectors must differ; rest of encoding should be identical.
 	if bytes.Equal(transfer[:4], approve[:4]) {
 		t.Fatal("transfer and approve must have different selectors")
@@ -124,7 +154,10 @@ func TestEncodeERC20Approve_DifferFromTransfer(t *testing.T) {
 func TestEncodeERC20Approve_MaxUint256(t *testing.T) {
 	// Unlimited approval: max uint256
 	max := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
-	data := EncodeERC20Approve("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", max)
+	data, err := EncodeERC20Approve("0x742d35Cc6634C0532925a3b844Bc454e4438f44e", max)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(data) != 68 {
 		t.Fatalf("expected 68 bytes, got %d", len(data))
 	}
@@ -133,5 +166,29 @@ func TestEncodeERC20Approve_MaxUint256(t *testing.T) {
 		if data[i] != 0xFF {
 			t.Fatalf("expected 0xFF at byte %d for max uint256, got 0x%02x", i, data[i])
 		}
+	}
+}
+
+// ─── EncodeERC20Transfer / EncodeERC20Approve — error cases ──────────────────
+
+func TestEncodeERC20Transfer_NegativeAmount(t *testing.T) {
+	_, err := EncodeERC20Transfer("0x0000000000000000000000000000000000000001", big.NewInt(-1))
+	if err == nil {
+		t.Error("expected error for negative amount")
+	}
+}
+
+func TestEncodeERC20Transfer_OverflowAmount(t *testing.T) {
+	huge := new(big.Int).Lsh(big.NewInt(1), 257) // > 2^256
+	_, err := EncodeERC20Transfer("0x0000000000000000000000000000000000000001", huge)
+	if err == nil {
+		t.Error("expected error for amount exceeding uint256")
+	}
+}
+
+func TestEncodeERC20Approve_NegativeAmount(t *testing.T) {
+	_, err := EncodeERC20Approve("0x0000000000000000000000000000000000000001", big.NewInt(-1))
+	if err == nil {
+		t.Error("expected error for negative amount")
 	}
 }

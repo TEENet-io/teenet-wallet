@@ -40,32 +40,35 @@ const ethDefaultGasLimit = uint64(21000)
 
 // encodeAddrAmountCalldata is the shared body of EncodeERC20Transfer and EncodeERC20Approve.
 // It builds 4-byte selector ++ ABI-encoded (address, uint256) calldata.
-func encodeAddrAmountCalldata(funcSig string, targetAddr string, amount *big.Int) []byte {
+func encodeAddrAmountCalldata(funcSig string, targetAddr string, amount *big.Int) ([]byte, error) {
+	if amount.Sign() < 0 {
+		return nil, fmt.Errorf("amount must not be negative")
+	}
+	amountBytes := amount.Bytes()
+	if len(amountBytes) > 32 {
+		return nil, fmt.Errorf("amount exceeds uint256 range")
+	}
 	selector := crypto.Keccak256([]byte(funcSig))[:4]
-
 	addr := common.HexToAddress(targetAddr)
 	paddedAddr := make([]byte, 32)
 	copy(paddedAddr[12:], addr.Bytes())
-
 	paddedAmount := make([]byte, 32)
-	amountBytes := amount.Bytes()
 	copy(paddedAmount[32-len(amountBytes):], amountBytes)
-
 	calldata := make([]byte, 0, 4+32+32)
 	calldata = append(calldata, selector...)
 	calldata = append(calldata, paddedAddr...)
 	calldata = append(calldata, paddedAmount...)
-	return calldata
+	return calldata, nil
 }
 
 // EncodeERC20Transfer encodes a ERC-20 transfer(address,uint256) call.
 // Returns the ABI-encoded calldata without any 0x prefix.
-func EncodeERC20Transfer(toAddr string, amount *big.Int) []byte {
+func EncodeERC20Transfer(toAddr string, amount *big.Int) ([]byte, error) {
 	return encodeAddrAmountCalldata("transfer(address,uint256)", toAddr, amount)
 }
 
 // EncodeERC20Approve encodes a ERC-20 approve(address,uint256) call.
-func EncodeERC20Approve(spenderAddr string, amount *big.Int) []byte {
+func EncodeERC20Approve(spenderAddr string, amount *big.Int) ([]byte, error) {
 	return encodeAddrAmountCalldata("approve(address,uint256)", spenderAddr, amount)
 }
 
@@ -247,6 +250,9 @@ func fetchGasFeesAndChainID(rpcURL string) (maxFee, priorityFee, chainID *big.In
 		if !ok3 {
 			return nil, nil, nil, fmt.Errorf("invalid chain id: %s", chainIDHex)
 		}
+		if !parsed.IsUint64() {
+			return nil, nil, nil, fmt.Errorf("chain id %s exceeds uint64 range", chainIDHex)
+		}
 		chainIDUint64 = parsed.Uint64()
 		setCachedChainID(rpcURL, chainIDUint64)
 	}
@@ -327,7 +333,11 @@ func RebuildETHTx(rpcURL string, params ETHTxParams) (*ETHTxData, error) {
 
 	var txData []byte
 	if params.Data != "" {
-		txData, _ = hex.DecodeString(strings.TrimPrefix(params.Data, "0x"))
+		var decodeErr error
+		txData, decodeErr = hex.DecodeString(strings.TrimPrefix(params.Data, "0x"))
+		if decodeErr != nil {
+			return nil, fmt.Errorf("invalid calldata hex in stored params: %w", decodeErr)
+		}
 	}
 
 	toAddr := common.HexToAddress(params.To)

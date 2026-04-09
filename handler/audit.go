@@ -89,8 +89,11 @@ func writeAuditLog(db *gorm.DB, userID uint, action, status, authMode, ip string
 		entry.ApprovalID = &approvalID[0]
 	}
 	if details != nil {
-		b, _ := json.Marshal(details)
-		entry.Details = string(b)
+		detailsJSON, _ := json.Marshal(details)
+		if len(detailsJSON) > 10000 {
+			detailsJSON = detailsJSON[:10000]
+		}
+		entry.Details = string(detailsJSON)
 	}
 	if err := db.Create(&entry).Error; err != nil {
 		slog.Error("audit write failed", "user_id", userID, "action", action, "error", err)
