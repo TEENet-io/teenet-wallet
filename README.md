@@ -1,100 +1,49 @@
 # TEENet Wallet
 
-A multi-chain crypto wallet where private keys never leave TEE hardware -- split across distributed TEE-DAO nodes via threshold cryptography.
+A wallet your AI agent can use -- without putting your assets at risk. Your agent handles routine tasks like balances, transfers, and activity checks, while you set the rules: transfer limits, contract allowlists, and approval requirements. When an action exceeds your rules, you step in with a single Passkey confirmation.
+
+Open source. Hardware-enforced rules. Passkey approval.
 
 > **Disclaimer:** This software manages real cryptocurrency assets. Use at your own risk. The authors are not responsible for any loss of funds. Always test thoroughly on testnets before using with real assets.
-
-## Features
-
-### Wallet and Blockchain
-
-- **Multi-chain support** -- Ethereum, Solana, and all EVM-compatible chains (Sepolia, Holesky, BSC, Optimism, Base Sepolia, and any custom chain via `chains.json` or the runtime API)
-- **ERC-20 token transfers** with contract whitelist security
-- **SPL token transfers** with automatic ATA (Associated Token Account) creation for recipients
-- **General smart contract interaction** via `contract-call` endpoint -- full ABI encoding on EVM, generic program calls on Solana
-- **Wrap/Unwrap SOL** -- convert between native SOL and wSOL (Wrapped SOL) SPL token
-- **Convenience endpoints** -- `approve-token`, `revoke-approval` for common DeFi operations
-- **EIP-1559 transactions** with dynamic fee estimation
-- **Solana transaction building** -- native transfers, SPL TransferChecked, arbitrary program instructions
-- **Nonce manager** for concurrent EVM transaction safety
-- **Idempotent transfers** via `Idempotency-Key` header to prevent duplicates
-- **Native and token balance queries**
-- **Custom chain management** -- add or remove EVM chains at runtime via API (persisted in DB across restarts)
-
-### Smart Contract Security (2-Layer Model)
-
-1. **Contract whitelist** -- only pre-approved contract addresses (EVM), token mints (SPL), or program IDs (Solana) can be called
-2. **Passkey approval for all contract operations** -- every contract call, token approval, or revocation initiated via API Key requires Passkey confirmation; Passkey sessions execute directly
-
-### ABI Encoder
-
-- Full Solidity ABI encoding: `address`, `bool`, `uintN`, `intN`, `bytesN`, `bytes`, `string`, dynamic arrays, fixed-size arrays (`T[N]`), and tuples
-- Supports complex DeFi calls including Uniswap V3 `exactInputSingle` with tuple parameters and fixed-size array arguments
-
-### Authentication and Authorization
-
-- **Dual auth model:**
-  - **API Keys** (`ocw_` prefix) -- up to 10 per user with optional labels, for AI agent and programmatic automation
-  - **Passkey sessions** (`ps_` prefix) -- for sensitive operations requiring human presence
-- **Passkey (WebAuthn)** hardware approval for high-value transactions and destructive operations
-- **USD-denominated approval thresholds** with configurable daily spend limits (ETH/SOL/ERC-20 prices via CoinGecko, stablecoins pegged to $1)
-- **CSRF protection** via `X-CSRF-Token` header for Passkey sessions
-- **Rate limiting** -- per-API-key for general requests, per-IP for registration endpoints
-- **Invite-based and open registration** flows
-
-### Address Book
-
-- **Nickname-based transfers** -- save contacts as `alice`, `treasury`, etc. and use nicknames instead of raw addresses in transfer requests
-- **Per-user, per-chain** entries with unique nickname enforcement
-- **Dual-auth support** -- API key creates pending approval, Passkey applies directly with fresh hardware assertion
-- **Address validation** per chain family (EVM checksummed hex, Solana base58)
-
-### Infrastructure
-
-- **Structured logging** (slog, JSON format)
-- **Audit logging** for all wallet operations with API key label tracking
-- **Graceful shutdown** with configurable timeout
-- **SQLite with WAL mode** for concurrent read performance
-- **Built-in web UI** for account management and transaction approval
-- **OpenClaw skill integration** for AI agent interaction
-- **Docker deployment** -- runs as non-root user
-- **Content Security Policy** headers for the web UI
-- **Real-time SSE notifications** -- per-user Server-Sent Events stream for approval status changes
 
 ## How It Works
 
 ```
 AI Agent / App                       User (Browser)
-    |  (API Key: ocw_*)                  |  (Passkey Session: ps_*)
+    |  (API Key)                         |  (Passkey Session)
     v                                    v
 +--------------------------------------------------+
-|  TEENet Wallet  (:8080)                           |
-|  - Builds transactions                            |
-|  - Enforces contract whitelist                     |
-|  - Manages approval policies + daily limits       |
-|  - Routes to approval queue or direct signing     |
-+--------------------------------------------------+
-    |  (TEENet SDK - HTTP)
-    v
-+--------------------------------------------------+
-|  app-comm-consensus  (:8089)                      |
-|  - M-of-N voting coordination                    |
-+--------------------------------------------------+
-    |  (gRPC + mTLS)
-    v
-+--------------------------------------------------+
-|  TEE-DAO Key Management Cluster                   |
-|  - 3-of-5 threshold signing (FROST / GG20)        |
-|  - Private key shares never leave TEE hardware    |
+|                 TEENet Platform                   |
+|  +--------------------------------------------+  |
+|  |  TEENet Wallet (application)               |  |
+|  |  - Builds transactions                     |  |
+|  |  - Enforces contract whitelist              |  |
+|  |  - Manages approval policies + daily limits |  |
+|  |  - Routes to approval queue or direct sign  |  |
+|  +--------------------------------------------+  |
+|                       |                           |
+|  +--------------------------------------------+  |
+|  |  Key Custody & Signing                     |  |
+|  |  - Keys sharded across TEE nodes           |  |
+|  |  - Threshold signing (no full key anywhere)|  |
+|  +--------------------------------------------+  |
+|                                                   |
+|  Hardware TEE Layer (Intel TDX / AMD SEV)         |
 +--------------------------------------------------+
 ```
 
-1. An application or AI agent sends a request to TEENet Wallet, authenticated with an API key or Passkey session.
-2. TEENet Wallet validates the request against the contract whitelist and approval policies.
-3. For transfers, if the amount exceeds the threshold the transaction enters a pending state requiring Passkey approval through the web UI. For all contract operations via API Key, Passkey approval is always required.
-4. TEENet Wallet requests a threshold signature from the local app-comm-consensus node via the TEENet SDK.
-5. The TEE-DAO cluster performs distributed signing -- the private key is never reconstructed on any single machine.
-6. TEENet Wallet broadcasts the signed transaction to the blockchain.
+Private keys are sharded across independent TEE nodes, never exported, and the hardware guarantees that the running code cannot be modified or bypassed.
+
+## Features
+
+- **Multi-chain** -- Ethereum, Solana, Optimism, Arbitrum, Base, Polygon, BNB Chain, Avalanche, and custom EVM chains
+- **Dual auth** -- API keys for AI agents and automation; Passkeys (WebAuthn) for human approval of high-value operations
+- **Smart contract security** -- contract whitelist + Passkey approval for all contract operations via API key
+- **Approval policies** -- USD-denominated thresholds, daily spend limits, real-time price feeds
+- **Address book** -- nickname-based transfers with per-chain validation
+- **Agent-ready** -- [OpenClaw](https://openclaw.ai) plugin and skill integration, idempotent transfers, SSE event stream, audit logging
+
+See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/introduction) for details.
 
 ## Quick Start
 
@@ -123,262 +72,26 @@ docker run -p 8080:8080 \
   teenet-wallet:latest
 ```
 
-## Configuration
+For the full setup guide, see [Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start).
 
-All configuration is via environment variables:
+## Documentation
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CONSENSUS_URL` | `http://localhost:8089` | URL of the local app-comm-consensus node |
-| `HOST` | `0.0.0.0` | Bind address |
-| `PORT` | `8080` | HTTP listen port |
-| `DATA_DIR` | `/data` | Directory for SQLite database |
-| `BASE_URL` | `http://localhost:<PORT>` | Public-facing URL (used in approval links) |
-| `FRONTEND_URL` | _(empty)_ | Allowed CORS origin; empty disables CORS headers |
-| `CHAINS_FILE` | `./chains.json` | Path to chain configuration file |
-| `APP_INSTANCE_ID` | _(from TEENet)_ | TEENet application instance identifier |
-| `API_KEY_RATE_LIMIT` | `200` | Max requests per minute per API key |
-| `WALLET_CREATE_RATE_LIMIT` | `5` | Max wallet creations per minute per key |
-| `REGISTRATION_RATE_LIMIT` | `10` | Max registration attempts per minute per IP |
-| `APPROVAL_EXPIRY_MINUTES` | `1440` | Minutes before a pending approval expires (default: 24h) |
-| `MAX_WALLETS_PER_USER` | `10` | Maximum wallets a single user can create |
-| `MAX_API_KEYS_PER_USER` | `10` | Maximum API keys a single user can hold |
-| `MAX_USERS` | `500` | Maximum registered users (0 = unlimited) |
-| `FAUCET_URL` | _(empty)_ | Internal faucet service URL for testnet token claims; empty disables `/api/faucet` |
-| `PRICE_CACHE_TTL` | `60` | Price cache TTL in seconds |
+Full documentation is available at **[teenet-io.github.io/teenet-wallet](https://teenet-io.github.io/teenet-wallet/)**.
 
-RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Override the file path with `CHAINS_FILE` if needed. Additional EVM chains can also be added at runtime via the `POST /api/chains` endpoint (Passkey required); these are persisted in the database and survive restarts.
+| Audience | Start here |
+|----------|-----------|
+| **Users** (via OpenClaw) | [Getting Started](https://teenet-io.github.io/teenet-wallet/#/en/user-getting-started) |
+| **Integrators** (REST API) | [Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start) &middot; [API Reference](https://teenet-io.github.io/teenet-wallet/#/en/api-overview) |
+| **Developers** | [Building & Contributing](https://teenet-io.github.io/teenet-wallet/#/en/developer-guide) |
+| **Security** | [Architecture & Security](https://teenet-io.github.io/teenet-wallet/#/en/whitepaper) |
 
-## API Reference
+## TEENet Platform
 
-**Auth legend:** "Public" = no authentication. "Dual" = API key or Passkey session. "Passkey" = Passkey session only.
-
-### Public
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check (returns DB status) |
-| GET | `/api/chains` | List supported chains (built-in + custom) |
-| GET | `/api/prices` | Current USD prices for ETH, SOL, stablecoins |
-
-### Authentication
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/auth/check-name` | Public | Check if a display name is available |
-| GET | `/api/auth/passkey/options` | Public | Get WebAuthn login challenge |
-| POST | `/api/auth/passkey/verify` | Public | Verify WebAuthn assertion and create session |
-| POST | `/api/auth/passkey/register/begin` | Public | Begin open registration (rate-limited) |
-| GET | `/api/auth/passkey/register/options` | Public | Get registration options (invite-token flow) |
-| POST | `/api/auth/passkey/register/verify` | Public | Complete passkey registration (rate-limited) |
-| POST | `/api/auth/invite` | Passkey | Generate an invite link |
-| DELETE | `/api/auth/session` | Passkey | Logout (revoke current session) |
-| DELETE | `/api/auth/account` | Passkey | Delete account and all keys |
-| POST | `/api/auth/apikey/generate` | Passkey | Generate a new API key (max 10, optional label) |
-| GET | `/api/auth/apikey/list` | Passkey | List all API keys (id, prefix, label, created_at) |
-| PATCH | `/api/auth/apikey` | Passkey | Rename an API key (update label) |
-| DELETE | `/api/auth/apikey` | Passkey | Revoke an API key by prefix |
-
-### Custom Chains
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/chains` | Passkey | Add a custom EVM chain (persisted across restarts) |
-| DELETE | `/api/chains/:name` | Passkey | Remove a custom chain (fails if wallets exist on it) |
-
-### Wallets
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/wallets` | Dual | Create a new wallet (rate-limited) |
-| GET | `/api/wallets` | Dual | List all wallets |
-| GET | `/api/wallets/:id` | Dual | Get wallet details |
-| PATCH | `/api/wallets/:id` | Dual | Rename a wallet (update label) |
-| DELETE | `/api/wallets/:id` | Passkey | Delete a wallet (irreversible) |
-| POST | `/api/wallets/:id/transfer` | Dual | Build, sign, and broadcast a transfer (native or token) |
-| POST | `/api/wallets/:id/wrap-sol` | Dual | Wrap native SOL into wSOL (Solana only) |
-| POST | `/api/wallets/:id/unwrap-sol` | Dual | Unwrap all wSOL back to native SOL (Solana only) |
-| GET | `/api/wallets/:id/balance` | Dual | Get native token balance |
-| GET | `/api/wallets/:id/pubkey` | Dual | Get wallet public key |
-| GET | `/api/wallets/:id/daily-spent` | Dual | Get daily USD spend, limit, and remaining budget |
-
-### Contract Whitelist
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/wallets/:id/contracts` | Dual | List whitelisted contracts |
-| POST | `/api/wallets/:id/contracts` | Dual | Add contract (API key creates pending approval) |
-| PUT | `/api/wallets/:id/contracts/:cid` | Dual | Update contract config (label, symbol, decimals; API key creates pending approval) |
-| DELETE | `/api/wallets/:id/contracts/:cid` | Passkey | Remove a whitelisted contract |
-
-### Contract Calls
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/wallets/:id/contract-call` | Dual | Execute a contract call (API Key: requires approval; Passkey: direct) |
-| POST | `/api/wallets/:id/approve-token` | Dual | Approve ERC-20 token spending (API Key: requires approval; Passkey: direct) |
-| POST | `/api/wallets/:id/revoke-approval` | Dual | Revoke ERC-20 token approval (API Key: requires approval; Passkey: direct) |
-
-### Approval Policies
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/wallets/:id/policy` | Dual | Get USD approval policy (one per wallet) |
-| PUT | `/api/wallets/:id/policy` | Dual | Set USD policy: `threshold_usd`, `daily_limit_usd` (API key creates pending approval) |
-| DELETE | `/api/wallets/:id/policy` | Passkey | Remove approval policy |
-
-### Approvals
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/approvals/pending` | Dual | List pending approvals |
-| GET | `/api/approvals/:id` | Dual | Get approval details |
-| POST | `/api/approvals/:id/approve` | Passkey | Approve a pending request |
-| POST | `/api/approvals/:id/reject` | Passkey | Reject a pending request |
-
-### Events
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/events/stream` | Dual | SSE event stream for real-time approval notifications |
-
-### Address Book
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/addressbook` | Dual | List address book entries (filter by `nickname`, `chain`) |
-| POST | `/api/addressbook` | Dual | Add entry (API key creates pending approval) |
-| PUT | `/api/addressbook/:id` | Dual | Update entry (API key creates pending approval) |
-| DELETE | `/api/addressbook/:id` | Passkey | Delete an entry |
-
-### Faucet (Testnet Only)
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/faucet` | Dual | Request testnet tokens (Sepolia, Base Sepolia; requires `FAUCET_URL`) |
-
-### Audit
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/audit/logs` | Dual | Query operation audit log |
-
-## Security Model
-
-- **Distributed Key Generation (DKG):** Private keys are generated across a cluster of TEE nodes using threshold cryptography (FROST for Ed25519/Schnorr, GG20 for ECDSA). No single node ever holds the full private key.
-- **Threshold Signing:** Transaction signing requires cooperation of M-of-N TEE nodes.
-- **Passkey Hardware Approval:** High-value transfers, all contract operations via API Key, and destructive operations (key deletion, policy changes) require fresh WebAuthn hardware authentication.
-- **Contract Whitelist:** Contract interactions are restricted to pre-approved addresses. All contract operations (calls, token approvals, revocations) initiated via API Key require Passkey approval. Passkey sessions execute directly.
-- **CSRF Protection:** All state-changing API requests from Passkey sessions require a `X-CSRF-Token` header.
-- **Rate Limiting:** Per-API-key and per-IP rate limits protect against abuse and prevent TEE DKG resource exhaustion.
-- **Daily Spend Limits:** Optional USD-denominated daily limits that hard-block transfers when exceeded. Unknown token transfers (tokens without a CoinGecko price) require Passkey approval (fail-closed). Uses pre-deduction with rollback on signing/broadcast failure (auth/capture pattern) to prevent phantom spend from failed transactions.
-- **Content Security Policy:** The web UI is served with a restrictive CSP header. Additional security headers include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security` (HSTS).
-
-## Supported Chains
-
-| Chain | Currency | Protocol | Curve | Family |
-|-------|----------|----------|-------|--------|
-| Ethereum Mainnet | ETH | ECDSA | secp256k1 | EVM |
-| Optimism Mainnet | ETH | ECDSA | secp256k1 | EVM |
-| Arbitrum One | ETH | ECDSA | secp256k1 | EVM |
-| Base Mainnet | ETH | ECDSA | secp256k1 | EVM |
-| Polygon PoS | POL | ECDSA | secp256k1 | EVM |
-| BNB Smart Chain | BNB | ECDSA | secp256k1 | EVM |
-| Avalanche C-Chain | AVAX | ECDSA | secp256k1 | EVM |
-| Solana Mainnet | SOL | Schnorr | ed25519 | Solana |
-| Sepolia Testnet | ETH | ECDSA | secp256k1 | EVM |
-| Holesky Testnet | ETH | ECDSA | secp256k1 | EVM |
-| Base Sepolia Testnet | ETH | ECDSA | secp256k1 | EVM |
-| BSC Testnet | tBNB | ECDSA | secp256k1 | EVM |
-| Solana Devnet | SOL | Schnorr | ed25519 | Solana |
-
-Add or modify chains by editing `chains.json`, or add custom EVM chains at runtime via `POST /api/chains` (persisted in the database). Any EVM-compatible chain can be added by providing a name, RPC URL, and currency.
-
-### Token Pricing
-
-Transfer limits use real-time USD pricing with multi-source fallback:
-
-| Source | Coverage |
-|--------|----------|
-| Built-in | ETH, SOL, BNB, POL, AVAX + stablecoins (USDC/USDT/DAI/BUSD = $1) |
-| CoinGecko Token Price API | ERC-20 tokens on 17 EVM chains + Solana (by contract/mint address) |
-| Jupiter Price API | Solana SPL tokens with DEX liquidity (fallback when CoinGecko has no data) |
-
-Tokens without a known price trigger approval (fail-closed).
-
-## Development
-
-```bash
-make build         # compile binary
-make test          # run tests with race detector
-make lint          # go vet + staticcheck
-make docker        # build Docker image
-make clean         # remove binary
-```
-
-### Project Structure
-
-```
-main.go                  Entry point, router setup, middleware
-handler/
-  auth.go                Passkey registration, login, API key management
-  wallet.go              Wallet CRUD, sign, transfer, policy management
-  contract.go            Contract whitelist CRUD
-  contract_call.go       General contract calls, approve-token, revoke-approval
-  approval.go            Approval queue (list, approve, reject)
-  sse.go                 SSE event stream endpoint
-  sse_hub.go             Per-user SSE pub/sub hub
-  balance.go             Native token balance queries
-  addressbook.go         Address book CRUD with nickname resolution
-  audit.go               Audit log queries
-  faucet.go              Testnet faucet proxy (Sepolia, Base Sepolia)
-  middleware.go          Auth, CSRF, Passkey-only middleware
-  ratelimit.go           Per-key and per-IP rate limiters
-  idempotency.go         Idempotent transfer deduplication
-  price.go               USD price service (CoinGecko + cache)
-  helpers.go             Shared handler utilities
-  response.go            Standardized JSON response helpers
-model/
-  user.go                User model
-  apikey.go              APIKey model (multi-key per user, max 10)
-  wallet.go              Wallet, CustomChain models and chain config loader
-  contract.go            AllowedContract model (whitelist)
-  policy.go              ApprovalPolicy and ApprovalRequest models
-  addressbook.go         AddressBookEntry model
-  audit.go               AuditLog model
-  idempotency.go         IdempotencyRecord model
-chain/
-  abi.go                 Full Solidity ABI encoder (address, uintN, bytes, tuples, fixed arrays)
-  tx_eth.go              EVM transaction building (EIP-1559)
-  tx_sol.go              Solana transaction building (native, SPL, program call, wrap/unwrap)
-  nonce.go               Nonce manager for concurrent EVM transactions
-  rpc.go                 JSON-RPC client with retry
-  address.go             Address validation, derivation, PDA and ATA computation
-frontend/                Pre-built web UI assets
-docs/                    Design documents
-skill/tee-wallet/        OpenClaw AI agent skill definition
-plugin/                  OpenClaw native plugin (TypeScript) with real-time approval notifications
-chains.json              Supported chain configuration
-Dockerfile               Multi-stage Docker build (non-root runtime)
-```
-
-## OpenClaw Integration
-
-Two ways to use this wallet with [OpenClaw](https://openclaw.ai) AI agents:
-
-- **Native Plugin** (`plugin/`) -- TypeScript plugin with 29 registered tools and real-time SSE approval notifications via `subagent.run()`. See `plugin/README.md`.
-- **Skill-only** (`skill/tee-wallet/`) -- Standalone skill definition where the agent uses `curl`/`web_fetch` to call the REST API directly. No plugin installation required. See `skill/tee-wallet/SKILL.md`.
-
-## Related Projects
-
-| Project | Description |
-|---------|-------------|
-| [TEENet SDK (Go/TypeScript)](https://github.com/TEENet-io/teenet-sdk) | Client SDK for TEE signing and key management — used by this wallet to interact with TEE-DAO nodes |
-| [OpenClaw](https://openclaw.io) | AI assistant platform — this wallet integrates as a skill |
+This wallet is one application built on [TEENet](https://teenet.io) -- a platform that provides hardware-isolated runtime and managed key custody for any application that needs to protect secrets, from AI agent wallets to autonomous trading systems to cross-chain bridges. TEENet is currently in Developer Preview. [Platform docs](https://teenet-io.github.io/#/) &middot; [TEENet SDK](https://github.com/TEENet-io/teenet-sdk)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+We welcome contributions! Whether it's bug fixes, new chain support, or documentation improvements -- see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## Disclaimer
 
