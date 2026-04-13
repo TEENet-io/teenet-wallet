@@ -2,13 +2,11 @@
 
 # Getting Started
 
-You tell OpenClaw what you want to do, it uses TEENet Wallet to do it, and big transactions need your fingerprint. Here's how to set it all up.
-
----
-
 ## Step 1: Create Your Account
 
-1. Open your browser and go to [TEENet Wallet][wallet-url]. Use Google Chrome for the best experience.
+1. Open your browser and go to the [wallet registration page][wallet-url]. Use Google Chrome for the best experience.
+
+> **Note:** TEENet Wallet is currently in testing phase with a limit of 500 users. Registration is first-come, first-served.
 
 2. Enter your name or email in the required field.
 
@@ -26,11 +24,11 @@ You tell OpenClaw what you want to do, it uses TEENet Wallet to do it, and big t
 
 ## Step 2: Generate an API Key
 
-The API key lets OpenClaw access your wallet. Without it, OpenClaw can't do anything.
+The API key lets your AI agent access your wallet. Without it, no agent can interact with your wallets.
 
 1. Click the **Settings** icon (gear) in the top-right corner.
 
-2. In the API Keys section, type a label (e.g., "my-openclaw") and click **Generate API Key**.
+2. In the API Keys section, type a label (e.g., "my-agent") and click **Generate API Key**.
 
 3. Authenticate with your Passkey.
 
@@ -38,53 +36,37 @@ The API key lets OpenClaw access your wallet. Without it, OpenClaw can't do anyt
 
 <div align="center"><img src="picture/generate_api.png" alt="API key generated" width="360" /></div>
 
-## Step 3: Connect OpenClaw
+## Step 3: Connect Your Agent
+
+Provide your agent with the **API key** from Step 2 and the **wallet API URL** shown on your account page. How you do this depends on your agent platform.
+
+**OpenClaw example:**
 
 1. Open your OpenClaw chat.
 
-2. Send **"Install this skill:"** followed by:
+2. Copy and paste this message:
 
    ```
-   https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
+   Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
    ```
 
-3. When prompted, enter:
-   - **TEE_WALLET_API_URL** -- `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`
-   - **TEE_WALLET_API_KEY** -- the key you copied in Step 2
+3. When prompted, enter your **TEE_WALLET_API_KEY** -- the key you copied in Step 2. The wallet API URL is shown on your account page.
 
 <div align="center"><img src="picture/tg.png" alt="Connect OpenClaw via Telegram" width="360" /></div>
 
-That's it. OpenClaw can now use your wallet.
+## Step 4: Test Your Wallet
 
-## Step 4: Create a Wallet
+Ask your agent to run a quick test. On OpenClaw, type `/test`. The agent will create a wallet on Base Sepolia testnet for you if you don't have one, then walk you through:
 
-Tell OpenClaw:
+1. **Check balance** -- confirm the wallet is active
+2. **Get test tokens** -- from a faucet (free, testnet only)
+3. **Send to yourself** -- verifies TEE distributed signing works
+4. **Set a $1 approval threshold** -- requires your Passkey
+5. **Send a small amount** -- goes through automatically (below threshold)
+6. **Send a larger amount** -- held until you approve with Passkey
+7. **Whitelist a token** -- adds test USDC to your contract whitelist
 
-- **"Create an Ethereum wallet"**
-- **"Create a Solana wallet called Trading"**
-
-Ethereum wallets take about a minute (distributed key generation). Solana wallets are instant. Once you have the address, fund it from an exchange or another wallet.
-
-<div align="center"><img src="picture/create.png" alt="Create wallet via OpenClaw" width="480" /></div>
-
-## Step 5: Set a Spending Limit
-
-Set an approval policy so large transactions require your fingerprint.
-
-**In the Web UI:**
-
-1. Go to [TEENet Wallet][wallet-url], click on a wallet to open its detail page, then select the **Threshold** tab.
-2. Set an **Approval Threshold (USD)** (e.g., $100) -- anything above this needs your approval.
-3. Optionally set a **Daily Limit (USD)** (e.g., $1,000) -- a hard cap per day.
-4. Click **Save policy**.
-
-**Or just tell OpenClaw:** "Set approval threshold to $100" / "Set daily limit to $1,000"
-
-<div align="center"><img src="picture/threshold.png" alt="Set threshold via OpenClaw" width="480" /></div>
-
-Policy changes always require your Passkey approval, so a compromised API key can't weaken your protections.
-
-<div align="center"><img src="picture/appqueue.png" alt="Web approval page" width="480" /></div>
+Testnet faucets: [Sepolia ETH](https://faucet.google.com/ethereum/sepolia) · [Solana Devnet](https://faucet.solana.com) · [Test USDC](https://faucet.circle.com)
 
 ---
 [Next: What You Can Do](/en/user-commands.md)

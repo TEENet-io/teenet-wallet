@@ -8,17 +8,17 @@
 
 ### How do I connect an AI agent?
 
-Generate an API key in the [TEENet Wallet][wallet-url] **Account** tab and provide it to your agent. The agent uses this key to call the wallet's REST API on your behalf.
+Generate an API key in the [TEENet Wallet][wallet-url] **Account** tab and provide it to your agent along with the wallet API URL shown on your account page. The agent uses these to call the wallet's REST API on your behalf.
 
-**OpenClaw example:** Open your OpenClaw chat and send **"Install this skill:"** followed by:
+**OpenClaw example:** Open your OpenClaw chat and send:
 
 ```
-https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
+Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
 ```
 
-OpenClaw will ask for two settings: TEE_WALLET_API_URL (your wallet URL) and TEE_WALLET_API_KEY (your API key starting with `ocw_`). Once both are provided, the skill is installed and ready.
+OpenClaw will ask for your API key (starts with `ocw_`) and wallet API URL. Once provided, the skill is installed and ready.
 
-For other agent platforms, consult the platform's documentation on how to configure API credentials, then provide the wallet URL and API key.
+For other agent platforms, consult the platform's documentation on how to configure API credentials.
 
 ---
 
