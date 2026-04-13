@@ -1,58 +1,59 @@
 # TEENet Wallet
 
-> Multi-chain crypto wallet where private keys never leave TEE hardware.
+A wallet your AI agent can use -- without putting your assets at risk.
 
-TEENet Wallet splits every private key across a cluster of **Trusted Execution Environment (TEE)** nodes using threshold cryptography. When a transaction needs to be signed, a quorum of nodes (e.g. 3-of-5) cooperates to produce a valid signature -- the full key is never reconstructed on any single machine.
+Your agent handles routine tasks like balances, transfers, and activity checks, while you set the rules: transfer limits, contract allowlists, and approval requirements. When an action exceeds your rules, you step in with a single Passkey confirmation.
 
-## Why TEENet Wallet?
+> **Disclaimer:** This software manages real cryptocurrency assets. Use at your own risk. The authors are not responsible for any loss of funds. Always test thoroughly on testnets before using with real assets.
 
-| Traditional Wallet | TEENet Wallet |
-|---|---|
-| Private key exists in one place | Key shares distributed across TEE nodes |
-| Single point of compromise | M-of-N threshold -- no single node can sign alone |
-| Manual approval or no approval | Configurable USD thresholds + Passkey hardware approval |
-| One chain at a time | Ethereum, Solana, and all EVM chains from one API |
+---
+
+## What Makes This Different
+
+- **Keys never reconstructed** -- Private keys are sharded across TEE nodes using threshold cryptography. No single machine ever holds a full key.
+- **Dual auth** -- API keys for AI agents and automation; Passkeys (WebAuthn) for human approval of high-value operations.
+- **Spending controls** -- USD-denominated thresholds, daily limits, and contract whitelists enforced before signing.
+- **Multi-chain, one API** -- Ethereum, Solana, and all EVM-compatible chains from a single REST API.
 
 ---
 
 ## I'm a User
 
-Use TEENet Wallet through OpenClaw -- no coding required.
+Use TEENet Wallet through [OpenClaw](https://openclaw.ai) -- no coding required.
 
 - [Getting Started](en/user-getting-started.md) -- Create your account, connect OpenClaw, and set up your first wallet
 - [Talking to OpenClaw](en/user-commands.md) -- What you can say to manage wallets and send crypto
 - [Approvals & Web UI](en/user-approvals.md) -- How to approve transactions and use the web dashboard
 - [Security & FAQ](en/user-faq.md) -- How your keys are protected, plus common questions
 
-## I'm Integrating
+## I'm a Developer
 
-Build on TEENet Wallet with the REST API.
+Build on TEENet Wallet with the REST API, or contribute to the project.
 
+- [Introduction](en/introduction.md) -- Architecture, how signing works, and key features
 - [Quick Start](en/quick-start.md) -- Build from source, deploy, and make your first API call
-- [Authentication](en/authentication.md) -- API keys for agents, Passkey for humans
-- [Wallet Management](en/wallets.md) -- Create, list, and manage wallets via API
-- [Transfers](en/transfers.md) -- Send native tokens, ERC-20, and SPL tokens
-- [Smart Contracts](en/smart-contracts.md) -- Contract whitelist, ABI encoding, Solana programs
-- [Approval System](en/approvals.md) -- USD thresholds, daily limits, contract call approval
-- [AI Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
 - [API Reference](en/api-overview.md) -- Full endpoint reference
-- [Configuration](en/configuration.md) -- Environment variables and deployment options
+- [AI Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
+- [Building & Contributing](en/developer-guide.md) -- Development setup and contribution guidelines
 - [Architecture & Security](en/whitepaper.md) -- Technical deep-dive
 
-## Supported Chains
+---
 
-| Chain | Currency | Family |
-|-------|----------|--------|
-| Ethereum Mainnet | ETH | EVM |
-| Optimism Mainnet | ETH | EVM |
-| Sepolia Testnet | ETH | EVM |
-| Holesky Testnet | ETH | EVM |
-| Base Sepolia | ETH | EVM |
-| BSC Testnet | tBNB | EVM |
-| Solana Mainnet | SOL | Solana |
-| Solana Devnet | SOL | Solana |
-| + Custom EVM chains via API | | |
+## Supported Signature Schemes
+
+TEENet Wallet supports all major signature schemes used by blockchain systems through the [TEENet platform](https://teenet.io). Chains marked with **✓** have been tested end-to-end.
+
+| Scheme | Blockchains |
+|--------|-------------|
+| ECDSA secp256k1 | Ethereum **✓**, Optimism **✓**, Base **✓**, BNB Chain **✓**, Arbitrum, Polygon, Avalanche, Bitcoin, + any EVM chain |
+| Ed25519 | Solana **✓** |
 
 ---
+
+## TEENet Platform
+
+This wallet is one application built on [TEENet](https://teenet.io) -- a platform that provides hardware-isolated runtime and managed key custody for any application that needs to protect secrets. TEENet is currently in Developer Preview.
+
+[Platform docs](https://teenet-io.github.io/#/) · [TEENet SDK](https://github.com/TEENet-io/teenet-sdk) · [GitHub](https://github.com/TEENet-io/teenet-wallet)
 
 **[中文文档 →](zh/)**
