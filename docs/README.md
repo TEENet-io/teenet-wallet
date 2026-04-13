@@ -21,10 +21,10 @@ Your agent handles routine tasks like balances, transfers, and activity checks, 
 
 Use TEENet Wallet through [OpenClaw](https://openclaw.ai) -- no coding required.
 
-- [Getting Started](en/user-getting-started.md) -- Create your account, connect OpenClaw, and set up your first wallet
-- [Talking to OpenClaw](en/user-commands.md) -- What you can say to manage wallets and send crypto
-- [Approvals & Web UI](en/user-approvals.md) -- How to approve transactions and use the web dashboard
-- [Security & FAQ](en/user-faq.md) -- How your keys are protected, plus common questions
+- [Getting Started](en/user-getting-started.md) -- Create your account and set up your first wallet
+- [Agent Commands](en/user-commands.md) -- What you can say to manage wallets and send crypto
+- [Web UI & Approvals](en/user-approvals.md) -- How to use the web dashboard and approve transactions
+- [FAQ](en/user-faq.md) -- Common questions about security, keys, and usage
 
 ## I'm a Developer
 
