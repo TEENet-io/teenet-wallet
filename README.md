@@ -1,5 +1,9 @@
 # TEENet Wallet
 
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg?logo=go&logoColor=white)](https://go.dev)
+[![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange.svg)]()
+
 A wallet your AI agent can use -- without putting your assets at risk. Your agent handles routine tasks like balances, transfers, and activity checks, while you set the rules: transfer limits, contract allowlists, and approval requirements. When an action exceeds your rules, you step in with a single Passkey confirmation.
 
 Open source. Hardware-enforced rules. Passkey approval.
