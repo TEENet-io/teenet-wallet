@@ -2,7 +2,7 @@
 
 - **Users**
   - [Getting Started](en/user-getting-started.md)
-  - [Agent Commands](en/user-commands.md)
+  - [What You Can Do](en/user-commands.md)
   - [Web UI & Approvals](en/user-approvals.md)
   - [FAQ](en/user-faq.md)
 

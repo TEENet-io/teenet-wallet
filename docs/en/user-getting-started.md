@@ -87,4 +87,4 @@ Policy changes always require your Passkey approval, so a compromised API key ca
 <div align="center"><img src="picture/appqueue.png" alt="Web approval page" width="480" /></div>
 
 ---
-[Next: Talking to OpenClaw](/en/user-commands.md)
+[Next: What You Can Do](/en/user-commands.md)
