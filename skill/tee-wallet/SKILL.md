@@ -24,7 +24,7 @@ as a whole outside secure hardware.
 
 ## Configuration
 
-- `TEE_WALLET_API_URL`: The wallet service URL (default: `https://test.teenet.io/instance/wallet`)
+- `TEE_WALLET_API_URL`: The wallet service URL (required — no default)
 - `TEE_WALLET_API_KEY`: Your API key (starts with `ocw_`)
 
 RPC URLs are configured in the wallet service's `chains.json` file (or via the `CHAINS_FILE` env var on the server), not as client-side environment variables. The wallet service handles all blockchain RPC communication internally.
@@ -37,24 +37,15 @@ When a user interacts with the wallet skill for the first time (no prior wallet 
 
 Before making any API calls, verify both required environment variables are set.
 
-**If `TEE_WALLET_API_URL` is missing**, use the default: `https://test.teenet.io/instance/wallet`
+**If `TEE_WALLET_API_URL` is missing**, stop and ask the user to set it — there is no default. Tell them:
+> ⚙️ **`TEE_WALLET_API_URL` is not configured.**
+>
+> Set it to the wallet service URL you were given (for example, the deployed instance URL from your administrator), then try again.
 
-**If `TEE_WALLET_API_KEY` is missing**, guide the user through account setup:
-> 🔑 **API key not configured — let's set one up.**
+**If `TEE_WALLET_API_KEY` is missing**, stop and tell the user:
+> 🔑 **`TEE_WALLET_API_KEY` is not configured.**
 >
-> You need a Passkey account and an API key to use this wallet. Here's how:
->
-> **1. Open the Web UI**
-> Go to [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet) in your browser (Chrome or Edge recommended for Passkey support).
->
-> **2. Register an account**
-> Click **Register** and follow the Passkey prompts. You'll need a device with biometric or hardware security key support (TouchID, FaceID, YubiKey, etc.). If registration is invite-only, ask an existing user for an invite link.
->
-> **3. Generate an API key**
-> After logging in, go to **Settings → API Keys**, click **Generate New Key**, and give it a label (e.g. "AI Agent"). **Copy the key immediately** — it starts with `ocw_` and is only shown once.
->
-> **4. Configure the environment**
-> Set `TEE_WALLET_API_KEY` to the key you just copied, then try again.
+> Set it to your wallet API key (starts with `ocw_`), then try again. You should have received this key when you generated it in the wallet Web UI.
 
 Once both variables are set, continue to Step 1.
 

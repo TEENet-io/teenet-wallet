@@ -121,7 +121,8 @@ For end-to-end local development without a real `app-comm-consensus` + TEE-DAO c
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
 go build && ./mock-server                                  # 127.0.0.1:8089
-MOCK_SERVER_PORT=9000 MOCK_SERVER_BIND=0.0.0.0 ./mock-server  # custom bind
+# For a custom port/bind: MOCK_SERVER_PORT=xxxx MOCK_SERVER_BIND=0.0.0.0 ./mock-server
+# Note: if you change the port, update CONSENSUS_URL below to match.
 ```
 
 Then run the wallet with:

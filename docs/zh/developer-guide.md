@@ -121,7 +121,8 @@ make lint
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
 go build && ./mock-server                                  # 127.0.0.1:8089
-MOCK_SERVER_PORT=9000 MOCK_SERVER_BIND=0.0.0.0 ./mock-server  # 自定义端口/绑定
+# 如需自定义端口/绑定：MOCK_SERVER_PORT=xxxx MOCK_SERVER_BIND=0.0.0.0 ./mock-server
+# 注意：改了端口后，下面的 CONSENSUS_URL 也要同步更新
 ```
 
 然后运行钱包：
