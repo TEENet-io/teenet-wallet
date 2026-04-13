@@ -1,44 +1,32 @@
 [wallet-url]: https://test.teenet.io/instance/wallet/
 
-# Security & FAQ
+# FAQ
 
 ---
 
-## Security
+## Getting Connected
 
-TEENet Wallet is built with multiple layers of protection:
+### How do I connect an AI agent?
 
-- **Your private keys are split across TEE hardware nodes.** They are generated and stored using threshold cryptography. No single node, server, or person ever holds your complete private key. Multiple secure hardware nodes must cooperate to sign a transaction.
+Generate an API key in the [TEENet Wallet][wallet-url] **Account** tab and provide it to your agent. The agent uses this key to call the wallet's REST API on your behalf.
 
-- **OpenClaw never sees your private keys.** OpenClaw sends transaction requests to the wallet service, which coordinates signing across the TEE nodes. The keys never leave the secure hardware.
-
-- **Large transactions need your fingerprint or Face ID.** Any transaction above your spending threshold requires Passkey approval. There is no way for OpenClaw, or anyone with your API key, to bypass this.
-
-- **You control the spending limit.** You decide the threshold. Lower thresholds give you more control. Higher thresholds give OpenClaw more autonomy. Adjust it to your comfort level.
-
-- **Daily limits provide a hard cap.** Even if every individual transaction is below your threshold, the daily limit prevents runaway spending.
-
-- **You can revoke OpenClaw's access at any time.** Go to the Account tab, click Revoke next to the API key, and OpenClaw immediately loses access to your wallets.
-
-- **Everything is logged.** Every action OpenClaw takes is recorded in the History tab. Review it anytime to confirm OpenClaw is doing what you expect.
-
----
-
-## FAQ
-
-### How do I install the wallet skill on OpenClaw?
-
-Open your OpenClaw chat and send **"Install this skill:"** followed by:
+**OpenClaw example:** Open your OpenClaw chat and send **"Install this skill:"** followed by:
 
 ```
 https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
 ```
 
-OpenClaw will ask you for two settings: TEE_WALLET_API_URL (enter your wallet URL) and TEE_WALLET_API_KEY (paste your API key starting with `ocw_`). Once both are provided, the skill is installed and ready.
+OpenClaw will ask for two settings: TEE_WALLET_API_URL (your wallet URL) and TEE_WALLET_API_KEY (your API key starting with `ocw_`). Once both are provided, the skill is installed and ready.
 
-### What can OpenClaw do without my approval?
+For other agent platforms, consult the platform's documentation on how to configure API credentials, then provide the wallet URL and API key.
 
-OpenClaw can freely perform the following without requiring your Passkey:
+---
+
+## Agent Permissions
+
+### What can my agent do without approval?
+
+Your agent can freely perform the following without requiring your Passkey:
 
 - Send transactions that are below your USD approval threshold.
 - Check wallet balances and addresses.
@@ -59,17 +47,33 @@ The following actions always require your Passkey, regardless of spending limits
 - Deleting a wallet.
 - Generating or revoking API keys.
 
-### Can I use multiple OpenClaw bots?
+### Can I use multiple agents?
 
-Yes. Generate a separate API key for each one in the Account tab. Each bot operates independently but shares your wallets and is subject to the same approval policies. If one misbehaves, revoke its specific key without affecting the others.
+Yes. Generate a separate API key for each agent in the Account tab. Each agent operates independently but shares your wallets and is subject to the same approval policies. If one misbehaves, revoke its specific key without affecting the others.
 
-### What if OpenClaw tries to overspend?
+---
 
-If OpenClaw submits a transaction above your threshold, it is held in a pending state and nothing is sent until you approve it. If the transaction would also exceed your daily limit, it is blocked entirely -- even you cannot approve it until the next day. The daily limit is a hard cap enforced at the infrastructure level.
+## Safety
 
-### How do I stop OpenClaw from using my wallet?
+### How are my private keys protected?
 
-Go to [TEENet Wallet][wallet-url], click the **Account** tab, find the API key OpenClaw is using, and click **Revoke**. Authenticate with your Passkey. OpenClaw immediately loses all access to your wallets. If you want to reconnect later, generate a new API key and provide it to OpenClaw.
+Your private keys are split across multiple TEE (Trusted Execution Environment) hardware nodes using threshold cryptography. No single node, server, or person ever holds your complete private key. Multiple secure hardware nodes must cooperate to sign a transaction. Your agent never sees your private keys -- it sends transaction requests to the wallet service, which coordinates signing across the TEE nodes. The keys never leave the secure hardware.
+
+### What if my agent tries to overspend?
+
+If your agent submits a transaction above your threshold, it is held in a pending state and nothing is sent until you approve it. If the transaction would also exceed your daily limit, it is blocked entirely -- even you cannot approve it until the next day. The daily limit is a hard cap enforced at the infrastructure level.
+
+### Can I see what my agent has done?
+
+Yes. Every action your agent takes is recorded in the History tab of the [TEENet Wallet][wallet-url] web UI. Review it anytime to confirm your agent is doing what you expect.
+
+### How do I revoke an agent's access?
+
+Go to [TEENet Wallet][wallet-url], click the **Account** tab, find the API key your agent is using, and click **Revoke**. Authenticate with your Passkey. The agent immediately loses all access to your wallets. If you want to reconnect later, generate a new API key and provide it to the agent.
+
+---
+
+## Account
 
 ### What is a Passkey?
 
@@ -85,27 +89,20 @@ If you have completely lost access to all devices with your Passkey, contact the
 
 **Best practice:** Make sure your Passkeys are backed up through your device ecosystem (Apple, Google, or a hardware security key stored in a safe place).
 
+---
+
+## Chains
+
 ### What chains are supported?
 
-**Mainnets:**
+TEENet Wallet supports all major signature schemes used by blockchain systems. Chains marked with **✓** have been tested end-to-end.
 
-| Chain | Currency | Type |
-|-------|----------|------|
-| Ethereum | ETH | EVM |
-| Optimism | ETH | EVM Layer 2 |
-| Solana | SOL | Solana |
+| Scheme | Blockchains |
+|--------|-------------|
+| ECDSA secp256k1 | Ethereum **✓**, Optimism **✓**, Base **✓**, BNB Chain **✓**, Arbitrum, Polygon, Avalanche, Bitcoin, + any EVM chain |
+| Ed25519 | Solana **✓** |
 
-**Testnets (free test tokens):**
-
-| Chain | Currency | Type |
-|-------|----------|------|
-| Sepolia | ETH | EVM |
-| Holesky | ETH | EVM |
-| Base Sepolia | ETH | EVM Layer 2 |
-| BSC Testnet | tBNB | EVM |
-| Solana Devnet | SOL | Solana |
-
-Any EVM-compatible chain (Polygon, Arbitrum, Avalanche, etc.) can be added at runtime. Use `/chains` to see the current list, or ask your wallet administrator to add one.
+Any EVM-compatible chain can be added at runtime. Ask your agent to list available chains, or check `GET /api/chains` in the API.
 
 ---
 
@@ -119,4 +116,4 @@ If you run into any issues not covered here, contact your wallet administrator. 
 - Which browser and device you are using.
 
 ---
-[Previous: Approvals & Web UI](/en/user-approvals.md)
+[Previous: Web UI & Approvals](/en/user-approvals.md)
