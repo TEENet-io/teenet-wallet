@@ -1,62 +1,71 @@
 [wallet-url]: https://test.teenet.io/instance/wallet/
 
-# Approvals & Web UI
+# Web UI & Approvals
 
-When OpenClaw submits a transaction that exceeds your spending threshold, the transaction is held in a pending state. Nothing is sent to the blockchain until you act.
+The web UI at [TEENet Wallet][wallet-url] is your dashboard for managing wallets, reviewing approvals, and monitoring activity. Your agent handles day-to-day operations — the web UI is for oversight and security configuration.
 
----
-
-## Approving Transactions
-
-### How it works
-
-1. OpenClaw tells you in chat that a transaction needs your approval. It includes a direct link to the approval screen.
-
-2. Tap the link. It opens in your browser and takes you straight to that specific transaction.
-
-3. Review the details: the recipient address, the amount, the currency, and the estimated USD value.
-
-4. Tap **Approve** and authenticate with your fingerprint or Face ID. Or tap **Reject** if something looks wrong.
-
-<div align="center"><img src="picture/appqueue.png" alt="Approval detail page" width="360" /></div>
-
-5. If you approve, the transaction is signed and sent to the blockchain. OpenClaw will confirm in chat with a transaction hash and explorer link.
-
-### Using the Web UI directly
-
-You can also go to [TEENet Wallet][wallet-url] and click the **Approvals** tab to see all pending transactions. Each one shows:
-
-- The wallet the transaction is from.
-- The recipient address.
-- The amount and currency.
-- The estimated USD value.
-- A countdown timer showing how much time remains before it expires.
-
-### Expiry
-
-Pending approvals expire after **24 hours**. If you do not approve or reject within that window, the transaction is automatically cancelled. If you still want to proceed, ask OpenClaw to submit it again.
+The top navigation has three tabs: **Wallets**, **Approvals**, and **Activity**. The gear icon opens **Settings**.
 
 ---
 
-## Web UI Overview
+## Wallets
 
-The Web UI at [TEENet Wallet][wallet-url] is your dashboard for oversight and management. Here is what you can do:
+The Wallets tab shows all your wallets. Each card displays the wallet name, chain, address, balance, and status.
 
-- **Wallets tab** -- View all your wallets, their addresses, and balances. Click on a wallet to see its detail page with spending policy and contract whitelist.
+**Creating a wallet:** Click **Create New Wallet** at the top, select a chain from the dropdown, optionally add a label, and click **Create Wallet**. EVM wallets take 1-2 minutes (distributed key generation across TEE nodes). Solana wallets are instant.
 
-- **Approvals tab** -- Review and approve or reject pending transactions that exceed your spending threshold.
+**Wallet detail page:** Click on any wallet to see its detail view:
 
-- **Activity tab** -- View a complete audit trail of every action: transfers, approvals, wallet creations, policy changes, whitelist updates, and more. Use the filter to narrow by action type.
+- **Balance** — current balance with USD estimate
+- **Threshold tab** — configure your spend policy:
+  - **Approval threshold (USD)** — transactions above this amount require your Passkey. Use the slider or type a value.
+  - **Daily limit (USD)** — hard cap on total daily spending. The progress bar shows how much you've spent today.
+  - Click **Save policy** to apply (requires Passkey approval).
+- **Contract tab** (or **Program** for Solana) — view and manage whitelisted contracts. Only whitelisted contracts can be called. Adding or removing contracts requires Passkey approval.
+- **Delete Wallet** — permanently removes the wallet (requires Passkey).
 
-- **Settings** (gear icon) -- Generate and manage API keys, manage your address book, and delete your account.
+---
 
-- **Approval policies** -- In a wallet's detail page, select the **Threshold** tab to set or change spending thresholds and daily limits.
+## Approvals
 
-- **Contract whitelist** -- In a wallet's detail page, select the **Contract** tab (or **Program** for Solana) to see whitelisted contracts. You can add or remove contracts here (requires Passkey approval).
+The Approvals tab shows all pending transactions that need your action. Each pending item displays:
 
-- **Address Book** -- In Settings, manage saved addresses with nicknames for quick transfers.
+- The amount and currency (e.g., **0.001 ETH**)
+- The recipient address
+- A **PENDING** status badge
+- A **countdown timer** showing time remaining before expiry
 
-Day-to-day operations like sending crypto and interacting with contracts are handled through OpenClaw. The Web UI is for oversight, approvals, and security configuration.
+**To approve:** Click on a pending item, review the details, and tap **Approve**. Authenticate with your fingerprint or Face ID. The transaction is then signed and sent to the blockchain.
+
+**To reject:** Tap **Reject** if something looks wrong. The transaction is cancelled.
+
+**Expiry:** Pending approvals expire after **24 hours**. If not acted on, the transaction is automatically cancelled. Ask your agent to resubmit if you still want to proceed.
+
+**How you get here:** Your agent will send you a direct link to the approval screen when a transaction needs your action. You can also check the Approvals tab directly at any time.
+
+---
+
+## Activity
+
+The Activity tab shows a complete audit trail of every action on your account, grouped by date. Each entry shows the action type, relevant details, and timestamp. Entry types include:
+
+- **Transfer** — with status badges: **AUTO** (went through automatically) or **PENDING** (awaiting approval)
+- **Approve** — you approved a pending transaction
+- **Policy Update** — spending threshold or daily limit changed
+- **Contract Call** — smart contract interaction
+- **Login** — account login event
+
+Use the **All Actions** dropdown to filter by action type. Click **Refresh** to load the latest entries.
+
+---
+
+## Settings
+
+Click the gear icon to open **Security & API Control**:
+
+- **API Keys** — generate new keys (enter a label and click **Generate**), view existing keys with their creation date and status, or revoke a key by clicking the revoke icon. Each key shows a masked preview (e.g., `ocw_84b888...`).
+- **Address Book** — save addresses with nicknames for quick transfers. Click **Add Address** to create a new entry.
+- **Danger Zone** — **Logout Global** signs out all sessions. **Delete Account** permanently removes your account and all data.
 
 ---
 [Previous: What You Can Do](/en/user-commands.md) | [Next: FAQ](/en/user-faq.md)

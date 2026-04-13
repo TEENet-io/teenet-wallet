@@ -99,7 +99,7 @@ TEENet Wallet supports all major signature schemes used by blockchain systems. C
 
 | Scheme | Blockchains |
 |--------|-------------|
-| ECDSA secp256k1 | Ethereum **✓**, Optimism **✓**, Base **✓**, BNB Chain **✓**, Arbitrum, Polygon, Avalanche, Bitcoin, + any EVM chain |
+| ECDSA secp256k1 | Ethereum **✓**, Optimism **✓**, Base **✓**, BNB Chain **✓**, Avalanche **✓**, Arbitrum, Polygon, Bitcoin, + any EVM chain |
 | Ed25519 | Solana **✓** |
 
 Any EVM-compatible chain can be added at runtime. Ask your agent to list available chains, or check `GET /api/chains` in the API.
