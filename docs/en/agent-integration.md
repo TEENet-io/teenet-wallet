@@ -1,6 +1,9 @@
 # AI Agent Integration
 
-TEENet Wallet is designed to serve as the custody layer for AI agents. The `skill/tee-wallet/` directory contains an [OpenClaw](https://openclaw.io) skill definition that enables AI agents to manage wallets through natural language.
+TEENet Wallet is designed to serve as the custody layer for AI agents. Two integration paths are supported:
+
+1. **Skill-based (REST)** -- `skill/tee-wallet/SKILL.md` describes every operation with curl examples. The agent reads the skill and makes HTTP calls directly. Works with any agent platform that supports skills.
+2. **OpenClaw plugin (native tools)** -- `plugin/` contains a first-class [OpenClaw](https://openclaw.io) plugin written in TypeScript. Each wallet operation is exposed as a strongly-typed tool, and an SSE approval watcher lets the agent continue automatically after the user approves via Passkey.
 
 ### How It Works
 
@@ -26,6 +29,70 @@ TEENet Wallet is designed to serve as the custody layer for AI agents. The `skil
 **Fetch fresh wallet lists.** Before showing balances or account-wide views, always re-fetch `GET /api/wallets` to ensure the list is current.
 
 **Include explorer links.** After every successful transaction, provide a block explorer link so the user can verify on-chain.
+
+---
+
+## OpenClaw Plugin (`plugin/`)
+
+For users running [OpenClaw](https://openclaw.io) >= `2026.3.24-beta.2`, the `plugin/` directory ships a native TypeScript plugin that registers wallet operations as first-class tools. Unlike the skill-based flow (where the agent issues raw HTTP calls), the plugin provides strongly-typed tool schemas and a live SSE event stream so the agent can react to Passkey approvals without polling.
+
+### Installation
+
+```bash
+openclaw plugins install "/path/to/teenet-wallet/plugin"
+openclaw config set plugins.entries.teenet-wallet.config.apiUrl "https://your-wallet-instance/"
+openclaw config set plugins.entries.teenet-wallet.config.apiKey "ocw_your_api_key"
+openclaw config set plugins.entries.teenet-wallet.enabled true
+openclaw gateway restart
+openclaw plugins inspect teenet-wallet   # expect Status: loaded
+```
+
+Configuration schema (from `openclaw.plugin.json`):
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `apiUrl` | Yes | Wallet backend URL (e.g. `https://test.teenet.io/instance/xxx/`) |
+| `apiKey` | Yes | API key with `ocw_` prefix |
+
+> **Watch out for `tools.profile`.** The plugin requires the `full` profile (the default). If it's set to `coding`, `messaging`, or `minimal`, tools are silently blocked with no error. Check with `openclaw config get tools.profile` and clear it via `openclaw config unset tools.profile` if needed.
+
+### Available Tools
+
+All tool names are prefixed with `teenet_wallet_`:
+
+| Category | Tools |
+|----------|-------|
+| Wallet | `create`, `list`, `get`, `rename`, `balance` |
+| Transfer | `transfer`, `wrap_sol`, `unwrap_sol` |
+| Contracts | `list_contracts`, `add_contract`, `update_contract`, `contract_call`, `approve_token`, `revoke_approval` |
+| Policy | `get_policy`, `set_policy`, `daily_spent` |
+| Address Book | `list_contacts`, `add_contact`, `update_contact` |
+| Approvals | `pending_approvals`, `check_approval` |
+| Utility | `list_chains`, `health`, `faucet`, `audit_logs`, `prices`, `get_pubkey` |
+
+### Approval Flow with SSE
+
+```
+User (chat)  →  Agent  →  Plugin tool  →  Wallet backend
+                 ↑                             |
+            subagent.run()                pending_approval
+            (deliver=true)                     ↓
+                 ↑                        SSE event stream
+                 └── ApprovalWatcher ←─────────┘
+```
+
+1. The agent calls a tool like `teenet_wallet_transfer`.
+2. If the backend returns `pending_approval`, the agent sends the user an approval link.
+3. The user verifies with Passkey (fingerprint / security key).
+4. `ApprovalWatcher` receives an SSE event and triggers `subagent.run()` in the original chat -- no polling, no "did you approve yet?".
+5. The agent reports the tx hash with an explorer link.
+
+### Security Notes
+
+- **API key never reaches the LLM** -- it's held in plugin config and injected by the HTTP client only.
+- **SSE events are user-scoped** -- each user only sees their own approval events.
+- **All write paths check approval policies** on the backend; the plugin cannot bypass USD thresholds or daily limits.
+- **SSRF protection** on custom chain RPC URLs (private IPs and cloud metadata addresses are blocked backend-side).
 
 ---
 

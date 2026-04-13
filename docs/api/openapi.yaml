@@ -64,6 +64,10 @@ tags:
     description: Operation audit log
   - name: Events
     description: Real-time event streams
+  - name: Address Book
+    description: Per-user nickname → address mapping for transfers
+  - name: Faucet
+    description: Testnet token faucet proxy
 
 components:
   securitySchemes:
@@ -102,6 +106,14 @@ components:
         type: integer
       description: Approval request ID (random 64-bit integer)
       example: 4839271056
+    AddressBookEntryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Address book entry ID
+      example: 17
     CSRFToken:
       name: X-CSRF-Token
       in: header
@@ -295,8 +307,12 @@ components:
           type: integer
         approval_type:
           type: string
-          enum: [transfer, contract_call, contract_add, contract_update, policy_change, wrap_sol, unwrap_sol, addressbook_add, addressbook_update]
+          enum: [sign, transfer, contract_call, contract_add, contract_update, policy_change, wrap_sol, unwrap_sol, addressbook_add, addressbook_update]
           example: "transfer"
+          description: |
+            Approval payload type. `sign` is the default for plain message signing and
+            transfer/wrap_sol/unwrap_sol approvals routed through `createApprovalRequest`
+            (the action is recorded in the audit log instead).
         message:
           type: string
           description: Hex signing hash or message bytes
@@ -339,6 +355,13 @@ components:
         action:
           type: string
           example: "transfer"
+          description: |
+            Audit action name. Known values:
+            `login`, `wallet_create`, `wallet_delete`, `transfer`, `sign`,
+            `wrap_sol`, `unwrap_sol`, `contract_add`, `contract_update`,
+            `contract_call`, `policy_update`, `addressbook_add`,
+            `addressbook_update`, `addressbook_delete`,
+            `apikey_generate`, `apikey_rename`, `apikey_revoke`.
         wallet_id:
           type: string
           nullable: true
@@ -355,6 +378,37 @@ components:
           type: string
           enum: [success, pending, failed]
         created_at:
+          type: string
+          format: date-time
+
+    AddressBookEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 17
+        user_id:
+          type: integer
+          example: 1
+        nickname:
+          type: string
+          description: Lowercase nickname; unique per (user, chain). Pattern `^[a-z0-9][a-z0-9_-]*$`, max 100 chars.
+          example: "alice"
+        chain:
+          type: string
+          example: "sepolia"
+        address:
+          type: string
+          description: Normalized on-chain address (lowercase EVM hex or base58 Solana)
+          example: "0xabcd1234ef567890abcd1234ef567890abcd1234"
+        memo:
+          type: string
+          description: Optional note (max 256 chars)
+          example: "Personal cold wallet"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
 
@@ -2827,6 +2881,351 @@ paths:
                     example: 30
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Address Book ────────────────────────
+  /api/addressbook:
+    get:
+      tags: [Address Book]
+      summary: List address book entries
+      description: |
+        Returns all address book entries for the authenticated user, ordered by
+        nickname then chain. Supports optional filters.
+      operationId: listAddressBookEntries
+      security:
+        - ApiKeyAuth: []
+        - PasskeySession: []
+      parameters:
+        - name: nickname
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by exact nickname (lowercase match)
+        - name: chain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by chain name (e.g. `sepolia`, `solana-devnet`)
+      responses:
+        "200":
+          description: Address book entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AddressBookEntry"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags: [Address Book]
+      summary: Add an address book entry
+      description: |
+        Creates a new address book entry.
+        - **Passkey session**: applied immediately (requires fresh credential).
+        - **API key**: creates a pending approval that the Passkey owner must approve.
+      operationId: addAddressBookEntry
+      security:
+        - ApiKeyAuth: []
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nickname, chain, address]
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                  description: Required for Passkey sessions
+                credential:
+                  type: object
+                  description: Fresh WebAuthn assertion (required for Passkey sessions)
+                nickname:
+                  type: string
+                  description: Lowercase, `^[a-z0-9][a-z0-9_-]*$`, max 100 chars. Unique per (user, chain).
+                  example: "alice"
+                chain:
+                  type: string
+                  description: Chain name (must exist in the chain registry)
+                  example: "sepolia"
+                address:
+                  type: string
+                  description: On-chain address. EVM addresses are normalized to lowercase 0x form; Solana addresses validated as base58 32-byte keys.
+                  example: "0xabcd1234ef567890abcd1234ef567890abcd1234"
+                memo:
+                  type: string
+                  description: Optional note (max 256 chars)
+                  example: "Personal cold wallet"
+      responses:
+        "200":
+          description: Entry created (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  entry:
+                    $ref: "#/components/schemas/AddressBookEntry"
+        "202":
+          description: Pending approval (API key path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pending:
+                    type: boolean
+                    example: true
+                  approval_id:
+                    type: integer
+                    example: 4839271056
+                  message:
+                    type: string
+                    example: "Address book entry submitted for approval"
+        "400":
+          description: Validation error (bad nickname/chain/address)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated or passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Nickname already exists for this chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/addressbook/{id}:
+    put:
+      tags: [Address Book]
+      summary: Update an address book entry
+      description: |
+        Updates one or more fields of an existing entry. Only include the fields
+        you want to change.
+        - **Passkey session**: applied immediately (requires fresh credential).
+        - **API key**: creates a pending approval.
+      operationId: updateAddressBookEntry
+      security:
+        - ApiKeyAuth: []
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/AddressBookEntryId"
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                login_session_id:
+                  type: integer
+                  format: uint64
+                credential:
+                  type: object
+                  description: Fresh WebAuthn assertion (required for Passkey sessions)
+                nickname:
+                  type: string
+                  description: New nickname (same validation rules as add)
+                address:
+                  type: string
+                  description: New address (revalidated against the entry's chain)
+                memo:
+                  type: string
+      responses:
+        "200":
+          description: Entry updated (Passkey path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  entry:
+                    $ref: "#/components/schemas/AddressBookEntry"
+        "202":
+          description: Pending approval (API key path)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pending:
+                    type: boolean
+                    example: true
+                  approval_id:
+                    type: integer
+                    example: 4839271056
+        "400":
+          description: Validation error or no fields to update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated or passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Nickname already exists for this chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Address Book]
+      summary: Delete an address book entry
+      description: |
+        Deletes an address book entry. Requires a fresh Passkey credential —
+        API keys cannot delete entries.
+      operationId: deleteAddressBookEntry
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/AddressBookEntryId"
+        - $ref: "#/components/parameters/CSRFToken"
+      responses:
+        "200":
+          description: Entry deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessFlag"
+        "401":
+          description: Passkey verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ──────────────────────── Faucet ────────────────────────
+  /api/faucet:
+    post:
+      tags: [Faucet]
+      summary: Claim testnet tokens
+      description: |
+        Requests testnet funds for a wallet by proxying to an internal faucet
+        service. Only testnet chains are supported (`sepolia`, `base-sepolia`,
+        `solana-devnet`). Returns 503 if no faucet service is configured on the
+        backend.
+      operationId: claimFaucet
+      security:
+        - ApiKeyAuth: []
+        - PasskeySession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wallet_id]
+              properties:
+                wallet_id:
+                  type: string
+                  format: uuid
+                  example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        "200":
+          description: Faucet claim succeeded (response is forwarded from the upstream faucet)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  tx_hash:
+                    type: string
+                    example: "0x9f8c…"
+                  amount:
+                    type: string
+                    example: "0.5"
+                  chain:
+                    type: string
+                    example: "sepolia"
+                  address:
+                    type: string
+                    example: "0xabcd1234…"
+        "400":
+          description: Missing `wallet_id`, or chain is not faucet-eligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream faucet unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Faucet service not configured on the backend
           content:
             application/json:
               schema:

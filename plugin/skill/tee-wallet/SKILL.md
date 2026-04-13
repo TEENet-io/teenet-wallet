@@ -233,6 +233,8 @@ When sending ERC-20 tokens (Ethereum) or SPL tokens (Solana):
 2. **Include token info** — `token_contract`, `token_symbol`, `token_decimals` are all required.
 3. Amount is in **human-readable units** (e.g. `100` for 100 USDC, not raw wei/lamports).
 
+> The contract whitelist is scoped per **user + chain**, not per wallet — all wallets you own on the same chain share one list, and deleting a wallet does not remove its entries.
+
 Common testnet tokens:
 
 | Chain | Token | Contract | Decimals |

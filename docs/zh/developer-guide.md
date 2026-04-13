@@ -69,7 +69,16 @@ teenet-wallet/
 │   └── index.html       # 单文件 SPA（原生 JS，无构建步骤）
 ├── skill/
 │   └── tee-wallet/
-│       └── SKILL.md     # OpenClaw 技能定义
+│       └── SKILL.md     # OpenClaw 技能定义（REST 方式）
+├── plugin/              # OpenClaw 插件（TypeScript，原生工具集成）
+│   ├── index.ts         # 插件入口：注册工具 + SSE 审批监听
+│   ├── openclaw.plugin.json  # 插件清单（id、配置 schema、skill 列表）
+│   ├── src/
+│   │   ├── api-client.ts       # 钱包后端 HTTP 客户端
+│   │   ├── approval-watcher.ts # SSE 订阅 + subagent.run() 通知
+│   │   ├── tools/              # 工具定义（wallet、transfer、contract、policy 等）
+│   │   └── __tests__/          # 单元 + E2E 测试（node --test）
+│   └── skill/tee-wallet/       # 随插件分发的 Agent 指令
 ├── docs/                # Docsify 文档站点
 ├── Makefile             # build、test、lint、docker、clean
 ├── Dockerfile
@@ -103,6 +112,66 @@ make lint
 ```
 
 测试使用内存 SQLite（`file::memory:`），不需要运行中的 consensus 节点 -- SDK 客户端在测试中为 nil，签名调用预期失败（测试验证签名前的行为）。
+
+### Mock Consensus Server（模拟共识服务器）
+
+如果本地没有真实的 `app-comm-consensus` + TEE-DAO 集群，可以使用 [teenet-sdk](https://github.com/TEENet-io/teenet-sdk) 自带的 mock server（位于 [`mock-server/`](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server)）。它实现了完整的 consensus HTTP API 并提供真实的密码学签名，只需将 `CONSENSUS_URL` 指向它，钱包就能像对接生产环境一样工作。
+
+```bash
+git clone https://github.com/TEENet-io/teenet-sdk.git
+cd teenet-sdk/mock-server
+go build && ./mock-server                                  # 127.0.0.1:8089
+MOCK_SERVER_PORT=9000 MOCK_SERVER_BIND=0.0.0.0 ./mock-server  # 自定义端口/绑定
+```
+
+然后运行钱包：
+
+```bash
+CONSENSUS_URL=http://127.0.0.1:8089 ./teenet-wallet
+```
+
+**提供的能力（共 34 个端点）：**
+
+- **核心签名 & 密钥** -- `/api/health`、`/api/publickeys/:app_instance_id`、`/api/submit-request`、`/api/generate-key`、`/api/apikey/:name`、`/api/apikey/:name/sign`
+- **投票缓存** -- `/api/cache/:hash`、`/api/cache/status`、`/api/config/:app_instance_id`
+- **审批桥接** -- `/api/auth/passkey/options|verify|verify-as`、`/api/approvals/request/init`、`/api/approvals/request/:id/challenge|confirm`、`/api/approvals/:taskId/challenge|action`、`/api/approvals/pending`、`/api/requests/mine`、`/api/signature/by-tx/:txId`
+- **管理桥接** -- Passkey 用户邀请/列表/删除、审计记录、权限策略 CRUD、公钥/API Key 管理、Passkey 注册
+
+**签名模式**（由 `app_instance_id` 决定）：
+
+| 模式 | 示例 app | 行为 |
+|------|---------|------|
+| Direct（直签） | `test-ecdsa-secp256k1`、`ethereum-wallet-app` | 立即签名，返回 `{status: "signed", signature}` |
+| Voting（投票） | `test-voting-2of3` | 首次返回 `pending`；需要 2 个不同实例投票后完成 |
+| Approval（审批） | `test-approval-required` | 返回 `pending_approval` + `tx_id`；需通过 `/api/approvals/:taskId/action` 完成 Passkey 审批 |
+
+**预置的测试 App：**
+
+| App Instance ID | 协议 | 曲线 | 模式 |
+|-----------------|------|------|------|
+| test-schnorr-ed25519 | schnorr | ed25519 | Direct |
+| test-schnorr-secp256k1 | schnorr | secp256k1 | Direct |
+| test-ecdsa-secp256k1 | ecdsa | secp256k1 | Direct |
+| test-ecdsa-secp256r1 | ecdsa | secp256r1 | Direct |
+| ethereum-wallet-app | ecdsa | secp256k1 | Direct |
+| secure-messaging-app | schnorr | ed25519 | Direct |
+| test-voting-2of3 | ecdsa | secp256k1 | Voting (2-of-N) |
+| test-approval-required | ecdsa | secp256k1 | Approval |
+
+预置 Passkey 用户：**Alice**（ID=1）、**Bob**（ID=2），均绑定到 `test-approval-required`。
+
+> **关于 `app_instance_id`。** 上表中"协议/曲线"列描述的只是每个测试 app **初始绑定**的那把密钥。`app_instance_id` 并不锁定到某条链或某把密钥 —— 你可以用 `POST /api/generate-key` 在任何 id 下追加新的密钥(任意协议/曲线组合),然后用 `POST /api/submit-request` 指定密钥名签名。选 id 时只看模式(Direct / Voting / Approval)即可;只有当你用默认初始密钥签名时,初始密钥的曲线才有意义。
+
+**哈希职责**（与 TEE-DAO 后端一致）：
+
+| 协议 | 曲线 | 谁来哈希？ |
+|------|------|-----------|
+| ECDSA | secp256k1 / secp256r1 | **调用方** -- 必须传入 32 字节哈希（以太坊用 Keccak-256，其他用 SHA-256） |
+| Schnorr | secp256k1 | Mock server 内部（SHA-256） |
+| Schnorr | ed25519 | EdDSA 协议内部（SHA-512） |
+| HMAC | -- | HMAC 内部（SHA-256） |
+
+**限制：** 全部数据保存在内存中（重启即清空），使用确定性私钥以便签名可复现，审批 Token 使用随机 HMAC 密钥，TTL 为 30 分钟。**请勿用于生产环境。**
 
 ### 编写测试
 

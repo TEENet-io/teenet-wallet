@@ -2,7 +2,9 @@
 
 ### Contract Whitelist
 
-Before calling any smart contract, the contract address (EVM), token mint (SPL), or program ID (Solana) must be added to the wallet's whitelist.
+Before calling any smart contract, the contract address (EVM), token mint (SPL), or program ID (Solana) must be added to the contract whitelist.
+
+> **Scope:** the whitelist is **per user + chain**, not per wallet. All wallets you own on the same chain share a single whitelist, and deleting a wallet does **not** remove its whitelist entries. The wallet ID in the URL is only used to derive the chain.
 
 **List whitelisted contracts:**
 

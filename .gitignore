@@ -31,4 +31,8 @@ __debug_bin*
 
 # Claude Code
 .claude/
+.codex/
+
+# Local-only frontend workspace
+/frontend/
 

@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
+	sdk "github.com/TEENet-io/teenet-sdk/go"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	sdk "github.com/TEENet-io/teenet-sdk/go"
 	"gorm.io/gorm"
 
 	"github.com/TEENet-io/teenet-wallet/chain"
@@ -281,9 +281,6 @@ func (h *WalletHandler) DeleteWallet(c *gin.Context) {
 		return
 	}
 	if err := h.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("wallet_id = ?", wallet.ID).Delete(&model.AllowedContract{}).Error; err != nil {
-			return err
-		}
 		if err := tx.Where("wallet_id = ?", wallet.ID).Delete(&model.ApprovalPolicy{}).Error; err != nil {
 			return err
 		}
@@ -335,7 +332,6 @@ type SignRequest struct {
 	Encoding  string                 `json:"encoding"`                   // "hex" (default) or "base64"
 	TxContext map[string]interface{} `json:"tx_context"`
 }
-
 
 // SetPolicy upserts the USD-denominated approval policy for a wallet.
 // PUT /api/wallets/:id/policy
@@ -526,16 +522,16 @@ func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Walle
 	}
 	am, akl := authInfo(c)
 	approval := model.ApprovalRequest{
-		WalletID:    &wallet.ID,
-		UserID:      userID,
-		Message:     req.Message,
-		TxContext:   string(txContextJSON),
-		TxParams:    txParams,
-		Status:      "pending",
-		AuthMode:    am,
+		WalletID:     &wallet.ID,
+		UserID:       userID,
+		Message:      req.Message,
+		TxContext:    string(txContextJSON),
+		TxParams:     txParams,
+		Status:       "pending",
+		AuthMode:     am,
 		APIKeyPrefix: akl,
-		CreatedAt:   time.Now(),
-		ExpiresAt:   time.Now().Add(h.approvalExpiry),
+		CreatedAt:    time.Now(),
+		ExpiresAt:    time.Now().Add(h.approvalExpiry),
 	}
 	if err := h.db.Create(&approval).Error; err != nil {
 		slog.Error("create approval request failed", "wallet_id", wallet.ID, "error", err)
@@ -556,12 +552,12 @@ func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Walle
 	}, approval.ID)
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"status":       "pending_approval",
-		"approval_id":  approval.ID,
-		"message":      msg,
-		"tx_context":   req.TxContext,
+		"status":        "pending_approval",
+		"approval_id":   approval.ID,
+		"message":       msg,
+		"tx_context":    req.TxContext,
 		"threshold_usd": policy.ThresholdUSD,
-		"approval_url": approvalURL,
+		"approval_url":  approvalURL,
 	})
 }
 

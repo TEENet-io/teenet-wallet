@@ -1,6 +1,9 @@
 # AI Agent 集成
 
-TEENet Wallet 原生支持 AI Agent 集成，提供了 OpenClaw Skill 定义，使 AI 代理能够通过自然语言管理钱包和执行交易。
+TEENet Wallet 原生支持 AI Agent 集成，提供两种接入方式：
+
+1. **Skill 方式（REST）** -- `skill/tee-wallet/SKILL.md` 用 curl 示例描述所有操作，Agent 读取 Skill 后直接发 HTTP 请求，任何支持 Skill 的 Agent 平台都能用。
+2. **OpenClaw 插件（原生工具）** -- `plugin/` 目录提供用 TypeScript 编写的一等 [OpenClaw](https://openclaw.io) 插件，每个钱包操作都是强类型工具，并通过 SSE 事件流让 Agent 在用户完成 Passkey 审批后自动继续执行。
 
 ### OpenClaw Skill
 
@@ -46,6 +49,70 @@ Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://opencl
    - Solana Devnet：`https://solscan.io/tx/{hash}?cluster=devnet`
 
 9. **申报 amount_usd**：调用 `/contract-call` 涉及价值转移时，始终包含 `amount_usd` 字段以触发阈值和日限额检查。
+
+---
+
+## OpenClaw 插件（`plugin/`）
+
+如果你用的是 [OpenClaw](https://openclaw.io) >= `2026.3.24-beta.2`，可以直接使用 `plugin/` 目录中的原生 TypeScript 插件。相比 Skill 方式（Agent 自己发 HTTP 请求），插件把每个钱包操作注册为强类型工具，并通过 SSE 事件流让 Agent 无需轮询就能感知 Passkey 审批结果。
+
+### 安装
+
+```bash
+openclaw plugins install "/path/to/teenet-wallet/plugin"
+openclaw config set plugins.entries.teenet-wallet.config.apiUrl "https://your-wallet-instance/"
+openclaw config set plugins.entries.teenet-wallet.config.apiKey "ocw_your_api_key"
+openclaw config set plugins.entries.teenet-wallet.enabled true
+openclaw gateway restart
+openclaw plugins inspect teenet-wallet   # 期望 Status: loaded
+```
+
+配置参数（来自 `openclaw.plugin.json`）：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `apiUrl` | 是 | 钱包后端地址（如 `https://test.teenet.io/instance/xxx/`） |
+| `apiKey` | 是 | 带 `ocw_` 前缀的 API Key |
+
+> **注意 `tools.profile`**。插件要求 `full` profile（默认值）。如果被设为 `coding`、`messaging` 或 `minimal`，工具会被静默屏蔽且不会报错。可通过 `openclaw config get tools.profile` 检查，必要时 `openclaw config unset tools.profile` 清除。
+
+### 可用工具
+
+所有工具名都以 `teenet_wallet_` 为前缀：
+
+| 分类 | 工具 |
+|------|------|
+| 钱包 | `create`、`list`、`get`、`rename`、`balance` |
+| 转账 | `transfer`、`wrap_sol`、`unwrap_sol` |
+| 合约 | `list_contracts`、`add_contract`、`update_contract`、`contract_call`、`approve_token`、`revoke_approval` |
+| 策略 | `get_policy`、`set_policy`、`daily_spent` |
+| 通讯录 | `list_contacts`、`add_contact`、`update_contact` |
+| 审批 | `pending_approvals`、`check_approval` |
+| 工具 | `list_chains`、`health`、`faucet`、`audit_logs`、`prices`、`get_pubkey` |
+
+### 基于 SSE 的审批流程
+
+```
+用户（聊天） → Agent → 插件工具 → 钱包后端
+                ↑                      |
+          subagent.run()          pending_approval
+          (deliver=true)               ↓
+                ↑                 SSE 事件流
+                └── ApprovalWatcher ←──┘
+```
+
+1. Agent 调用工具（如 `teenet_wallet_transfer`）。
+2. 如果后端返回 `pending_approval`，Agent 向用户发送审批链接。
+3. 用户用 Passkey（指纹 / 安全密钥）确认。
+4. `ApprovalWatcher` 收到 SSE 事件，在原对话中触发 `subagent.run()` -- 不需要轮询，也不需要用户来回复 "我批了"。
+5. Agent 返回交易哈希和区块浏览器链接。
+
+### 安全说明
+
+- **API Key 永不暴露给 LLM** -- 存储在插件配置里，仅由 HTTP 客户端注入。
+- **SSE 事件按用户隔离** -- 每个用户只能收到自己的审批事件。
+- **所有写操作都在后端检查审批策略** -- 插件无法绕过 USD 阈值和日限额。
+- **自定义链 RPC URL 有 SSRF 防护** -- 内网 IP 和云元数据地址在后端被拦截。
 
 ---
 

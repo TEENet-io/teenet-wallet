@@ -69,7 +69,16 @@ teenet-wallet/
 │   └── index.html       # Single-file SPA (vanilla JS, no build step)
 ├── skill/
 │   └── tee-wallet/
-│       └── SKILL.md     # OpenClaw skill definition
+│       └── SKILL.md     # OpenClaw skill definition (REST-based)
+├── plugin/              # OpenClaw plugin (TypeScript, native tool integration)
+│   ├── index.ts         # Plugin entry: registers tools + SSE approval watcher
+│   ├── openclaw.plugin.json  # Plugin manifest (id, config schema, skills)
+│   ├── src/
+│   │   ├── api-client.ts       # Wallet backend HTTP client
+│   │   ├── approval-watcher.ts # SSE subscription + subagent.run() notifications
+│   │   ├── tools/              # Tool definitions (wallet, transfer, contract, policy, ...)
+│   │   └── __tests__/          # Unit + E2E tests (node --test)
+│   └── skill/tee-wallet/       # Agent instructions bundled with the plugin
 ├── docs/                # Docsify documentation site
 ├── Makefile             # build, test, lint, docker, clean
 ├── Dockerfile
@@ -103,6 +112,66 @@ make lint
 ```
 
 Tests use in-memory SQLite (`file::memory:`) and don't require a running consensus node -- the SDK client is nil in tests, and signing calls are expected to fail (tests verify behavior up to the signing step).
+
+### Mock Consensus Server
+
+For end-to-end local development without a real `app-comm-consensus` + TEE-DAO cluster, the [teenet-sdk](https://github.com/TEENet-io/teenet-sdk) ships a mock server (under [`mock-server/`](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server)) that implements the full consensus HTTP API with real cryptographic signing. Point `CONSENSUS_URL` at it and the wallet behaves as if talking to production.
+
+```bash
+git clone https://github.com/TEENet-io/teenet-sdk.git
+cd teenet-sdk/mock-server
+go build && ./mock-server                                  # 127.0.0.1:8089
+MOCK_SERVER_PORT=9000 MOCK_SERVER_BIND=0.0.0.0 ./mock-server  # custom bind
+```
+
+Then run the wallet with:
+
+```bash
+CONSENSUS_URL=http://127.0.0.1:8089 ./teenet-wallet
+```
+
+**What it provides (34 endpoints):**
+
+- **Core signing & keys** -- `/api/health`, `/api/publickeys/:app_instance_id`, `/api/submit-request`, `/api/generate-key`, `/api/apikey/:name`, `/api/apikey/:name/sign`
+- **Voting cache** -- `/api/cache/:hash`, `/api/cache/status`, `/api/config/:app_instance_id`
+- **Approval bridge** -- `/api/auth/passkey/options|verify|verify-as`, `/api/approvals/request/init`, `/api/approvals/request/:id/challenge|confirm`, `/api/approvals/:taskId/challenge|action`, `/api/approvals/pending`, `/api/requests/mine`, `/api/signature/by-tx/:txId`
+- **Admin bridge** -- passkey user invite/list/delete, audit records, permission policy CRUD, public key / API key admin, passkey registration
+
+**Signing modes** (selected by `app_instance_id`):
+
+| Mode | Example app | Behavior |
+|------|-------------|----------|
+| Direct | `test-ecdsa-secp256k1`, `ethereum-wallet-app` | Signs immediately, returns `{status: "signed", signature}` |
+| Voting | `test-voting-2of3` | First call returns `pending`; sign completes after 2 votes from distinct instances |
+| Approval | `test-approval-required` | Returns `pending_approval` + `tx_id`; requires passkey approve via `/api/approvals/:taskId/action` |
+
+**Pre-configured test apps:**
+
+| App Instance ID | Protocol | Curve | Mode |
+|-----------------|----------|-------|------|
+| test-schnorr-ed25519 | schnorr | ed25519 | Direct |
+| test-schnorr-secp256k1 | schnorr | secp256k1 | Direct |
+| test-ecdsa-secp256k1 | ecdsa | secp256k1 | Direct |
+| test-ecdsa-secp256r1 | ecdsa | secp256r1 | Direct |
+| ethereum-wallet-app | ecdsa | secp256k1 | Direct |
+| secure-messaging-app | schnorr | ed25519 | Direct |
+| test-voting-2of3 | ecdsa | secp256k1 | Voting (2-of-N) |
+| test-approval-required | ecdsa | secp256k1 | Approval |
+
+Pre-seeded passkey users: **Alice** (ID=1) and **Bob** (ID=2), bound to `test-approval-required`.
+
+> **About `app_instance_id`.** The protocol/curve column above only describes the **initial key** bound to each test app. An `app_instance_id` is not locked to one chain or one key — call `POST /api/generate-key` against any id to mint additional keys with whatever protocol/curve you need, then sign with them via `POST /api/submit-request`. Pick whichever id matches the mode you want to test (Direct / Voting / Approval); the curve of the *initial* key only matters if you sign with the default key.
+
+**Hashing responsibility** (matches TEE-DAO backend):
+
+| Protocol | Curve | Who hashes? |
+|----------|-------|-------------|
+| ECDSA | secp256k1 / secp256r1 | **Caller** -- pass a 32-byte hash (Keccak-256 for Ethereum, SHA-256 otherwise) |
+| Schnorr | secp256k1 | Mock server (SHA-256 internally) |
+| Schnorr | ed25519 | EdDSA protocol (SHA-512 internally) |
+| HMAC | -- | HMAC (SHA-256 internally) |
+
+**Limitations:** in-memory only (state resets on restart), deterministic private keys for reproducible signatures, approval tokens use a random HMAC secret with a 30-minute TTL. **Do not use in production.**
 
 ### Writing Tests
 

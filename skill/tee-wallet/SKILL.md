@@ -437,6 +437,8 @@ The contract whitelist is a **security gate**: only pre-registered contracts/pro
 - **Ethereum**: ERC-20 contract addresses (`0x…`)
 - **Solana**: SPL token mint addresses (base58) and program IDs (base58)
 
+> **Scope:** entries are scoped per **user + chain**, not per wallet. All wallets you own on the same chain share one whitelist, and deleting a wallet does **not** remove its whitelist entries.
+
 Removing entries requires **Passkey hardware authentication**. Adding can be done by either:
 - **Passkey session** (Web UI): applied immediately
 - **API key**: creates a pending approval (HTTP 202) that the Passkey owner must approve
@@ -751,9 +753,9 @@ curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/balance" \
 
 > ⚠️ `/balance` returns the wallet's **native gas token** only (ETH / SOL). Never present this as a token balance.
 
-**Step 2 — Fetch the wallet's token whitelist** (for Ethereum wallets):
+**Step 2 — Fetch the token whitelist** (for Ethereum wallets):
 
-Query the current wallet's contract whitelist to get its token list. Only tokens whitelisted on **this wallet** are checked for balances.
+Query the contract whitelist for this wallet's chain to get its token list. The whitelist is **scoped per user + chain** — all wallets on the same chain share the same whitelist, and deleting a wallet does **not** remove these entries. Only tokens in the whitelist are checked for balances.
 
 ```bash
 curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
