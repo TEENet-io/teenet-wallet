@@ -50,6 +50,15 @@ func (h *AuditHandler) ListLogs(c *gin.Context) {
 	if wid := c.Query("wallet_id"); wid != "" {
 		q = q.Where("wallet_id = ?", wid)
 	}
+	if status := c.Query("status"); status != "" {
+		q = q.Where("status = ?", status)
+	}
+	// approved=true restricts to entries that went through a manual
+	// approval (i.e. have approved_at set) — distinguishes manual
+	// approvals from auto-success operations like login or wallet_create.
+	if c.Query("approved") == "true" {
+		q = q.Where("approved_at IS NOT NULL")
+	}
 
 	var total int64
 	q.Count(&total)
