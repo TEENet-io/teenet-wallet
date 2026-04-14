@@ -168,11 +168,30 @@ func main() {
 	r.Use(requestIDMiddleware())
 	r.Use(corsMiddleware(frontendURL))
 
-	// Content-Security-Policy for non-API routes (web UI).
+	// Cache index.html so we can inject a per-request CSP nonce without
+	// hitting disk on every page load. The SPA needs an inline <script> in
+	// <head> to redirect bare paths like /instance/abc → /instance/abc/
+	// (Vite builds with `base: './'`, so relative asset paths only resolve
+	// when the page URL ends with a slash). To keep CSP strict, that inline
+	// script is gated by a per-request nonce instead of 'unsafe-inline'.
+	var indexHTMLTemplate string
+	if data, err := os.ReadFile("./frontend/index.html"); err != nil {
+		slog.Warn("failed to read frontend index.html at startup", "error", err)
+	} else {
+		indexHTMLTemplate = string(data)
+	}
+
+	// Content-Security-Policy for non-API routes (web UI). Generates a
+	// per-request nonce and exposes it via gin.Context for the SPA handler.
 	r.Use(func(c *gin.Context) {
 		if !strings.HasPrefix(c.Request.URL.Path, "/api/") {
-			c.Header("Content-Security-Policy",
-				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+			nonceBytes := make([]byte, 16)
+			if _, err := rand.Read(nonceBytes); err == nil {
+				nonce := hex.EncodeToString(nonceBytes)
+				c.Set("cspNonce", nonce)
+				c.Header("Content-Security-Policy",
+					"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+			}
 		}
 		c.Next()
 	})
@@ -185,7 +204,14 @@ func main() {
 			c.JSON(404, gin.H{"error": "api endpoint not found"})
 			return
 		}
-		c.File("./frontend/index.html")
+		if indexHTMLTemplate == "" {
+			c.File("./frontend/index.html")
+			return
+		}
+		nonce, _ := c.Get("cspNonce")
+		nonceStr, _ := nonce.(string)
+		body := strings.ReplaceAll(indexHTMLTemplate, "__CSP_NONCE__", nonceStr)
+		c.Data(200, "text/html; charset=utf-8", []byte(body))
 	})
 
 	// Health check (public).
