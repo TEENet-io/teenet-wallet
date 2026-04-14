@@ -12,7 +12,9 @@ cd "${SCRIPT_DIR}"
 git submodule update --init --remote --recursive
 
 echo "==> Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-docker build --no-cache \
+# Layer cache is enabled by default. If you hit a weird cache bug, pass
+# --no-cache as a one-off: `docker build --no-cache -t ... .`
+docker build \
   -t "${IMAGE_NAME}:${IMAGE_TAG}" \
   "${SCRIPT_DIR}"
 

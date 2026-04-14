@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,7 @@ type AuthHandler struct {
 	baseURL    string
 	maxAPIKeys int
 	maxUsers   int
+	emailSvc   *EmailVerificationService
 }
 
 func NewAuthHandler(db *gorm.DB, sdkClient *sdk.Client, sessions *SessionStore, baseURL string) *AuthHandler {
@@ -37,6 +39,13 @@ func NewAuthHandler(db *gorm.DB, sdkClient *sdk.Client, sessions *SessionStore, 
 
 func (h *AuthHandler) SetMaxAPIKeys(n int) { h.maxAPIKeys = n }
 func (h *AuthHandler) SetMaxUsers(n int)   { h.maxUsers = n }
+
+// SetEmailVerificationService injects the email verification dependency.
+// Required for the new registration flow; if nil, registration endpoints
+// return 503.
+func (h *AuthHandler) SetEmailVerificationService(svc *EmailVerificationService) {
+	h.emailSvc = svc
+}
 
 // InviteUser invites a passkey user via the SDK admin bridge.
 // POST /api/auth/invite
@@ -101,20 +110,40 @@ func (h *AuthHandler) PasskeyOptions(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
-// PasskeyRegistrationBegin auto-generates an invite and returns WebAuthn registration options.
-// Open registration — no pre-existing invite token required.
+// PasskeyRegistrationBegin starts a passkey registration ceremony.
+//
+// New flow: requires a verification_id obtained from
+// POST /api/auth/email/verify-code. The DisplayName is derived from the
+// verified email's local part (e.g. alice@foo.com → alice).
+//
 // POST /api/auth/passkey/register/begin
 func (h *AuthHandler) PasskeyRegistrationBegin(c *gin.Context) {
-	var body struct {
-		DisplayName string `json:"display_name"`
+	if h.emailSvc == nil {
+		jsonError(c, http.StatusServiceUnavailable, "email verification not configured")
+		return
 	}
-	_ = c.ShouldBindJSON(&body)
-	displayName := strings.TrimSpace(body.DisplayName)
+	var body struct {
+		VerificationID string `json:"verification_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		jsonError(c, http.StatusBadRequest, "invalid json")
+		return
+	}
+	email, err := h.emailSvc.LookupVerification(strings.TrimSpace(body.VerificationID))
+	if err != nil {
+		jsonError(c, http.StatusUnauthorized, "invalid or expired verification_id")
+		return
+	}
+
+	// Derive DisplayName from local part of email.
+	displayName := email
+	if at := strings.Index(email, "@"); at > 0 {
+		displayName = email[:at]
+	}
 	if displayName == "" {
 		displayName = "user_" + randomHex(3)
 	}
 
-	// Auto-generate a short-lived invite (5 min — just for the ceremony).
 	inviteRes, err := h.sdk.InvitePasskeyUser(c.Request.Context(), sdk.PasskeyInviteRequest{
 		DisplayName:      displayName,
 		ExpiresInSeconds: 300,
@@ -131,8 +160,6 @@ func (h *AuthHandler) PasskeyRegistrationBegin(c *gin.Context) {
 		return
 	}
 
-	// Fetch WebAuthn registration options using the auto-generated token.
-	// The result already contains invite_token + options fields.
 	optRes, err := h.sdk.PasskeyRegistrationOptions(c.Request.Context(), inviteRes.InviteToken)
 	if err != nil || !optRes.Success {
 		msg := "get options failed"
@@ -165,19 +192,34 @@ func (h *AuthHandler) PasskeyRegistrationOptions(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
-// PasskeyRegistrationVerify verifies passkey registration and creates the local user.
+// PasskeyRegistrationVerify verifies the WebAuthn credential, atomically
+// creates the local user with a verified email, and consumes the
+// verification row. Requires verification_id obtained from
+// POST /api/auth/email/verify-code.
+//
 // POST /api/auth/passkey/register/verify
 func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
+	if h.emailSvc == nil {
+		jsonError(c, http.StatusServiceUnavailable, "email verification not configured")
+		return
+	}
 	var body map[string]interface{}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		jsonError(c, http.StatusBadRequest, "invalid json")
 		return
 	}
 	inviteToken, _ := body["invite_token"].(string)
+	verificationID, _ := body["verification_id"].(string)
+	verificationID = strings.TrimSpace(verificationID)
 	if inviteToken == "" {
 		jsonError(c, http.StatusBadRequest, "invite_token is required")
 		return
 	}
+	if verificationID == "" {
+		jsonError(c, http.StatusBadRequest, "verification_id is required")
+		return
+	}
+
 	res, err := h.sdk.PasskeyRegistrationVerify(c.Request.Context(), inviteToken, body["credential"])
 	if err != nil || !res.Success {
 		msg := "registration failed"
@@ -190,7 +232,7 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_verify"})
 		return
 	}
-	// Use DisplayName from the passkey system as the username.
+
 	username := strings.TrimSpace(res.DisplayName)
 	if username == "" {
 		username = "user"
@@ -199,35 +241,58 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "username too long (max 100 characters)")
 		return
 	}
+
 	var user model.User
-	if h.maxUsers > 0 {
-		var createErr error
-		createErr = h.db.Transaction(func(tx *gorm.DB) error {
+	createErr := h.db.Transaction(func(tx *gorm.DB) error {
+		// Re-check max_users inside the transaction.
+		if h.maxUsers > 0 {
 			var userCount int64
 			tx.Model(&model.User{}).Count(&userCount)
 			if userCount >= int64(h.maxUsers) {
 				return fmt.Errorf("max_users_reached")
 			}
-			user = model.User{Username: username, PasskeyUserID: res.PasskeyUserID}
-			return tx.Create(&user).Error
-		})
-		if createErr != nil {
-			if createErr.Error() == "max_users_reached" {
-				jsonError(c, http.StatusForbidden, "maximum number of users reached")
+		}
+
+		// Atomically consume the verification row (TOCTOU defense).
+		email, err := h.emailSvc.ConsumeVerification(tx, verificationID)
+		if err != nil {
+			return err
+		}
+
+		// Insert the user with the verified email. Unique index on email
+		// will reject concurrent duplicates.
+		emailCopy := email
+		user = model.User{
+			Username:      username,
+			Email:         &emailCopy,
+			PasskeyUserID: res.PasskeyUserID,
+		}
+		return tx.Create(&user).Error
+	})
+	if createErr != nil {
+		switch {
+		case createErr.Error() == "max_users_reached":
+			jsonError(c, http.StatusForbidden, "maximum number of users reached")
+		case errors.Is(createErr, ErrVerificationIDBad):
+			jsonError(c, http.StatusUnauthorized, "invalid or expired verification_id")
+		default:
+			// GORM unique-constraint violations come through as plain errors;
+			// surface them as 409 so the frontend can show a useful message.
+			if strings.Contains(strings.ToLower(createErr.Error()), "unique") {
+				jsonError(c, http.StatusConflict, "email already registered")
 				return
 			}
+			slog.Error("create user failed", "error", createErr)
 			jsonError(c, http.StatusInternalServerError, "failed to create user")
-			return
 		}
-	} else {
-		// no max check needed
-		user = model.User{Username: username, PasskeyUserID: res.PasskeyUserID}
-		if err := h.db.Create(&user).Error; err != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to create user")
-			return
-		}
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "user_id": user.ID, "username": user.Username})
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"user_id":  user.ID,
+		"username": user.Username,
+	})
 }
 
 // PasskeyVerify verifies a WebAuthn assertion and creates a passkey session.

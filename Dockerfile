@@ -47,7 +47,15 @@ ENV HOST=0.0.0.0 \
     PORT=8080 \
     DATA_DIR=/data \
     CONSENSUS_URL=http://localhost:8089 \
-    FAUCET_URL=""
+    FAUCET_URL="" \
+    SMTP_HOST="" \
+    SMTP_PORT=587 \
+    SMTP_USERNAME="" \
+    SMTP_PASSWORD="" \
+    SMTP_FROM="" \
+    EMAIL_CODE_TTL=600 \
+    EMAIL_CODE_RESEND_COOLDOWN=60 \
+    EMAIL_CODE_MAX_ATTEMPTS=5
 
 USER app
 

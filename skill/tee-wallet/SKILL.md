@@ -205,6 +205,10 @@ Skip the full flow and go directly to the requested operation if:
 - The conversation already has wallet context from earlier messages
 - The user explicitly asks to skip setup
 
+### If the user has no API key yet
+
+The agent talks to the wallet via `TEE_WALLET_API_KEY`, which the user generates in the wallet Web UI **after** registering an account. New accounts are created in the Web UI through a 3-step flow: **enter email → submit the 6-digit verification code emailed to them → register a Passkey**. If the user says they haven't created an account yet, point them to the wallet Web UI, walk them through that flow, and ask them to come back with the generated API key.
+
 ## Smart Wallet Selection
 
 **Never ask the user to provide a wallet ID directly.** Always resolve the wallet automatically:

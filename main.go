@@ -123,6 +123,7 @@ func main() {
 
 	if err := db.AutoMigrate(
 		&model.User{},
+		&model.EmailVerification{},
 		&model.APIKey{},
 		&model.Wallet{},
 		&model.ApprovalPolicy{},
@@ -247,9 +248,37 @@ func main() {
 	authH := handler.NewAuthHandler(db, sdkClient, sessions, baseURL)
 	authH.SetMaxAPIKeys(maxAPIKeysPerUser)
 	authH.SetMaxUsers(maxUsers)
+
+	// Email verification service: SMTP if SMTP_HOST is set, otherwise mock mode.
+	var emailSender handler.EmailSender
+	if smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST")); smtpHost != "" {
+		emailSender = &handler.SmtpEmailSender{
+			Host:     smtpHost,
+			Port:     envOrDefault("SMTP_PORT", "587"),
+			Username: os.Getenv("SMTP_USERNAME"),
+			Password: os.Getenv("SMTP_PASSWORD"),
+			From:     os.Getenv("SMTP_FROM"),
+		}
+	} else {
+		emailSender = &handler.MockEmailSender{}
+	}
+	emailSvc := handler.NewEmailVerificationService(db, emailSender, handler.EmailVerificationConfig{
+		CodeTTL:        time.Duration(envOrDefaultInt("EMAIL_CODE_TTL", 600)) * time.Second,
+		ResendCooldown: time.Duration(envOrDefaultInt("EMAIL_CODE_RESEND_COOLDOWN", 60)) * time.Second,
+		MaxAttempts:    envOrDefaultInt("EMAIL_CODE_MAX_ATTEMPTS", 5),
+	})
+	authH.SetEmailVerificationService(emailSvc)
+	emailH := handler.NewEmailVerificationHandler(emailSvc)
+	slog.Info("email verification configured", "mode", emailSender.Mode())
+
 	ipLimiter := handler.NewIPRateLimiter(registrationRateLimit, time.Minute)
 	defer ipLimiter.Stop()
 	ipRL := handler.IPRateLimitMiddleware(ipLimiter)
+
+	// Email verification routes (unauthenticated, IP rate limited).
+	r.POST("/api/auth/email/send-code", ipRL, emailH.SendCode)
+	r.POST("/api/auth/email/verify-code", ipRL, emailH.VerifyCode)
+
 	r.GET("/api/auth/check-name", authH.CheckName)
 	r.GET("/api/auth/passkey/options", authH.PasskeyOptions)
 	r.POST("/api/auth/passkey/verify", authH.PasskeyVerify)

@@ -47,6 +47,7 @@ func testDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxOpenConns(1)
 	if err := db.AutoMigrate(
 		&model.User{},
+		&model.EmailVerification{},
 		&model.APIKey{},
 		&model.Wallet{},
 		&model.AllowedContract{},

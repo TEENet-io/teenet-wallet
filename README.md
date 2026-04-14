@@ -76,6 +76,23 @@ docker run -p 8080:8080 \
   teenet-wallet:latest
 ```
 
+### Email verification (registration)
+
+New users register via a 3-step flow: enter email → receive 6-digit code → register Passkey. Existing users created before this feature continue to work without an email.
+
+To send real verification emails, configure SMTP via environment variables:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `SMTP_HOST` | _(empty)_ | If empty, codes are logged to stdout (mock mode — dev only) |
+| `SMTP_PORT` | `587` | |
+| `SMTP_USERNAME` | | |
+| `SMTP_PASSWORD` | | |
+| `SMTP_FROM` | `SMTP_USERNAME` | |
+| `EMAIL_CODE_TTL` | `600` | Verification code lifetime, in seconds (default 10 min) |
+| `EMAIL_CODE_RESEND_COOLDOWN` | `60` | Seconds between resends to the same address |
+| `EMAIL_CODE_MAX_ATTEMPTS` | `5` | Max wrong attempts per code before invalidation |
+
 For the full setup guide, see [Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start).
 
 ## Documentation
