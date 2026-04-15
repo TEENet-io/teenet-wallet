@@ -30,12 +30,12 @@ Use TEENet Wallet through [OpenClaw](https://openclaw.ai) -- no coding required.
 
 Build on TEENet Wallet with the REST API, or contribute to the project.
 
-- [Introduction](en/introduction.md) -- Architecture, how signing works, and key features
-- [Quick Start](en/quick-start.md) -- Build from source, deploy, and make your first API call
-- [API Reference](en/api-overview.md) -- Full endpoint reference
-- [AI Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
-- [Building & Contributing](en/developer-guide.md) -- Development setup and contribution guidelines
-- [Architecture & Security](en/whitepaper.md) -- Technical deep-dive
+- [Overview](en/overview.md) -- What it does and how signing works
+- [Quick Start](en/quick-start.md) -- Zero to running in 5 minutes
+- [Concepts](en/architecture-overview.md) -- Architecture, key terms, and workflows
+- [API Reference](en/authentication.md) -- Full endpoint reference
+- [Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
+- [Contributing](en/contributing-process.md) -- Contribution process and coding standards
 
 ---
 
