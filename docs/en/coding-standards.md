@@ -17,13 +17,14 @@ One handler file per domain (wallets, contracts, auth, etc.). Every handler foll
 
 ## Auth Groups
 
-Routes are organized into three auth groups in `main.go`:
+Routes are organized into auth groups in `main.go`:
 
 | Group | Auth Required | Use For |
 |-------|---------------|---------|
-| `pub` | None | Public endpoints (health, chain list) |
+| _(bare router)_ | None | Public endpoints (health, chain list) |
 | `auth` | API key OR Passkey | Standard operations (transfers, balance queries) |
 | `passkeyOnly` | Passkey session | Sensitive operations (wallet deletion, policy deletion, approve/reject) |
+| `approveOnly` | Passkey session | Approval actions (approve, reject pending requests) |
 
 ## Approval-Gated Operations
 

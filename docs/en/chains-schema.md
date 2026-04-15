@@ -6,8 +6,10 @@
 |-------|----------|------|--------------|-------------|
 | `name` | Yes | string | any unique identifier | API identifier (e.g., `sepolia`, `solana-devnet`) |
 | `label` | Yes | string | -- | Human-readable name (e.g., `Sepolia Testnet`) |
-| `protocol` | Yes | string | `ecdsa`, `ed25519` | Signature scheme |
-| `curve` | Yes | string | `secp256k1`, `ed25519` | Cryptographic curve. Must match protocol: ecdsa->secp256k1, ed25519->ed25519 |
+| `protocol` | Yes | string | `ecdsa`, `schnorr` | Signature scheme |
+| `curve` | Yes | string | `secp256k1`, `ed25519` | Cryptographic curve. Must match protocol: ecdsa→secp256k1, schnorr→ed25519 |
+
+> **Note:** The `protocol` value for Solana is currently `schnorr`. This will be renamed to `ed25519` in a future update.
 | `currency` | Yes | string | -- | Native currency symbol (e.g., `ETH`, `SOL`, `tBNB`) |
 | `family` | Yes | string | `evm`, `solana` | Chain family, determines tx building logic |
 | `rpc_url` | Yes | string | -- | JSON-RPC endpoint URL |
@@ -25,8 +27,13 @@ The following chains are included in `chains.json` out of the box:
 | Holesky Testnet | `holesky` | ETH | ECDSA | secp256k1 | EVM |
 | Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
 | BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
-| Solana Mainnet | `solana` | SOL | Ed25519 | ed25519 | Solana |
-| Solana Devnet | `solana-devnet` | SOL | Ed25519 | ed25519 | Solana |
+| Arbitrum One | `arbitrum` | ETH | ECDSA | secp256k1 | EVM |
+| Base Mainnet | `base` | ETH | ECDSA | secp256k1 | EVM |
+| Polygon PoS | `polygon` | POL | ECDSA | secp256k1 | EVM |
+| BNB Smart Chain | `bsc` | BNB | ECDSA | secp256k1 | EVM |
+| Avalanche C-Chain | `avalanche` | AVAX | ECDSA | secp256k1 | EVM |
+| Solana Mainnet | `solana` | SOL | Schnorr | ed25519 | Solana |
+| Solana Devnet | `solana-devnet` | SOL | Schnorr | ed25519 | Solana |
 
 ## Common Token Contract Addresses
 
@@ -54,6 +61,3 @@ The following chains are included in `chains.json` out of the box:
 | USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 |
 | WETH | `0x4200000000000000000000000000000000000006` | 18 |
 
-## Custom Chains
-
-Custom chains can be added at runtime via `POST /api/chains` by providing a name, RPC URL, currency, and optional chain ID. Custom chains are stored in the `custom_chains` database table and use ECDSA on secp256k1.
