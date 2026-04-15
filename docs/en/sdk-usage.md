@@ -88,8 +88,6 @@ sdkClient.DeletePublicKey(ctx, keyName)
 sdkClient.DeletePasskeyUser(ctx, passkeyUserID)
 ```
 
-Best-effort: failures are logged but do not block the deletion response.
-
 ---
 
 ## Nil Client Pattern
