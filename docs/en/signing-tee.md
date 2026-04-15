@@ -67,7 +67,7 @@ The wallet reads its `APP_INSTANCE_ID` from the environment at startup and passe
 | Mode | Behavior |
 |------|----------|
 | **Direct** | The coordinator signs immediately and returns the signature. Used for standard wallet operations. |
-| **Multi-instance voting** | Multiple instances of the same application run concurrently. A signing request enters a pending state until enough instances independently submit the same request to reach the threshold. Used for multi-party workflows where no single instance should be able to sign alone. |
+| **Multi-instance voting** | Multiple instances run concurrently. A signing request enters a pending state until enough instances independently submit the same request to reach the threshold. Used for multi-party workflows where no single instance should be able to sign alone. |
 
 In typical wallet deployments, the application uses **direct** mode. The wallet's own approval system (threshold policies, daily limits) handles human authorization at the application layer, before the signing request ever reaches the TEENet service.
 
