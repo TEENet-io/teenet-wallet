@@ -75,5 +75,5 @@ In typical wallet deployments, the application uses **direct** mode. The wallet'
 
 ## Next Steps
 
-- [SDK Usage](sdk-usage.md) -- how the wallet calls the SDK in code
-- [Architecture Overview](architecture-overview.md) -- the full system mental model
+- [SDK Usage](sdk-usage.md) -- SDK interface reference
+- [Architecture Overview](architecture-overview.md) -- system mental model and core workflows
