@@ -26,13 +26,6 @@ Wallet                    TEENet Service
   │  Sign(msg, keyName)       │
   │ ─────────────────────────>│
   │                           │
-  │                     ┌─────▼──────┐
-  │                     │ Coordinator │
-  │                     │ (consensus) │
-  │                     └──┬──┬──┬───┘
-  │                        │  │  │
-  │                  ┌─────┘  │  └─────┐
-  │                  ▼        ▼        ▼
   │              ┌──────┐ ┌──────┐ ┌──────┐
   │              │ TEE  │ │ TEE  │ │ TEE  │
   │              │ Node │ │ Node │ │ Node │
@@ -41,23 +34,21 @@ Wallet                    TEENet Service
   │                 │        │        │
   │                 │ partial signatures
   │                 │        │        │
-  │                  └───┬───┘───┬───┘
-  │                      ▼       ▼
-  │                 ┌────────────────┐
-  │                 │   Assemble     │
-  │                 │   threshold    │
-  │                 │   signature    │
-  │                 └───────┬────────┘
-  │                         │
-  │  Signature              │
-  │ <───────────────────────┘
+  │                 └───┬────┘────┘
+  │                     ▼
+  │              Initiating node
+  │              assembles final
+  │              signature
+  │                     │
+  │  Signature          │
+  │ <───────────────────┘
   │
 ```
 
-1. The wallet sends the message bytes and key name to the TEENet service coordinator (`app-comm-consensus`) via HTTP.
-2. The coordinator identifies which TEE nodes hold shares for the requested key and distributes the signing request.
+1. The wallet sends the message bytes and key name to the TEENet service via the SDK.
+2. One of the TEE nodes initiates the signing process and distributes the request to other nodes holding shares for the requested key.
 3. Each participating TEE node computes a **partial signature** using its key share inside the enclave.
-4. The coordinator collects the required number of partial signatures (M out of N) and assembles the final threshold signature.
+4. The initiating node collects the required number of partial signatures (M out of N) and assembles the final threshold signature.
 5. The complete signature is returned to the wallet, which broadcasts the signed transaction to the blockchain.
 
 ---
