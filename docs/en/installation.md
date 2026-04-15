@@ -17,7 +17,7 @@ Complete installation reference for teenet-wallet. For the fastest path, see [Qu
 
 ## Go version
 
-Go **1.24+** is required. CGo must be enabled (`CGO_ENABLED=1`, which is the default) because the SQLite driver is a C library.
+Go **1.25+** is required. CGo must be enabled (`CGO_ENABLED=1`, which is the default) because the SQLite driver is a C library.
 
 ---
 
@@ -43,6 +43,8 @@ xcode-select --install
 ```bash
 git clone https://github.com/TEENet-io/teenet-wallet.git
 cd teenet-wallet
+git submodule update --init --recursive
+make frontend
 make build
 ```
 

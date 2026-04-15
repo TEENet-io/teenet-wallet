@@ -11,7 +11,7 @@ API keys are intended for AI agents, bots, and automated pipelines. They are pre
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/auth/apikey/generate \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck" \
+  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"label": "production-agent"}'
 ```
@@ -28,7 +28,7 @@ curl -s ${TEE_WALLET_URL}/api/wallets \
 ```bash
 curl -s ${TEE_WALLET_URL}/api/auth/apikey/list \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck"
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 **Renaming a key:**
@@ -36,7 +36,7 @@ curl -s ${TEE_WALLET_URL}/api/auth/apikey/list \
 ```bash
 curl -s -X PATCH ${TEE_WALLET_URL}/api/auth/apikey \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck" \
+  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"key_id": "KEY_ID_HERE", "label": "new-label"}'
 ```
@@ -46,7 +46,7 @@ curl -s -X PATCH ${TEE_WALLET_URL}/api/auth/apikey \
 ```bash
 curl -s -X DELETE ${TEE_WALLET_URL}/api/auth/apikey \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck" \
+  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"key_id": "KEY_ID_HERE"}'
 ```
@@ -69,7 +69,7 @@ Passkey sessions use the WebAuthn standard for hardware-bound authentication. Th
 
 1. `GET /api/auth/passkey/options` -- get a login challenge
 2. Complete the WebAuthn assertion in the browser
-3. `POST /api/auth/passkey/verify` -- submit the assertion and receive a session token
+3. `POST /api/auth/passkey/verify` -- submit the assertion and receive a session token plus `csrf_token`
 
 Passkey sessions are required for:
 - Generating, renaming, and revoking API keys
@@ -83,12 +83,12 @@ Passkey sessions are required for:
 
 ### CSRF Protection
 
-All state-changing requests made with a Passkey session must include the `X-CSRF-Token` header. Any non-empty value is accepted (e.g., `nocheck`). This prevents cross-site request forgery attacks against browser-based sessions.
+All state-changing requests made with a Passkey session must include the `X-CSRF-Token` header with the exact `csrf_token` returned at login. This prevents cross-site request forgery attacks against browser-based sessions.
 
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/wallets \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck" \
+  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"chain": "ethereum", "label": "My Wallet"}'
 ```

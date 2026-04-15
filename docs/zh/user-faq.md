@@ -14,7 +14,7 @@
 
 **消费限额由你控制。** 你设定 USD 阈值和日限额，OpenClaw 只能在这个范围内自主行动。
 
-**随时可以撤销 OpenClaw 的访问权限。** 在 Web 界面的 Account 标签页删除 API 密钥，OpenClaw 的所有钱包操作权限瞬间归零。
+**随时可以撤销 OpenClaw 的访问权限。** 在 Web 界面的**设置**中删除 API 密钥，OpenClaw 的所有钱包操作权限瞬间归零。
 
 ---
 
@@ -67,7 +67,7 @@ OpenClaw 会引导你完成设置，你需要提供钱包地址和 API 密钥。
 
 ### 怎么停止 OpenClaw 使用我的钱包？
 
-登录 [TEENet Wallet][wallet-url]，切换到 **Account** 标签页，在 API 密钥列表中找到对应的密钥，点击 **Revoke**（撤销）。密钥立即失效，OpenClaw 将无法执行任何钱包操作。如果你不确定哪个密钥对应哪个 OpenClaw 实例，可以撤销所有密钥，然后为需要保留的实例重新生成。
+登录 [TEENet Wallet][wallet-url]，打开**设置**，在 API 密钥列表中找到对应的密钥，点击 **Revoke**（撤销）。密钥立即失效，OpenClaw 将无法执行任何钱包操作。如果你不确定哪个密钥对应哪个 OpenClaw 实例，可以撤销所有密钥，然后为需要保留的实例重新生成。
 
 ### 什么是 Passkey？
 

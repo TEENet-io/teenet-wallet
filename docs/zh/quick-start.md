@@ -6,7 +6,7 @@
 
 ## 前提条件
 
-- **Go 1.24+**
+- **Go 1.25+**
 - **SQLite3 开发头文件**
 
 为你的平台安装 SQLite 头文件：
@@ -51,6 +51,8 @@ Mock server listening on 127.0.0.1:8089
 ```bash
 git clone https://github.com/TEENet-io/teenet-wallet.git
 cd teenet-wallet
+git submodule update --init --recursive
+make frontend
 make build
 SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
@@ -81,7 +83,7 @@ curl -s http://localhost:8080/api/health
 
 ## 4. 创建你的第一个钱包
 
-在浏览器中打开 [http://localhost:8080](http://localhost:8080)。使用 Passkey 注册，然后进入 **Settings** 生成 API key。密钥以 `ocw_` 开头，仅显示一次——请妥善保存。
+在浏览器中打开 [http://localhost:8080](http://localhost:8080)。使用 Passkey 注册，然后进入**设置**生成 API key。密钥以 `ocw_` 开头，仅显示一次——请妥善保存。
 
 然后创建钱包：
 

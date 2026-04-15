@@ -6,7 +6,7 @@ Get from zero to a running wallet in 5 minutes. Every step is copy-paste.
 
 ## Prerequisites
 
-- **Go 1.24+**
+- **Go 1.25+**
 - **SQLite3 development headers**
 
 Install SQLite headers for your platform:
@@ -51,6 +51,8 @@ Open a **new terminal**:
 ```bash
 git clone https://github.com/TEENet-io/teenet-wallet.git
 cd teenet-wallet
+git submodule update --init --recursive
+make frontend
 make build
 SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```

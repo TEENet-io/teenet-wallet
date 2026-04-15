@@ -39,7 +39,7 @@ curl -s ${TEE_WALLET_URL}/api/wallets/WALLET_ID/policy \
 ```bash
 curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID/policy \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck"
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 ### Daily Limits
@@ -100,7 +100,7 @@ curl -s ${TEE_WALLET_URL}/api/approvals/APPROVAL_ID \
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/approvals/APPROVAL_ID/approve \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck"
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 **Reject a request** (Passkey only):
@@ -108,7 +108,7 @@ curl -s -X POST ${TEE_WALLET_URL}/api/approvals/APPROVAL_ID/approve \
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/approvals/APPROVAL_ID/reject \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck"
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 Pending approvals expire after the configured timeout (default: 24 hours).

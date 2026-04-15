@@ -14,7 +14,7 @@
 | `cannot overwrite a built-in chain` | 尝试创建与内置链同名的自定义链 | 为自定义链选择一个不同的名称。 |
 | `chain has existing wallets; delete them first` | 尝试删除仍有钱包的自定义链 | 先删除该链上的所有钱包，再移除链。 |
 | `rate limit exceeded` | 当前时间窗口内请求过多 | 等待后重试。默认限制：每个 API key 200 次请求/分钟，5 次钱包创建/分钟，每个 IP 10 次注册/分钟。 |
-| `CSRF token required` | Passkey 会话请求缺少 `X-CSRF-Token` 请求头 | 在状态变更请求中添加 `X-CSRF-Token: nocheck`（或任意非空值）。 |
+| `invalid CSRF token` | Passkey 会话请求使用了缺失、过期或错误的 `X-CSRF-Token` | 在状态变更的 Passkey 请求中，使用登录时返回的 `csrf_token` 作为 `X-CSRF-Token` 请求头。 |
 | `passkey session required` | 该操作需要 Passkey 认证，但使用了 API key 调用 | 使用 Passkey 会话执行此操作（钱包删除、策略删除、合约移除、审批/拒绝）。 |
 | `max wallets reached` | 用户已达到 `MAX_WALLETS_PER_USER` 限制 | 删除不使用的钱包，或在服务器配置中增加限制。 |
 

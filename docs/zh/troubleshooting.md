@@ -47,7 +47,7 @@
 
 **原因：** API key 复制错误，或已被撤销。API key 仅在生成时显示一次。
 
-**解决方法：** 在 Web UI 的 **Settings** 中生成新的 API key。
+**解决方法：** 在 Web UI 的**设置**中生成新的 API key。
 
 ---
 

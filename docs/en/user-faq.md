@@ -8,7 +8,7 @@
 
 ### How do I connect an AI agent?
 
-Generate an API key in the [TEENet Wallet][wallet-url] **Account** tab and provide it to your agent along with the wallet API URL shown on your account page. The agent uses these to call the wallet's REST API on your behalf.
+Generate an API key in the [TEENet Wallet][wallet-url] **Settings** panel and provide it to your agent along with the wallet API URL shown on your account page. The agent uses these to call the wallet's REST API on your behalf.
 
 **OpenClaw example:** Open your OpenClaw chat and send:
 
@@ -49,7 +49,7 @@ The following actions always require your Passkey, regardless of spending limits
 
 ### Can I use multiple agents?
 
-Yes. Generate a separate API key for each agent in the Account tab. Each agent operates independently but shares your wallets and is subject to the same approval policies. If one misbehaves, revoke its specific key without affecting the others.
+Yes. Generate a separate API key for each agent in Settings. Each agent operates independently but shares your wallets and is subject to the same approval policies. If one misbehaves, revoke its specific key without affecting the others.
 
 ---
 
@@ -65,11 +65,11 @@ If your agent submits a transaction above your threshold, it is held in a pendin
 
 ### Can I see what my agent has done?
 
-Yes. Every action your agent takes is recorded in the History tab of the [TEENet Wallet][wallet-url] web UI. Review it anytime to confirm your agent is doing what you expect.
+Yes. Every action your agent takes is recorded in the Activity tab of the [TEENet Wallet][wallet-url] web UI. Review it anytime to confirm your agent is doing what you expect.
 
 ### How do I revoke an agent's access?
 
-Go to [TEENet Wallet][wallet-url], click the **Account** tab, find the API key your agent is using, and click **Revoke**. Authenticate with your Passkey. The agent immediately loses all access to your wallets. If you want to reconnect later, generate a new API key and provide it to the agent.
+Go to [TEENet Wallet][wallet-url], open **Settings**, find the API key your agent is using, and click **Revoke**. Authenticate with your Passkey. The agent immediately loses all access to your wallets. If you want to reconnect later, generate a new API key and provide it to the agent.
 
 ---
 

@@ -45,7 +45,7 @@ Wallet deletion is irreversible and requires a Passkey session:
 ```bash
 curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck"
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 ### Chain Selection
@@ -74,7 +74,7 @@ Custom EVM chains can be added at runtime (Passkey required):
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/chains \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck" \
+  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "polygon",

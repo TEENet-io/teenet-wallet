@@ -63,7 +63,7 @@ Deletion requires a Passkey session:
 ```bash
 curl -s -X DELETE "${TEE_WALLET_URL}/api/addressbook/ENTRY_ID" \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: nocheck"
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 ### Using Nicknames in Transfers
