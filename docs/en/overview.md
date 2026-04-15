@@ -1,8 +1,8 @@
 # Overview
 
-TEENet Wallet is a multi-chain cryptocurrency wallet where your private keys never exist on any single machine. Every key is split across multiple Trusted Execution Environment (TEE) nodes — when a transaction needs to be signed, the nodes cooperate to produce a valid signature without ever reconstructing the full key.
+TEENet Wallet is a multi-chain crypto wallet that lets your AI agent handle routine transactions — balance checks, transfers, contract calls — while you keep approval for what matters. Set transfer limits, restrict which contracts your agent can interact with, and confirm high-value actions with a single Passkey tap. Your rules are enforced inside hardware-protected enclaves, not just in application code.
 
-The wallet supports Ethereum, Solana, and all major EVM chains from a single interface. You can manage wallets through a web UI or automate operations through a REST API with configurable spending policies and Passkey-based human approval for high-value transactions.
+Private keys never exist on any single machine. They are generated inside TEE nodes, sharded across multiple independent nodes using threshold cryptography, and never exported or reconstructed. Signing requires cooperation from multiple nodes — no operator, cloud provider, or compromised server can unilaterally access your keys.
 
 ---
 
