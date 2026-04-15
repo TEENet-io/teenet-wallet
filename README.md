@@ -55,7 +55,6 @@ See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/intr
 
 - Go 1.25+
 - SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
-- A running TEENet mesh node exposing the TEENet service on port 8089
 
 ### Build and Run
 
@@ -64,7 +63,7 @@ make build
 ./teenet-wallet
 ```
 
-The server starts on `http://0.0.0.0:8080` by default.
+The wallet service starts on `http://0.0.0.0:8080` by default.
 
 ### Docker
 
@@ -76,35 +75,9 @@ docker run -p 8080:8080 \
   teenet-wallet:latest
 ```
 
-### Email verification (registration)
-
-New users register via a 3-step flow: enter email → receive 6-digit code → register Passkey. Existing users created before this feature continue to work without an email.
-
-To send real verification emails, configure SMTP via environment variables:
-
-| Variable | Default | Notes |
-|---|---|---|
-| `SMTP_HOST` | _(empty)_ | If empty, codes are logged to stdout (mock mode — dev only) |
-| `SMTP_PORT` | `587` | |
-| `SMTP_USERNAME` | | |
-| `SMTP_PASSWORD` | | |
-| `SMTP_FROM` | `SMTP_USERNAME` | |
-| `EMAIL_CODE_TTL` | `600` | Verification code lifetime, in seconds (default 10 min) |
-| `EMAIL_CODE_RESEND_COOLDOWN` | `60` | Seconds between resends to the same address |
-| `EMAIL_CODE_MAX_ATTEMPTS` | `5` | Max wrong attempts per code before invalidation |
-
-For the full setup guide, see [Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start).
-
 ## Documentation
 
 Full documentation is available at **[teenet-io.github.io/teenet-wallet](https://teenet-io.github.io/teenet-wallet/)**.
-
-| Audience | Start here |
-|----------|-----------|
-| **Users** (via OpenClaw) | [Getting Started](https://teenet-io.github.io/teenet-wallet/#/en/user-getting-started) |
-| **Integrators** (REST API) | [Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start) &middot; [API Reference](https://teenet-io.github.io/teenet-wallet/#/en/api-overview) |
-| **Developers** | [Building & Contributing](https://teenet-io.github.io/teenet-wallet/#/en/developer-guide) |
-| **Security** | [Architecture & Security](https://teenet-io.github.io/teenet-wallet/#/en/whitepaper) |
 
 ## TEENet Platform
 
