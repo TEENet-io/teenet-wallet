@@ -24,8 +24,6 @@ TEENet Wallet is designed to serve as the custody layer for AI agents. Two integ
 
 **Poll approvals with countdown.** When waiting for Passkey approval, poll `GET /api/approvals/:id` every 15 seconds and show the remaining time. Stop after 25 minutes.
 
-**Use `amount_usd` for contract calls.** When calling `/contract-call` for operations that transfer value, always include the approximate USD value so threshold and daily-limit policies are enforced.
-
 **Fetch fresh wallet lists.** Before showing balances or account-wide views, always re-fetch `GET /api/wallets` to ensure the list is current.
 
 **Include explorer links.** After every successful transaction, provide a block explorer link so the user can verify on-chain.
