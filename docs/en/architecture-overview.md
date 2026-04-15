@@ -86,26 +86,62 @@ TEENet Wallet is a single Go binary with a clear internal layering:
 
 ### Create a wallet
 
-1. User sends `POST /api/wallets` with a chain name.
-2. Handler creates a `"creating"` wallet record in the database.
-3. SDK calls `GenerateKey` with the appropriate scheme and curve (ECDSA/secp256k1 for EVM, Ed25519 for Solana). ECDSA key generation involves distributed key generation across TEE nodes and takes 1--2 minutes. Ed25519 is near-instant.
-4. The returned public key is used to derive a chain address (`chain.DeriveAddress`).
-5. The wallet record is updated to `"ready"` with the key name, public key, and address.
+```
+POST /api/wallets {chain}
+        │
+        ▼
+  Save wallet record ──► status: "creating"
+        │
+        ▼
+  SDK GenerateKey(scheme, curve)
+  (ECDSA ~1-2 min, Ed25519 instant)
+        │
+        ▼
+  Derive chain address from public key
+        │
+        ▼
+  Update wallet record ──► status: "ready"
+```
 
 ### Send a transfer
 
-1. Agent or user sends `POST /api/wallets/:id/transfer` with recipient and amount.
-2. Handler builds the unsigned transaction (`chain/tx_eth.go` or `chain/tx_sol.go`).
-3. If the wallet has an approval policy and the transfer exceeds the threshold (or the daily limit would be exceeded), the request is saved as a pending `ApprovalRequest` and the endpoint returns HTTP 202 with an `approval_url`.
-4. If no approval is needed (or the caller is using a Passkey session and the policy allows direct signing), the handler calls `sdk.Sign()`, broadcasts the signed transaction, and returns the transaction hash.
+```
+POST /api/wallets/:id/transfer {to, amount}
+        │
+        ▼
+  Build unsigned transaction
+        │
+        ▼
+  Check approval policy ─── exceeds threshold ──► Save as pending
+        │                     or daily limit          approval,
+        │                                          return HTTP 202
+        ▼                                         + approval_url
+  SDK Sign(tx, keyName)
+        │
+        ▼
+  Broadcast to blockchain
+        │
+        ▼
+  Return tx hash
+```
 
 ### Approve a pending request
 
-1. A pending approval appears in the user's Web UI (pushed via SSE) or is returned by `GET /api/approvals/pending`.
-2. The user opens the approval URL in their browser and confirms with their Passkey (hardware key tap or biometric).
-3. The approval handler verifies the fresh Passkey assertion against the TEENet service.
-4. The transaction is **rebuilt** with a fresh nonce and gas estimate (not reused from the original request).
-5. The rebuilt transaction is signed via `sdk.Sign()`, broadcast, and the approval record is updated with the transaction hash.
+```
+Pending approval appears in Web UI (via SSE)
+        │
+        ▼
+  User confirms with Passkey (tap / biometric)
+        │
+        ▼
+  Verify Passkey assertion via TEENet service
+        │
+        ▼
+  Rebuild transaction (fresh nonce + gas estimate)
+        │
+        ▼
+  SDK Sign(tx, keyName) ──► Broadcast ──► Return tx hash
+```
 
 ---
 
