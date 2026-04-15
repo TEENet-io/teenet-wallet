@@ -77,7 +77,7 @@ docker run -p 8080:8080 \
 
 ## Documentation
 
-Full documentation is available at **[teenet-io.github.io/teenet-wallet](https://teenet-io.github.io/teenet-wallet/)**.
+Full documentation is available **[HERE](https://teenet-io.github.io/teenet-wallet/)**.
 
 ## TEENet Platform
 
