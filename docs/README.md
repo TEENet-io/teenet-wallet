@@ -17,7 +17,7 @@ Your agent handles routine tasks like balances, transfers, and activity checks, 
 
 ---
 
-## I'm a User
+## Use TEENet Wallet
 
 Use TEENet Wallet through [OpenClaw](https://openclaw.ai) -- no coding required.
 
@@ -26,16 +26,25 @@ Use TEENet Wallet through [OpenClaw](https://openclaw.ai) -- no coding required.
 - [Web UI & Approvals](en/user-approvals.md) -- How to use the web dashboard and approve transactions
 - [FAQ](en/user-faq.md) -- Common questions about security, keys, and usage
 
-## I'm a Developer
+## Build & Integrate
 
-Build on TEENet Wallet with the REST API, or contribute to the project.
+Build on TEENet Wallet with the REST API, integrate it into agent platforms, or prepare it for deployment on TEENet.
 
+- [Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
 - [Quick Start](en/quick-start.md) -- Zero to running in 5 minutes
+- [OpenAPI Spec](api/openapi.yaml) -- Machine-readable API schema
 - [Architecture Overview](en/architecture-overview.md) -- How the system works
 - [Authentication](en/authentication.md) -- API reference starting point
-- [Add a Chain](en/howto-add-chain.md) -- How-to guides
-- [Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
+- [Deploy Your Wallet App on TEENet](en/howto-deploy.md) -- Deployment scope and prerequisites
+
+## Contribute
+
 - [Contribution Process](en/contributing-process.md) -- How to contribute
+- [Coding Standards & CI](en/coding-standards.md) -- Development expectations and checks
+
+## Support
+
+- [Community & Support](en/community.md) -- Project links, security reporting, and maintainer info
 
 ---
 

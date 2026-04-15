@@ -17,7 +17,7 @@
 
 ---
 
-## 我是用户
+## 使用 TEENet Wallet
 
 通过 [OpenClaw](https://openclaw.ai) 使用 TEENet Wallet——无需编程。
 
@@ -26,16 +26,25 @@
 - [审批与 Web 界面](/zh/user-approvals.md) -- 如何使用 Web 控制台和审批交易
 - [安全与常见问题](/zh/user-faq.md) -- 关于安全、密钥和使用的常见问题
 
-## 我是开发者
+## 构建与集成
 
-基于 TEENet Wallet 的 REST API 构建应用，或参与项目贡献。
+基于 TEENet Wallet 的 REST API 构建应用，将其集成到 Agent 平台中，或为部署到 TEENet 做准备。
 
+- [AI Agent 集成](/zh/agent-integration.md) -- Agent 平台最佳实践
 - [快速开始](/zh/quick-start.md) -- 5 分钟从零开始运行
+- [OpenAPI 规范](/api/openapi.yaml) -- 机器可读的 API schema
 - [架构概览](/zh/architecture-overview.md) -- 系统工作原理
 - [认证体系](/zh/authentication.md) -- API 参考入口
-- [添加链](/zh/howto-add-chain.md) -- 操作指南
-- [AI Agent 集成](/zh/agent-integration.md) -- Agent 平台最佳实践
+- [在 TEENet 上部署你的钱包应用](/zh/howto-deploy.md) -- 部署边界与前提条件
+
+## 贡献
+
 - [贡献流程](/zh/contributing-process.md) -- 如何参与贡献
+- [编码规范与 CI](/zh/coding-standards.md) -- 开发要求与检查项
+
+## 支持
+
+- [社区与支持](/zh/community.md) -- 项目链接、安全报告和维护者信息
 
 ---
 
