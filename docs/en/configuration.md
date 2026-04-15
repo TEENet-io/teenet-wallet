@@ -4,7 +4,7 @@ All configuration is via environment variables. No configuration files are requi
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CONSENSUS_URL` | `http://localhost:8089` | URL of the local `app-comm-consensus` node |
+| `SERVICE_URL` | `http://localhost:8089` | URL of the local TEENet service node |
 | `HOST` | `0.0.0.0` | Bind address for the HTTP server |
 | `PORT` | `8080` | HTTP listen port |
 | `DATA_DIR` | `/data` | Directory for the SQLite database file (`wallet.db`) |

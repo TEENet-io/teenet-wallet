@@ -101,7 +101,7 @@ AI Agent / Application              Human Operator (Browser)
     |  TEENet SDK (HTTP REST)
     v
 +--------------------------------------------------------------+
-|  app-comm-consensus  (:8089)                                 |
+|  TEENet Service  (:8089)                                    |
 |  +-- M-of-N Voting Coordination                             |
 |  +-- Config Cache (apps, instances, keys from UMS)           |
 +--------------------------------------------------------------+
@@ -140,9 +140,9 @@ AI Agent / Application              Human Operator (Browser)
    Solana transaction message for Solana).
 3. The approval policy engine evaluates whether the transaction requires human
    approval (based on USD amount and authentication type).
-4. If approved (or below threshold), the signing hash is sent to
-   app-comm-consensus via the TEENet SDK.
-5. app-comm-consensus coordinates M-of-N threshold signing across the TEE-DAO
+4. If approved (or below threshold), the signing hash is sent to the
+   TEENet service via the TEENet SDK.
+5. The TEENet service coordinates M-of-N threshold signing across the TEE-DAO
    cluster.
 6. The signature is returned to TEENet Wallet, which assembles the signed
    transaction and broadcasts it to the blockchain RPC endpoint.
@@ -210,7 +210,7 @@ compromise of up to two nodes.
 
 ### 3.3 M-of-N Signing
 
-The signing flow is coordinated by app-comm-consensus, which acts as the
+The signing flow is coordinated by the TEENet service, which acts as the
 session coordinator:
 
 1. The coordinator receives the message hash to be signed.
@@ -466,8 +466,8 @@ TEENet Wallet is distributed as a statically-compiled Go binary or Docker
 image:
 
 - **Docker image** uses a multi-stage build with a non-root runtime user.
-- The only runtime dependency is a TEENet mesh node running
-  app-comm-consensus on the configured `CONSENSUS_URL`.
+- The only runtime dependency is a TEENet mesh node reachable on the
+  configured `SERVICE_URL`.
 - All configuration is via environment variables (12-factor app style).
 - The server binds to `0.0.0.0:8080` by default.
 

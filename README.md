@@ -55,7 +55,7 @@ See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/intr
 
 - Go 1.25+
 - SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
-- A running TEENet mesh node with app-comm-consensus on port 8089
+- A running TEENet mesh node exposing the TEENet service on port 8089
 
 ### Build and Run
 
@@ -71,7 +71,7 @@ The server starts on `http://0.0.0.0:8080` by default.
 ```bash
 make docker
 docker run -p 8080:8080 \
-  -e CONSENSUS_URL=http://host.docker.internal:8089 \
+  -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```

@@ -6,7 +6,7 @@ This guide is for developers who want to build, test, and contribute to the teen
 
 ## Build & Run
 
-**Prerequisites:** Go 1.24+, SQLite3 dev headers, a running `app-comm-consensus` node on port 8089.
+**Prerequisites:** Go 1.24+, SQLite3 dev headers, a running TEENet service node on port 8089.
 
 ```bash
 # Build
@@ -18,7 +18,7 @@ make build
 # Or with Docker
 make docker
 docker run -p 8080:8080 \
-  -e CONSENSUS_URL=http://host.docker.internal:8089 \
+  -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
@@ -91,7 +91,7 @@ teenet-wallet/
 - **No ORM queries in handlers** -- handlers use GORM directly (simple enough that a repository layer adds no value).
 - **GORM AutoMigrate** -- schema changes are applied automatically on startup. No migration files.
 - **Single-file frontend** -- `frontend/index.html` is a complete SPA with no build tooling. Embedded via `gin.Static`.
-- **TEENet SDK** -- signing goes through `github.com/TEENet-io/teenet-sdk/go`, which talks to the local `app-comm-consensus` node.
+- **TEENet SDK** -- signing goes through `github.com/TEENet-io/teenet-sdk/go`, which talks to the local TEENet service node.
 
 ---
 
@@ -111,24 +111,24 @@ go test ./handler/ -run TestTransfer_ERC20 -v
 make lint
 ```
 
-Tests use in-memory SQLite (`file::memory:`) and don't require a running consensus node -- the SDK client is nil in tests, and signing calls are expected to fail (tests verify behavior up to the signing step).
+Tests use in-memory SQLite (`file::memory:`) and don't require a running TEENet service node -- the SDK client is nil in tests, and signing calls are expected to fail (tests verify behavior up to the signing step).
 
-### Mock Consensus Server
+### Mock TEENet Service
 
-For end-to-end local development without a real `app-comm-consensus` + TEE-DAO cluster, the [teenet-sdk](https://github.com/TEENet-io/teenet-sdk) ships a mock server (under [`mock-server/`](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server)) that implements the full consensus HTTP API with real cryptographic signing. Point `CONSENSUS_URL` at it and the wallet behaves as if talking to production.
+For end-to-end local development without a real TEENet service, the [teenet-sdk](https://github.com/TEENet-io/teenet-sdk) ships a mock server (under [`mock-server/`](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server)) that implements the full TEENet HTTP API with real cryptographic signing. Point `SERVICE_URL` at it and the wallet behaves as if talking to production.
 
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
 go build && ./mock-server                                  # 127.0.0.1:8089
 # For a custom port/bind: MOCK_SERVER_PORT=xxxx MOCK_SERVER_BIND=0.0.0.0 ./mock-server
-# Note: if you change the port, update CONSENSUS_URL below to match.
+# Note: if you change the port, update SERVICE_URL below to match.
 ```
 
 Then run the wallet with:
 
 ```bash
-CONSENSUS_URL=http://127.0.0.1:8089 ./teenet-wallet
+SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
 
 **What it provides (34 endpoints):**

@@ -4,7 +4,7 @@
 
 | 环境变量 | 默认值 | 说明 |
 |---------|-------|------|
-| `CONSENSUS_URL` | `http://localhost:8089` | 本地 app-comm-consensus 节点地址 |
+| `SERVICE_URL` | `http://localhost:8089` | 本地 TEENet 服务节点地址 |
 | `HOST` | `0.0.0.0` | 服务绑定地址 |
 | `PORT` | `8080` | HTTP 监听端口 |
 | `DATA_DIR` | `/data` | SQLite 数据库存储目录 |

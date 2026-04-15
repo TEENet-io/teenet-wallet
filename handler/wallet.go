@@ -151,13 +151,7 @@ func (h *WalletHandler) CreateWallet(c *gin.Context) {
 	}
 
 	// Generate key via TEE-DAO (may take 1-2 min for ECDSA).
-	var keyResult *sdk.GenerateKeyResult
-	var genErr error
-	if chainCfg.Protocol == "ecdsa" {
-		keyResult, genErr = h.sdk.GenerateECDSAKey(c.Request.Context(), chainCfg.Curve)
-	} else {
-		keyResult, genErr = h.sdk.GenerateSchnorrKey(c.Request.Context(), chainCfg.Curve)
-	}
+	keyResult, genErr := h.sdk.GenerateKey(c.Request.Context(), chainCfg.Protocol, chainCfg.Curve)
 	if genErr != nil || !keyResult.Success {
 		msg := "key generation failed"
 		if genErr != nil {

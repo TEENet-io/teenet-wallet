@@ -43,7 +43,7 @@ The result is a wallet that is as easy to use as a hosted API, but with security
      |  TEENet SDK
      v
 +--------------------------------------------------------------+
-|  app-comm-consensus  (:8089)                                 |
+|  TEENet Service  (:8089)                                    |
 |  M-of-N voting coordination                                  |
 +--------------------------------------------------------------+
      |  gRPC + mutual TLS
