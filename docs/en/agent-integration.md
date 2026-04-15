@@ -94,18 +94,3 @@ User (chat)  →  Agent  →  Plugin tool  →  Wallet backend
 - **All write paths check approval policies** on the backend; the plugin cannot bypass USD thresholds or daily limits.
 - **SSRF protection** on custom chain RPC URLs (private IPs and cloud metadata addresses are blocked backend-side).
 
----
-
-## Web UI
-
-TEENet Wallet includes a built-in web interface served at the root URL (e.g., [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)). The web UI provides:
-
-- **Account management:** Passkey registration, login, and session management.
-- **Wallet dashboard:** Create, view, rename, and delete wallets. View addresses, balances, and chain information.
-- **Transfer interface:** Send native currency and tokens with a visual form.
-- **Contract whitelist management:** Add, update, and remove whitelisted contracts with an interactive table.
-- **Approval queue:** Review pending approval requests and approve or reject them with hardware Passkey authentication.
-- **API key management:** Generate and revoke API keys for programmatic access.
-- **Policy configuration:** Set and manage USD-denominated approval thresholds and daily limits.
-
-The web UI is served with a restrictive Content Security Policy and additional security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`).
