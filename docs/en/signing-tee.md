@@ -75,5 +75,4 @@ In typical wallet deployments, the application uses **direct** mode. The wallet'
 
 ## Next Steps
 
-- [How-To Guides](howto-add-chain.md) -- start building
-- [API Reference](authentication.md) -- full endpoint reference
+[← TEENet SDK Usage](sdk-usage.md) | [Add a Chain →](howto-add-chain.md)
