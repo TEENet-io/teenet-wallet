@@ -49,7 +49,7 @@ API 密钥是 OpenClaw 访问你钱包的凭证。
    ```
 
 3. 按提示输入：
-   - **TEE_WALLET_API_URL** -- `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`
+   - **TEE_WALLET_API_URL** -- 你的账户页中显示的钱包 API 地址
    - **TEE_WALLET_API_KEY** -- 第二步复制的密钥
 
 <div align="center"><img src="picture/tg.png" alt="通过 Telegram 连接 OpenClaw" width="360" /></div>

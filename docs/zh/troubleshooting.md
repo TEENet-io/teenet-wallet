@@ -20,7 +20,7 @@
   # Alpine
   apk add sqlite-dev gcc musl-dev
   ```
-- 验证 Go 版本为 1.24+：`go version`
+- 验证 Go 版本为 1.25+：`go version`
 - 验证 CGo 已启用：`go env CGO_ENABLED` 应输出 `1`。如果输出 `0`，使用 `CGO_ENABLED=1 make build` 运行。CGo 默认启用，但某些环境可能会覆盖此设置。
 
 ---
