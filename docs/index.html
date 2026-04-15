@@ -74,6 +74,7 @@
 
     // Map EN page paths to ZH equivalents and vice versa
     var pageMap = {
+      'en/overview': 'zh/',
       'en/introduction': 'zh/introduction',
       'en/whitepaper': 'zh/whitepaper',
       'en/user-getting-started': 'zh/user-getting-started',
@@ -82,14 +83,30 @@
       'en/user-faq': 'zh/user-faq',
       'en/user-guide': 'zh/user-guide',
       'en/quick-start': 'zh/quick-start',
+      'en/installation': 'zh/',
+      'en/troubleshooting': 'zh/',
+      'en/architecture-overview': 'zh/',
+      'en/sdk-usage': 'zh/',
+      'en/signing-tee': 'zh/',
+      'en/howto-add-chain': 'zh/',
+      'en/howto-add-plugin-tool': 'zh/',
+      'en/howto-deploy': 'zh/',
       'en/authentication': 'zh/authentication',
       'en/wallets': 'zh/wallets',
       'en/transfers': 'zh/transfers',
+      'en/addressbook': 'zh/addressbook',
       'en/smart-contracts': 'zh/smart-contracts',
       'en/approvals': 'zh/approvals',
       'en/agent-integration': 'zh/agent-integration',
       'en/api-overview': 'zh/api-overview',
       'en/configuration': 'zh/configuration',
+      'en/error-codes': 'zh/',
+      'en/audit-log': 'zh/',
+      'en/chains-schema': 'zh/',
+      'en/data-model': 'zh/',
+      'en/contributing-process': 'zh/',
+      'en/coding-standards': 'zh/',
+      'en/community': 'zh/',
     };
     // Build reverse map
     var reverseMap = {};
@@ -127,10 +144,13 @@
       alias: {
         '/zh/.*/_sidebar.md': '/zh/_sidebar.md',
         '/_sidebar.md': '/_sidebar.md',
-        // Old URLs redirect to new user doc pages
+        // Redirects for removed/replaced pages
+        '/en/introduction.md': '/en/overview.md',
+        '/en/developer-guide.md': '/en/quick-start.md',
+        '/en/api-overview.md': '/en/error-codes.md',
         '/en/user-guide.md': '/en/user-getting-started.md',
         '/zh/user-guide.md': '/zh/user-getting-started.md',
-        '/en/product-guide.md': '/en/introduction.md',
+        '/en/product-guide.md': '/en/overview.md',
         '/zh/product-guide.md': '/zh/introduction.md',
       },
       coverpage: false,
