@@ -10,10 +10,7 @@ This page provides a mental model of how TEENet Wallet is structured, what the k
 |------|-----------|
 | **Wallet** | A chain-specific account backed by a TEE-managed key. Each wallet has one address, one key pair, and belongs to one user. |
 | **Chain** | A blockchain network (e.g. `ethereum`, `solana`, `avalanche-c`). Configured in `chains.json` or added at runtime. |
-| **Approval policy** | Per-wallet spending rules: a USD threshold (transactions above it require Passkey approval) and an optional daily limit. |
-| **Threshold** | The USD amount above which a transaction triggers a pending approval instead of signing immediately. |
-| **Daily limit** | The maximum USD value a wallet can send in a single UTC day. Resets at midnight UTC. |
-| **Contract whitelist** | A per-wallet list of smart contract addresses that are allowed for contract calls. Calls to unlisted contracts are rejected. |
+| **Approval policy** | Spending rules that control when a transaction requires Passkey approval. An approval policy includes a USD threshold (transactions above it require approval), an optional daily spending limit (resets at midnight UTC), and a contract whitelist (only listed contract addresses are allowed for contract calls). |
 | **API key** | A bearer token prefixed `ocw_` used by agents and automation. Can perform most operations, but sensitive actions (transfers above threshold, contract whitelist changes) create pending approvals that require Passkey confirmation. |
 | **Passkey session** | A bearer token prefixed `ps_` obtained through WebAuthn (hardware key or platform authenticator). Can do everything, including approving/rejecting pending requests and irreversible operations like wallet deletion. |
 | **TEENet service** | The backend infrastructure that manages threshold cryptography. In production this is a cluster of TEE nodes coordinated by `app-comm-consensus`. In development it is the mock server from `teenet-sdk/mock-server`. |
