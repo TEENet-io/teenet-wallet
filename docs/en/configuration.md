@@ -21,6 +21,3 @@ All configuration is via environment variables. No configuration files are requi
 | `MAX_USERS` | `500` | Maximum registered users, 0 = unlimited |
 
 RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Additional EVM chains can be added at runtime via `POST /api/chains` (Passkey required); these are persisted in the database and survive restarts.
-
----
-[Previous: Quick Start](/en/quick-start.md) | [Next: Authentication](/en/authentication.md)

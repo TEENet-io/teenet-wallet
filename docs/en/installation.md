@@ -144,6 +144,3 @@ curl -s http://localhost:8080/api/health
 **Create a wallet:** Generate an API key from Settings, then create a wallet via the API.
 
 See [Quick Start](quick-start.md) for the full step-by-step walkthrough.
-
----
-[Previous: Quick Start](quick-start.md) | [Next: Troubleshooting](troubleshooting.md)

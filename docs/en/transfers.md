@@ -115,6 +115,3 @@ If a request with the same idempotency key has already been processed, the walle
 - **Scope:** Per-user -- two different API keys for the same user share the same idempotency namespace.
 - **TTL:** 24 hours -- after that, the same key can be reused.
 - **Applies to:** `/transfer`, `/contract-call`, `/wrap-sol`, `/unwrap-sol`.
-
----
-[Previous: Wallet Management](/en/wallets.md) | [Next: Address Book](/en/addressbook.md)

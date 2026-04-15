@@ -114,6 +114,3 @@ If you run into any issues not covered here, contact your wallet administrator. 
 - What you expected to happen.
 - What actually happened (including any error messages).
 - Which browser and device you are using.
-
----
-[Previous: Web UI & Approvals](/en/user-approvals.md)

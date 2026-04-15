@@ -122,6 +122,3 @@ make test
 
 - [Installation & Setup](installation.md) -- full build options, Docker, environment variables
 - [Concepts](architecture-overview.md) -- understand the architecture
-
----
-[Previous: Overview](overview.md) | [Next: Installation](installation.md)

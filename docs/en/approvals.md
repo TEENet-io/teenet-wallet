@@ -135,6 +135,3 @@ All contract calls made via API key require Passkey approval. This is by design 
 Contract calls made via a Passkey session execute immediately (the human is already present).
 
 The convenience endpoints `approve-token` and `revoke-approval` also always require Passkey approval because they grant or revoke third-party spending access.
-
----
-[Previous: Smart Contracts](/en/smart-contracts.md) | [Next: AI Agent Integration](/en/agent-integration.md)

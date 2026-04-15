@@ -67,6 +67,3 @@ Ask your agent to run a quick test. On OpenClaw, type `/test`. The agent will cr
 7. **Whitelist a token** -- adds test USDC to your contract whitelist
 
 Testnet faucets: [Sepolia ETH](https://faucet.google.com/ethereum/sepolia) · [Solana Devnet](https://faucet.solana.com) · [Test USDC](https://faucet.circle.com)
-
----
-[Next: What You Can Do](/en/user-commands.md)

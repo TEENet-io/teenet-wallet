@@ -66,6 +66,3 @@ Click the gear icon to open **Security & API Control**:
 - **API Keys** — generate new keys (enter a label and click **Generate**), view existing keys with their creation date and status, or revoke a key by clicking the revoke icon. Each key shows a masked preview (e.g., `ocw_84b888...`).
 - **Address Book** — save addresses with nicknames for quick transfers. Click **Add Address** to create a new entry.
 - **Danger Zone** — **Logout Global** signs out all sessions. **Delete Account** permanently removes your account and all data.
-
----
-[Previous: What You Can Do](/en/user-commands.md) | [Next: FAQ](/en/user-faq.md)

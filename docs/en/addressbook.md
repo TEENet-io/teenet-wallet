@@ -81,6 +81,3 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/WALLET_ID/transfer" \
 ```
 
 The wallet automatically detects that `alice` is a nickname (not a raw address) and resolves it to the stored address for the wallet's chain. If no matching entry is found, the request fails with an error.
-
----
-[Previous: Transfers](/en/transfers.md) | [Next: Smart Contracts](/en/smart-contracts.md)

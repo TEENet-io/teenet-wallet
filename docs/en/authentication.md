@@ -94,6 +94,3 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets \
 ```
 
 API key requests do not require the CSRF header.
-
----
-[Previous: Configuration](/en/configuration.md) | [Next: Wallet Management](/en/wallets.md)

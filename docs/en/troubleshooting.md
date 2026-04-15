@@ -109,6 +109,3 @@ make frontend
 ```
 
 Frontend files must be in the `./frontend/` directory. Restart the wallet after building.
-
----
-[Previous: Installation](installation.md) | [Next: Configuration](configuration.md)
