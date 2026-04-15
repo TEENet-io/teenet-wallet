@@ -25,20 +25,6 @@ Common issues and how to fix them.
 
 ---
 
-## Wallet stuck in "creating"
-
-**Problem:** A wallet stays in `creating` status and never becomes `ready`.
-
-**Cause:** EVM wallets require distributed key generation across TEE nodes, which takes 1-2 minutes. If it takes longer, the mock service may not be reachable.
-
-**Fix:**
-
-- Wait up to 2 minutes -- this is normal for ECDSA key generation.
-- Verify the mock service is running: `curl -s http://localhost:8089/api/health`
-- Verify `SERVICE_URL` points to the mock service. If you started the mock service on a custom port, make sure the wallet was started with the matching `SERVICE_URL`.
-
----
-
 ## Connection refused on :8089
 
 **Problem:** The wallet logs connection errors to port 8089.
