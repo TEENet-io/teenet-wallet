@@ -60,6 +60,39 @@ TEENet Wallet is a single Go binary with a clear internal layering:
 
 ---
 
+## How Signing Works
+
+```
+ AI Agent / App                        Human (Browser)
+     |  API Key (ocw_*)                    |  Passkey (ps_*)
+     v                                     v
++--------------------------------------------------------------+
+|  TEENet Wallet  (:8080)                                      |
+|  REST API · approval policies · contract whitelist            |
++--------------------------------------------------------------+
+     |  TEENet SDK
+     v
++--------------------------------------------------------------+
+|  app-comm-consensus  (:8089)                                 |
+|  M-of-N voting coordination                                  |
++--------------------------------------------------------------+
+     |  gRPC + mutual TLS
+     v
++--------------------------------------------------------------+
+|  TEE-DAO Key Management Cluster  (3-5 nodes)                 |
+|  Threshold signing · keys never leave TEE hardware            |
++--------------------------------------------------------------+
+```
+
+1. Client sends a request (API key or Passkey).
+2. Wallet checks whitelist, threshold, and daily limit.
+3. If approval is needed, the request enters a pending state until the owner confirms with Passkey.
+4. Wallet routes the signing request through the TEE cluster.
+5. TEE nodes produce a threshold signature — the full key is never reconstructed.
+6. Wallet broadcasts the signed transaction and returns the hash.
+
+---
+
 ## The Wallet and TEENet Service Relationship
 
 The wallet is an **application** built on top of the TEENet service. The relationship is straightforward:
