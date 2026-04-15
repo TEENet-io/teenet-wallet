@@ -147,7 +147,7 @@ curl -s "${TEE_WALLET_URL}/api/audit/logs?page=1&limit=20" \
 1. **检查健康状态**：调用 `GET /api/health` 确认服务和数据库正常
 2. **查看审计日志**：调用 `GET /api/audit/logs` 查看操作历史和错误详情
 3. **确认链配置**：调用 `GET /api/chains` 确认目标链已加载
-4. **检查 app-comm-consensus**：确保 `CONSENSUS_URL` 对应的节点正常运行且可达
+4. **检查 TEENet 服务**：确保 `SERVICE_URL` 对应的节点正常运行且可达
 5. **结构化日志**：服务以 JSON 格式输出日志（slog），可通过日志聚合工具分析
 
 ---

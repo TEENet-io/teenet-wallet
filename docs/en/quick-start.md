@@ -4,7 +4,7 @@
 
 - **Go 1.24+** (for building from source)
 - **SQLite3 development headers** (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
-- A running **TEENet mesh node** with `app-comm-consensus` on port 8089
+- A running **TEENet mesh node** exposing the TEENet service on port 8089
 
 ### Installation
 
@@ -21,7 +21,7 @@ Or use Docker:
 ```bash
 make docker
 docker run -p 8080:8080 \
-  -e CONSENSUS_URL=http://host.docker.internal:8089 \
+  -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```

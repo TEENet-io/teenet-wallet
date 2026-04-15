@@ -6,7 +6,7 @@
 
 ## 构建与运行
 
-**前置条件：** Go 1.24+、SQLite3 开发头文件、一个运行中的 `app-comm-consensus` 节点（端口 8089）。
+**前置条件：** Go 1.24+、SQLite3 开发头文件、一个运行中的 TEENet 服务节点（端口 8089）。
 
 ```bash
 # 编译
@@ -18,7 +18,7 @@ make build
 # 或用 Docker
 make docker
 docker run -p 8080:8080 \
-  -e CONSENSUS_URL=http://host.docker.internal:8089 \
+  -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
@@ -91,7 +91,7 @@ teenet-wallet/
 - **Handler 直接用 GORM** -- 项目足够简单，不需要 Repository 层。
 - **GORM AutoMigrate** -- Schema 变更在启动时自动应用，没有迁移文件。
 - **单文件前端** -- `frontend/index.html` 是完整的 SPA，没有构建工具链。通过 `gin.Static` 嵌入。
-- **TEENet SDK** -- 签名通过 `github.com/TEENet-io/teenet-sdk/go` 发送到本地 `app-comm-consensus` 节点。
+- **TEENet SDK** -- 签名通过 `github.com/TEENet-io/teenet-sdk/go` 发送到本地 TEENet 服务节点。
 
 ---
 
@@ -111,24 +111,24 @@ go test ./handler/ -run TestTransfer_ERC20 -v
 make lint
 ```
 
-测试使用内存 SQLite（`file::memory:`），不需要运行中的 consensus 节点 -- SDK 客户端在测试中为 nil，签名调用预期失败（测试验证签名前的行为）。
+测试使用内存 SQLite（`file::memory:`），不需要运行中的 TEENet 服务节点 -- SDK 客户端在测试中为 nil，签名调用预期失败（测试验证签名前的行为）。
 
-### Mock Consensus Server（模拟共识服务器）
+### Mock TEENet Service（模拟 TEENet 服务）
 
-如果本地没有真实的 `app-comm-consensus` + TEE-DAO 集群，可以使用 [teenet-sdk](https://github.com/TEENet-io/teenet-sdk) 自带的 mock server（位于 [`mock-server/`](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server)）。它实现了完整的 consensus HTTP API 并提供真实的密码学签名，只需将 `CONSENSUS_URL` 指向它，钱包就能像对接生产环境一样工作。
+如果本地没有真实的 TEENet 服务，可以使用 [teenet-sdk](https://github.com/TEENet-io/teenet-sdk) 自带的 mock server（位于 [`mock-server/`](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server)）。它实现了完整的 TEENet HTTP API 并提供真实的密码学签名，只需将 `SERVICE_URL` 指向它，钱包就能像对接生产环境一样工作。
 
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
 go build && ./mock-server                                  # 127.0.0.1:8089
 # 如需自定义端口/绑定：MOCK_SERVER_PORT=xxxx MOCK_SERVER_BIND=0.0.0.0 ./mock-server
-# 注意：改了端口后，下面的 CONSENSUS_URL 也要同步更新
+# 注意：改了端口后，下面的 SERVICE_URL 也要同步更新
 ```
 
 然后运行钱包：
 
 ```bash
-CONSENSUS_URL=http://127.0.0.1:8089 ./teenet-wallet
+SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
 
 **提供的能力（共 34 个端点）：**

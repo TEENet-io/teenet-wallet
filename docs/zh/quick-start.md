@@ -6,7 +6,7 @@
 |--------|----------|
 | Go | 1.24 或更高版本 |
 | SQLite3 开发头文件 | Debian/Ubuntu: `apt-get install libsqlite3-dev` |
-| TEENet Mesh 节点 | 需要运行中的 app-comm-consensus（端口 8089） |
+| TEENet Mesh 节点 | 需要运行中的 TEENet 服务（端口 8089） |
 | Docker（可选） | 用于容器化部署 |
 
 ### 安装部署
@@ -33,7 +33,7 @@ make docker
 
 # 运行容器
 docker run -p 8080:8080 \
-  -e CONSENSUS_URL=http://host.docker.internal:8089 \
+  -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```

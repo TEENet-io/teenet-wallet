@@ -56,7 +56,7 @@ func main() {
 
 	raiseFileLimit()
 
-	consensusURL := envOrDefault("CONSENSUS_URL", "http://localhost:8089")
+	serviceURL := envOrDefault("SERVICE_URL", "http://localhost:8089")
 	host := envOrDefault("HOST", "0.0.0.0")
 	port := envOrDefault("PORT", "8080")
 	dataDir := envOrDefault("DATA_DIR", "/data")
@@ -141,7 +141,7 @@ func main() {
 		RequestTimeout:     3 * time.Minute, // ECDSA DKG can take 1-2 min
 		PendingWaitTimeout: 3 * time.Minute,
 	}
-	sdkClient := sdk.NewClientWithOptions(consensusURL, opts)
+	sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
 	if err := sdkClient.SetDefaultAppInstanceIDFromEnv(); err != nil {
 		slog.Warn("APP_INSTANCE_ID not set — SDK signing will require explicit app instance ID")
 	}
@@ -389,7 +389,7 @@ func main() {
 	addr := host + ":" + port
 	slog.Info("server starting",
 		"addr", addr,
-		"consensus_url", consensusURL,
+		"service_url", serviceURL,
 		"base_url", baseURL,
 		"chains_file", chainsFile,
 		"chains_loaded", model.ChainsLen(),
