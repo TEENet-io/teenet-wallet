@@ -56,6 +56,3 @@ Some agent platforms support shortcut commands. For example, on [OpenClaw](https
 | `/chains` | Available blockchains |
 
 You can always say the same thing in plain language instead.
-
----
-[Previous: Getting Started](/en/user-getting-started.md) | [Next: Web UI & Approvals](/en/user-approvals.md)

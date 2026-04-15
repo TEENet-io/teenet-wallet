@@ -86,6 +86,3 @@ curl -s -X POST ${TEE_WALLET_URL}/api/chains \
 ```
 
 Custom chains are persisted in the database and survive restarts. They can be removed with `DELETE /api/chains/:name` (fails if any wallet exists on that chain).
-
----
-[Previous: Authentication](/en/authentication.md) | [Next: Transfers](/en/transfers.md)
