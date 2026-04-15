@@ -73,34 +73,6 @@ In typical wallet deployments, the application uses **direct** mode. The wallet'
 
 ---
 
-## Mock Service Simulation
-
-For local development, the `teenet-sdk/mock-server` faithfully simulates the TEENet service:
-
-- Implements the same HTTP API (34 endpoints covering signing, key management, Passkey flows, and administration).
-- Uses **real cryptographic operations** -- ECDSA signatures on secp256k1/secp256r1, Ed25519 signatures.
-- Supports all three signing modes (direct, voting, approval) via different pre-configured `app_instance_id` values.
-- Ships with pre-seeded test applications and Passkey users for immediate testing.
-
-**Key difference from production:** the mock server uses **deterministic keys** derived from predictable seeds. This makes tests reproducible but means the mock server provides no actual security. Never use it in a production deployment.
-
-To run:
-
-```bash
-cd teenet-sdk/mock-server
-go build && ./mock-server              # default: 127.0.0.1:8089
-```
-
-Then point the wallet at it:
-
-```bash
-SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
-```
-
-See the [TEENet SDK mock-server documentation](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server) for the full list of endpoints, pre-configured test applications, and hashing responsibilities.
-
----
-
 ## Next Steps
 
 - [SDK Usage](sdk-usage.md) -- how the wallet calls the SDK in code
