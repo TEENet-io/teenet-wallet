@@ -1,96 +1,99 @@
 # 快速开始
 
-### 环境要求
+从零到运行钱包只需 5 分钟。每个步骤都可以直接复制粘贴。
 
-| 依赖项 | 版本/说明 |
-|--------|----------|
-| Go | 1.24 或更高版本 |
-| SQLite3 开发头文件 | Debian/Ubuntu: `apt-get install libsqlite3-dev` |
-| TEENet Mesh 节点 | 需要运行中的 TEENet 服务（端口 8089） |
-| Docker（可选） | 用于容器化部署 |
+---
 
-### 安装部署
+## 前提条件
 
-**方式一：源码编译**
+- **Go 1.24+**
+- **SQLite3 开发头文件**
+
+为你的平台安装 SQLite 头文件：
 
 ```bash
-# 克隆仓库
-git clone <repository-url>
+# Debian / Ubuntu
+sudo apt-get install libsqlite3-dev
+
+# macOS (已包含在 Xcode Command Line Tools 中)
+xcode-select --install
+
+# Alpine
+apk add sqlite-dev gcc musl-dev
+```
+
+---
+
+## 1. 启动 mock 服务
+
+Mock 服务在开发期间替代 TEENet 服务。打开一个终端：
+
+```bash
+git clone https://github.com/TEENet-io/teenet-sdk.git
+cd teenet-sdk/mock-server
+go build && ./mock-server
+```
+
+预期输出：
+
+```
+Mock server listening on 127.0.0.1:8089
+```
+
+保持此终端运行。
+
+---
+
+## 2. 构建并运行钱包
+
+打开一个**新终端**：
+
+```bash
+git clone https://github.com/TEENet-io/teenet-wallet.git
 cd teenet-wallet
-
-# 编译
 make build
-
-# 启动（默认监听 0.0.0.0:8080）
-./teenet-wallet
+SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
 
-**方式二：Docker 部署**
+预期输出：
+
+```
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+```
+
+---
+
+## 3. 验证运行状态
 
 ```bash
-# 构建镜像
-make docker
-
-# 运行容器
-docker run -p 8080:8080 \
-  -e SERVICE_URL=http://host.docker.internal:8089 \
-  -v wallet-data:/data \
-  teenet-wallet:latest
+curl -s http://localhost:8080/api/health
 ```
 
-服务启动后，访问 [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet) 即可看到内置 Web UI。
-
-### 创建第一个钱包
-
-**第 1 步：注册账户并获取 API Key**
-
-通过 Web UI（[`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)）完成 Passkey 注册，然后在界面中生成 API Key。
-
-或者通过 API 注册流程：
-
-```bash
-# 开始注册（获取 WebAuthn 挑战）
-curl -s -X POST ${TEE_WALLET_URL}/api/auth/passkey/register/begin \
-  -H "Content-Type: application/json" \
-  -d '{"display_name": "my-account"}'
-
-# 完成注册后，登录并生成 API Key（需要 Passkey 会话）
-# 建议通过 Web UI 完成此步骤
-```
-
-**第 2 步：查看支持的链**
-
-```bash
-export TEE_WALLET_URL=https://test.teenet.io/instance/wallet
-export API_KEY=ocw_your_api_key_here
-
-curl -s "${TEE_WALLET_URL}/api/chains"
-```
-
-返回示例：
+预期响应：
 
 ```json
 {
-  "success": true,
-  "chains": [
-    {"name": "ethereum", "label": "Ethereum Mainnet", "currency": "ETH", "family": "evm"},
-    {"name": "solana", "label": "Solana Mainnet", "currency": "SOL", "family": "solana"},
-    {"name": "sepolia", "label": "Sepolia Testnet", "currency": "ETH", "family": "evm"}
-  ]
+  "status": "ok"
 }
 ```
 
-**第 3 步：创建钱包**
+---
+
+## 4. 创建你的第一个钱包
+
+在浏览器中打开 [http://localhost:8080](http://localhost:8080)。使用 Passkey 注册，然后进入 **Settings** 生成 API key。密钥以 `ocw_` 开头，仅显示一次——请妥善保存。
+
+然后创建钱包：
 
 ```bash
-# 创建 Sepolia 测试网钱包
-curl -s -X POST "${TEE_WALLET_URL}/api/wallets" \
+export API_KEY="ocw_..."
+curl -s -X POST http://localhost:8080/api/wallets \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"chain": "sepolia", "label": "My Test Wallet"}'
+  -d '{"chain": "sepolia", "label": "Test Wallet"}'
 ```
 
-返回示例：
+预期响应：
 
 ```json
 {
@@ -98,63 +101,24 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets" \
   "wallet": {
     "id": "8a2fbc16-faf4-451a-be34-9fc5c49cde00",
     "chain": "sepolia",
-    "address": "0x1234...abcd",
-    "label": "My Test Wallet",
+    "address": "0x1234abcd5678ef90...",
+    "label": "Test Wallet",
     "status": "ready"
   }
 }
 ```
 
-> 注意：以太坊（ECDSA）钱包创建涉及分布式密钥生成（DKG），可能需要 1-2 分钟。Solana 钱包通常即时完成。
+---
 
-### 发送第一笔交易
-
-```bash
-WALLET_ID=8a2fbc16-faf4-451a-be34-9fc5c49cde00
-
-# 查询余额
-curl -s "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/balance" \
-  -H "Authorization: Bearer ${API_KEY}"
-
-# 发送 ETH（确保钱包有足够余额）
-curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "to": "0xRecipientAddress...",
-    "amount": "0.01"
-  }'
-```
-
-成功返回：
-
-```json
-{
-  "status": "completed",
-  "tx_hash": "0xabc123...",
-  "chain": "sepolia",
-  "amount": "0.01",
-  "currency": "ETH"
-}
-```
-
-若金额超过审批阈值，返回 `"status": "pending_approval"`，需在 Web UI 中通过 Passkey 审批。
-
-### 设置审批策略
+## 5. 运行测试套件
 
 ```bash
-# 设置 USD 审批阈值和日限额
-curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/policy" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "threshold_usd": 100,
-    "daily_limit_usd": 5000,
-    "enabled": true
-  }'
+make test
 ```
-
-> 通过 API Key 设置策略会创建一个待审批请求（HTTP 202），钱包所有者需在 Web UI 中通过 Passkey 确认后策略才会生效。通过 Passkey 会话设置则立即生效。
 
 ---
-[上一页: 简介](/zh/introduction.md) | [下一页: 配置参考](/zh/configuration.md)
+
+## 开始使用
+
+- [安装与配置](installation.md) -- 完整构建选项、Docker、环境变量
+- [核心概念](architecture-overview.md) -- 了解架构
