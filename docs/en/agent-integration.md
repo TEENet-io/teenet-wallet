@@ -20,11 +20,9 @@ TEENet Wallet is designed to serve as the custody layer for AI agents. Two integ
 
 **Always include the `token` field for token transfers.** Omitting it sends native ETH/SOL instead, which is an irreversible mistake.
 
-**Check the whitelist before token operations.** Call `GET /api/wallets/:id/contracts` before sending tokens. If the contract is not whitelisted, propose adding it (which creates a pending approval).
+**Check the whitelist before token operations.** Call `GET /api/wallets/:id/contracts` before sending tokens. If the contract is not whitelisted, the transfer will be rejected with HTTP 403. To add a contract, call `POST /api/wallets/:id/contracts` (which creates a pending approval via API key).
 
-**Poll approvals with countdown.** When waiting for Passkey approval, poll `GET /api/approvals/:id` every 15 seconds and show the remaining time. Stop after 25 minutes.
-
-**Use `amount_usd` for contract calls.** When calling `/contract-call` for operations that transfer value, always include the approximate USD value so threshold and daily-limit policies are enforced.
+**Poll approvals with countdown.** When waiting for Passkey approval, poll `GET /api/approvals/:id` every 15 seconds and show the remaining time. Approvals expire after 24 hours by default (configurable via `APPROVAL_EXPIRY_MINUTES`).
 
 **Fetch fresh wallet lists.** Before showing balances or account-wide views, always re-fetch `GET /api/wallets` to ensure the list is current.
 
@@ -94,18 +92,3 @@ User (chat)  →  Agent  →  Plugin tool  →  Wallet backend
 - **All write paths check approval policies** on the backend; the plugin cannot bypass USD thresholds or daily limits.
 - **SSRF protection** on custom chain RPC URLs (private IPs and cloud metadata addresses are blocked backend-side).
 
----
-
-## Web UI
-
-TEENet Wallet includes a built-in web interface served at the root URL (e.g., [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)). The web UI provides:
-
-- **Account management:** Passkey registration, login, and session management.
-- **Wallet dashboard:** Create, view, rename, and delete wallets. View addresses, balances, and chain information.
-- **Transfer interface:** Send native currency and tokens with a visual form.
-- **Contract whitelist management:** Add, update, and remove whitelisted contracts with an interactive table.
-- **Approval queue:** Review pending approval requests and approve or reject them with hardware Passkey authentication.
-- **API key management:** Generate and revoke API keys for programmatic access.
-- **Policy configuration:** Set and manage USD-denominated approval thresholds and daily limits.
-
-The web UI is served with a restrictive Content Security Policy and additional security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`).

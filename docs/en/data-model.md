@@ -7,7 +7,6 @@ SQLite with WAL mode. Tables are auto-migrated on startup via GORM:
 | Table | Model | Purpose |
 |-------|-------|---------|
 | `users` | `User` | Registered users |
-| `passkey_credentials` | `PasskeyCredential` | WebAuthn credentials |
 | `api_keys` | `APIKey` | API keys (hashed, prefixed `ocw_`) |
 | `wallets` | `Wallet` | Wallets with chain, address, public key |
 | `approval_policies` | `ApprovalPolicy` | USD thresholds and daily limits |
@@ -16,7 +15,6 @@ SQLite with WAL mode. Tables are auto-migrated on startup via GORM:
 | `audit_logs` | `AuditLog` | Full operation audit trail |
 | `idempotency_records` | `IdempotencyRecord` | Idempotency-Key cache (24h TTL) |
 | `address_book_entries` | `AddressBookEntry` | Saved contacts per user/chain (unique nickname) |
-| `custom_chains` | `CustomChain` | User-added EVM chains |
 
 ## GORM Patterns
 
@@ -27,5 +25,4 @@ SQLite with WAL mode. Tables are auto-migrated on startup via GORM:
 ## Chain Configuration
 
 - **Built-in chains** are loaded from `chains.json` at startup.
-- **Custom chains** added via `POST /api/chains` are stored in the `custom_chains` table and merged with built-in chains at load time.
 - See [chains.json Schema](chains-schema.md) for the full field reference.
