@@ -25,7 +25,7 @@ type Wallet struct {
 	Address   string    `json:"address" gorm:"size:100;index"`        // chain address
 	Label     string    `json:"label" gorm:"size:100"`
 	Curve     string    `json:"curve"`    // secp256k1, ed25519
-	Protocol  string    `json:"protocol"` // ecdsa, schnorr
+	Protocol  string    `json:"protocol"` // ecdsa, eddsa, schnorr, schnorr-bip340
 	Status    string    `json:"status" gorm:"default:'creating'"` // creating, ready, error
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -42,8 +42,8 @@ func (w *Wallet) BeforeCreate(tx *gorm.DB) error {
 type ChainConfig struct {
 	Name     string `json:"name"`     // unique key, e.g. "sepolia"
 	Label    string `json:"label"`    // display name, e.g. "Sepolia Testnet"
-	Protocol string `json:"protocol"` // "ecdsa" | "schnorr"
-	Curve    string `json:"curve"`    // "secp256k1" | "ed25519"
+	Protocol string `json:"protocol"` // "ecdsa" | "eddsa" | "schnorr" | "schnorr-bip340"
+	Curve    string `json:"curve"`    // "secp256k1" | "ed25519" | "secp256r1"
 	Currency string `json:"currency"` // e.g. "ETH", "SOL"
 	Family   string `json:"family"`   // "evm" | "solana"
 	RPCURL   string `json:"rpc_url"`  // JSON-RPC endpoint
@@ -94,11 +94,11 @@ func ChainsLen() int {
 // defaultChains is the fallback when no chains.json is present.
 var defaultChains = []ChainConfig{
 	{Name: "ethereum", Label: "Ethereum Mainnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-rpc.publicnode.com"},
-	{Name: "solana", Label: "Solana Mainnet", Protocol: "schnorr", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.mainnet-beta.solana.com"},
+	{Name: "solana", Label: "Solana Mainnet", Protocol: "eddsa", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.mainnet-beta.solana.com"},
 	{Name: "sepolia", Label: "Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-sepolia-rpc.publicnode.com"},
 	{Name: "holesky", Label: "Holesky Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-holesky-rpc.publicnode.com"},
 	{Name: "bsc-testnet", Label: "BSC Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "tBNB", Family: "evm", RPCURL: "https://bsc-testnet-rpc.publicnode.com"},
-	{Name: "solana-devnet", Label: "Solana Devnet", Protocol: "schnorr", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.devnet.solana.com"},
+	{Name: "solana-devnet", Label: "Solana Devnet", Protocol: "eddsa", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.devnet.solana.com"},
 	{Name: "optimism", Label: "Optimism Mainnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://optimism-rpc.publicnode.com"},
 	{Name: "base-sepolia", Label: "Base Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://base-sepolia-rpc.publicnode.com"},
 }

@@ -4,7 +4,7 @@ go 1.25.9
 
 require (
 	filippo.io/edwards25519 v1.2.0
-	github.com/TEENet-io/teenet-sdk/go v0.0.0-20260413081050-ebb27dac83d9
+	github.com/TEENet-io/teenet-sdk/go v0.0.0-20260415033921-7825b4227898
 	github.com/ethereum/go-ethereum v1.17.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
