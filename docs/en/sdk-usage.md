@@ -40,10 +40,10 @@ Key generation is called during wallet creation in `handler/wallet.go`. The targ
 keyResult, err := sdkClient.GenerateKey(ctx, scheme, curve)
 ```
 
-| Chain family | Scheme | Curve | Example | Typical duration |
-|---|---|---|---|---|
-| EVM (Ethereum, Avalanche, etc.) | `ecdsa` | `secp256k1` | `GenerateKey(ctx, "ecdsa", "secp256k1")` | 1--2 minutes |
-| Solana | `ed25519` | `ed25519` | `GenerateKey(ctx, "ed25519", "ed25519")` | Near-instant |
+| Chain family | Scheme | Curve | Example |
+|---|---|---|---|
+| EVM (Ethereum, Avalanche, etc.) | `ecdsa` | `secp256k1` | `GenerateKey(ctx, "ecdsa", "secp256k1")` |
+| Solana | `ed25519` | `ed25519` | `GenerateKey(ctx, "ed25519", "ed25519")` |
 
 > **Note:** The SDK key generation interface is being updated. The current code may still use `GenerateECDSAKey` / `GenerateSchnorrKey`. Verify the actual function signature against the code.
 
