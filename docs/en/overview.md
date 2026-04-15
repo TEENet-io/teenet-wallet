@@ -19,8 +19,8 @@ Set up your wallet, manage your assets, and approve transactions.
 
 Build on the wallet API, integrate with agent platforms, or contribute to the codebase.
 
-- [Quick Start](en/quick-start.md) — Zero to running in 5 minutes
-- [Architecture Overview](en/architecture-overview.md) — How the system works
-- [API Reference](en/authentication.md) — Full endpoint reference
-- [Agent Integration](en/agent-integration.md) — Best practices for agent platforms
-- [Contributing](en/contributing-process.md) — Contribution process and coding standards
+- [Quick Start](en/quick-start.md) — Get Started
+- [Architecture Overview](en/architecture-overview.md) — Concepts
+- [Add a Chain](en/howto-add-chain.md) — How-To Guides
+- [Agent Integration](en/agent-integration.md) — Agent Integration
+- [Contribution Process](en/contributing-process.md) — Contributing
