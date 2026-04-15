@@ -82,18 +82,6 @@ TEENet Wallet is a single Go binary with a clear internal layering:
 
 ---
 
-## The Wallet and TEENet Service Relationship
-
-The wallet is an **application** built on top of the TEENet service. The relationship is straightforward:
-
-- The **TEENet SDK** (`github.com/TEENet-io/teenet-sdk/go`) is the interface between them. The wallet imports it as a Go library and calls methods like `GenerateKey`, `Sign`, and the Passkey family of functions.
-- In **production**, the TEENet service runs a cluster of TEE nodes with threshold cryptography. The SDK talks to the `app-comm-consensus` coordinator over HTTP.
-- In **development**, the mock server (`teenet-sdk/mock-server`) simulates the same interactions with real cryptographic operations but deterministic keys. Point `SERVICE_URL` at it and the wallet behaves identically.
-
-The wallet never touches private keys directly. It sends unsigned messages to the SDK, receives signatures back, and broadcasts the signed transaction to the blockchain.
-
----
-
 ## Core Workflows
 
 ### Create a wallet
