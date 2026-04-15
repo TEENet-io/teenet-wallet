@@ -144,29 +144,6 @@ Pending approval appears in Web UI (via SSE)
 
 ---
 
-## Dual Authentication Model
-
-TEENet Wallet uses two authentication modes that share the same API endpoints:
-
-### API keys (`ocw_` prefix)
-
-- Designed for **agents, bots, and automation**.
-- Passed as `Authorization: Bearer ocw_...`.
-- Can create wallets, send transfers, query balances, and manage the address book.
-- **Cannot** approve or reject pending requests, delete wallets, or delete accounts.
-- Transfers above the approval threshold automatically create a pending approval that must be confirmed with a Passkey.
-
-### Passkey sessions (`ps_` prefix)
-
-- Designed for **humans in the browser**.
-- Obtained through WebAuthn login (hardware key or platform authenticator).
-- Can do everything API keys can do, **plus** approve/reject pending requests, delete wallets, and delete user accounts.
-- State-changing requests require a valid `X-CSRF-Token` header.
-
-This separation ensures that even if an API key is compromised, an attacker cannot authorize high-value transactions or perform destructive operations without physical access to the user's Passkey device.
-
----
-
 ## Feature Comparison
 
 | Traditional Wallet | TEENet Wallet |
