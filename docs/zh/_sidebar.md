@@ -23,13 +23,15 @@
     - [添加插件工具](/zh/howto-add-plugin-tool.md)
     - [部署到生产环境](/zh/howto-deploy.md)
 
-  - **参考**
+  - **API 参考**
     - [认证体系](/zh/authentication.md)
     - [钱包管理](/zh/wallets.md)
     - [转账](/zh/transfers.md)
     - [地址簿](/zh/addressbook.md)
     - [智能合约交互](/zh/smart-contracts.md)
     - [审批系统](/zh/approvals.md)
+
+  - **参考**
     - [配置参考](/zh/configuration.md)
     - [错误码与状态码](/zh/error-codes.md)
     - [审计日志](/zh/audit-log.md)

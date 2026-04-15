@@ -23,13 +23,15 @@
     - [Add a Plugin Tool](en/howto-add-plugin-tool.md)
     - [Deploy to Production](en/howto-deploy.md)
 
-  - **Reference**
+  - **API Reference**
     - [Authentication](en/authentication.md)
     - [Wallets](en/wallets.md)
     - [Transfers](en/transfers.md)
     - [Address Book](en/addressbook.md)
     - [Smart Contracts](en/smart-contracts.md)
     - [Approval System](en/approvals.md)
+
+  - **Reference**
     - [Configuration](en/configuration.md)
     - [Error Codes & Status Codes](en/error-codes.md)
     - [Audit Log](en/audit-log.md)
