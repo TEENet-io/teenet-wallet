@@ -142,6 +142,21 @@ Pending approval appears in Web UI (via SSE)
   SDK Sign(tx, keyName) ──► Broadcast ──► Return tx hash
 ```
 
+### Set approval policy
+
+```
+PUT /api/wallets/:id/policy {threshold_usd, daily_limit_usd, enabled}
+        │
+        ▼
+  Called via API key? ─── yes ──► Save as pending approval
+        │                         (policy changes require
+        │                          Passkey confirmation)
+        ▼
+  Called via Passkey ──► Apply policy immediately
+```
+
+Without a policy, all transfers sign immediately. Once set, transfers above the threshold or exceeding the daily limit require Passkey approval.
+
 ---
 
 ## Why TEENet Wallet for Agents?
