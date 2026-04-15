@@ -746,7 +746,12 @@ func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessio
 		if res != nil && res.Error != "" {
 			errMsg = res.Error
 		}
-		jsonError(c, http.StatusUnauthorized, errMsg)
+		// 403, not 401: the session is still valid, the user just failed the
+		// per-operation fresh-passkey challenge. 401 would make the frontend
+		// treat this as session expiry and force a logout — but the user
+		// should stay logged in and retry the sensitive action (e.g. wallet
+		// delete).
+		jsonError(c, http.StatusForbidden, errMsg)
 		return false
 	}
 	return true

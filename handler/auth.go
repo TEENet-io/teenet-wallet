@@ -288,10 +288,21 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 		return
 	}
 
+	// Auto-login: issue a session token so the user doesn't have to do a
+	// separate passkey login right after registration. On Android, Google
+	// Password Manager has a 1-3 second indexing delay after credential
+	// creation, so an immediate discoverable login often returns empty.
+	// Issuing the session here sidesteps that race entirely.
+	sessionToken := "ps_" + randomHex(24)
+	csrfToken := h.sessions.Set(sessionToken, user.ID, 24*time.Hour)
+	writeAuditLog(h.db, user.ID, "login", "success", "passkey_register", c.ClientIP(), nil, nil, "")
+
 	c.JSON(http.StatusOK, gin.H{
-		"success":  true,
-		"user_id":  user.ID,
-		"username": user.Username,
+		"success":       true,
+		"user_id":       user.ID,
+		"username":      user.Username,
+		"session_token": sessionToken,
+		"csrf_token":    csrfToken,
 	})
 }
 

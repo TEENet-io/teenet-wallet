@@ -182,16 +182,21 @@ func (s *EmailVerificationService) SendCode(rawEmail string) error {
 	return txErr
 }
 
-// VerifyCode checks the user-supplied code against the most recent unverified
-// row for the email. On success it sets verified_at and returns a fresh
-// verification_id that can later be passed to PasskeyRegistrationBegin /
-// PasskeyRegistrationVerify.
+// VerifyCode checks the user-supplied code against the most recent
+// non-consumed row for the email. On first success it sets verified_at and
+// returns a fresh verification_id. Subsequent calls with the same correct
+// code return the existing verification_id (idempotent), which lets the
+// user retry the downstream passkey ceremony without having to request a
+// new code — important because the passkey "save to…" dialog can fail for
+// device-local reasons (biometric cancelled, wrong provider picked, etc.).
 func (s *EmailVerificationService) VerifyCode(rawEmail, code string) (string, error) {
 	email := NormalizeEmail(rawEmail)
 	now := time.Now()
 
 	var row model.EmailVerification
-	err := s.db.Where("email = ? AND verified_at IS NULL", email).
+	// Match any non-consumed row (verified or not) so that re-verifying with
+	// the same code is idempotent as long as the row hasn't been used yet.
+	err := s.db.Where("email = ? AND consumed_at IS NULL", email).
 		Order("created_at DESC").
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -213,6 +218,12 @@ func (s *EmailVerificationService) VerifyCode(rawEmail, code string) (string, er
 	if HashCode(code) != row.CodeHash {
 		s.db.Model(&row).Update("attempts", row.Attempts+1)
 		return "", ErrCodeInvalid
+	}
+
+	// Idempotent path: row already verified and still usable — just return
+	// the existing verification_id.
+	if row.VerifiedAt != nil && row.VerificationID != nil && *row.VerificationID != "" {
+		return *row.VerificationID, nil
 	}
 
 	vid := GenerateVerificationID()
