@@ -47,7 +47,7 @@ Private keys are sharded across independent TEE nodes, never exported, and the h
 - **Address book** -- nickname-based transfers with per-chain validation
 - **Agent-ready** -- [OpenClaw](https://openclaw.ai) plugin and skill integration, idempotent transfers, SSE event stream, audit logging
 
-See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/introduction) for details.
+See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/overview) for details.
 
 ## Quick Start
 
@@ -55,15 +55,20 @@ See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/intr
 
 - Go 1.25+
 - SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
+- A TEENet service endpoint (`teenet-sdk/mock-server` for local development)
 
 ### Build and Run
 
 ```bash
+git submodule update --init --recursive
+make frontend
 make build
-./teenet-wallet
+SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
 
-The wallet service starts on `http://0.0.0.0:8080` by default.
+The wallet service starts on `http://0.0.0.0:8080` by default. Open `http://localhost:8080`, register a Passkey, and generate an API key.
+
+For the complete local setup, including starting `teenet-sdk/mock-server` and creating your first wallet, see the [full Quick Start guide](https://teenet-io.github.io/teenet-wallet/#/en/quick-start).
 
 ### Docker
 
@@ -74,6 +79,8 @@ docker run -p 8080:8080 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
+
+The Docker image still requires a reachable TEENet service endpoint via `SERVICE_URL`.
 
 ## Documentation
 
