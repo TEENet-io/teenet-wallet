@@ -20,9 +20,9 @@ TEENet Wallet is designed to serve as the custody layer for AI agents. Two integ
 
 **Always include the `token` field for token transfers.** Omitting it sends native ETH/SOL instead, which is an irreversible mistake.
 
-**Check the whitelist before token operations.** Call `GET /api/wallets/:id/contracts` before sending tokens. If the contract is not whitelisted, propose adding it (which creates a pending approval).
+**Check the whitelist before token operations.** Call `GET /api/wallets/:id/contracts` before sending tokens. If the contract is not whitelisted, the transfer will be rejected with HTTP 403. To add a contract, call `POST /api/wallets/:id/contracts` (which creates a pending approval via API key).
 
-**Poll approvals with countdown.** When waiting for Passkey approval, poll `GET /api/approvals/:id` every 15 seconds and show the remaining time. Stop after 25 minutes.
+**Poll approvals with countdown.** When waiting for Passkey approval, poll `GET /api/approvals/:id` every 15 seconds and show the remaining time. Approvals expire after 24 hours by default (configurable via `APPROVAL_EXPIRY_MINUTES`).
 
 **Fetch fresh wallet lists.** Before showing balances or account-wide views, always re-fetch `GET /api/wallets` to ensure the list is current.
 
