@@ -68,13 +68,7 @@ TEENet Wallet is a single Go binary with a clear internal layering:
      |  TEENet SDK
      v
 +--------------------------------------------------------------+
-|  app-comm-consensus  (:8089)                                 |
-|  M-of-N voting coordination                                  |
-+--------------------------------------------------------------+
-     |  gRPC + mutual TLS
-     v
-+--------------------------------------------------------------+
-|  TEE-DAO Key Management Cluster  (3-5 nodes)                 |
+|  TEENet Service                                              |
 |  Threshold signing · keys never leave TEE hardware            |
 +--------------------------------------------------------------+
 ```
