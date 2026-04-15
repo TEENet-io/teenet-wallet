@@ -144,14 +144,14 @@ Pending approval appears in Web UI (via SSE)
 
 ---
 
-## Feature Comparison
+## Why TEENet Wallet for Agents?
 
-| Traditional Wallet | TEENet Wallet |
-|---|---|
-| Private key in one place | Key shares distributed across TEE nodes |
-| Single point of compromise | M-of-N threshold -- no single node can sign alone |
-| Manual approval or no approval | Configurable USD thresholds + Passkey hardware approval |
-| One chain at a time | Ethereum, Solana, and all EVM chains from one API |
+| Approach | Trade-off | TEENet Wallet |
+|---|---|---|
+| **Share private key with agent** | Agent has full access — one bug or prompt injection drains the wallet | Agent operates within configurable spending limits; high-value actions require Passkey approval |
+| **Multisig wallet** | Every approval costs gas, needs multiple signers online, slow UX | Approval is a single Passkey tap — no gas, no coordination, sub-second |
+| **Custodial API service** | Convenient, but you trust the provider with your keys | Keys are sharded across TEE nodes — no single party (including the operator) ever holds a complete key |
+| **One chain per integration** | Each chain needs its own wallet setup and key management | Ethereum, Solana, and all major EVM chains from one API |
 
 ---
 
