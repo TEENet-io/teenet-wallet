@@ -13,10 +13,10 @@ opts := &sdk.ClientOptions{
     RequestTimeout:     3 * time.Minute,
     PendingWaitTimeout: 3 * time.Minute,
 }
-sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
+sdkClient := sdk.NewClientWithOptions(consensusURL, opts)
 ```
 
-- `serviceURL` comes from the `CONSENSUS_URL` environment variable (default: `http://localhost:8089`).
+- `consensusURL` comes from the `CONSENSUS_URL` environment variable (default: `http://localhost:8089`).
 - The client is closed on shutdown via `defer sdkClient.Close()`.
 
 After creation, the client loads its application identity:
