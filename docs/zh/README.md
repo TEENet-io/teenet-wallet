@@ -32,6 +32,7 @@
 
 - [快速开始](/zh/quick-start.md) -- 5 分钟从零开始运行
 - [架构概览](/zh/architecture-overview.md) -- 系统工作原理
+- [认证体系](/zh/authentication.md) -- API 参考入口
 - [添加链](/zh/howto-add-chain.md) -- 操作指南
 - [AI Agent 集成](/zh/agent-integration.md) -- Agent 平台最佳实践
 - [贡献流程](/zh/contributing-process.md) -- 如何参与贡献

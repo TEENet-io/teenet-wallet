@@ -32,6 +32,7 @@ Build on TEENet Wallet with the REST API, or contribute to the project.
 
 - [Quick Start](en/quick-start.md) -- Zero to running in 5 minutes
 - [Architecture Overview](en/architecture-overview.md) -- How the system works
+- [Authentication](en/authentication.md) -- API reference starting point
 - [Add a Chain](en/howto-add-chain.md) -- How-to guides
 - [Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
 - [Contribution Process](en/contributing-process.md) -- How to contribute
