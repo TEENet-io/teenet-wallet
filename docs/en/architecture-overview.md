@@ -59,7 +59,7 @@ TEENet Wallet is a single Go binary with a clear internal layering:
 
 ```
  AI Agent / App                        Human (Browser)
-     |  API Key (ocw_*)                    |  Passkey (ps_*)
+     |  API Key (ocw_*)                    |  Passkey
      v                                     v
 +--------------------------------------------------------------+
 |  TEENet Wallet  (:8080)                                      |
