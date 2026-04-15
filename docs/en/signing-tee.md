@@ -73,6 +73,3 @@ In typical wallet deployments, the application uses **direct** mode. The wallet'
 
 ---
 
-## Next Steps
-
-[← TEENet SDK Usage](sdk-usage.md) | [Add a Chain →](howto-add-chain.md)
