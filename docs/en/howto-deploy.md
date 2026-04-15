@@ -1,6 +1,6 @@
 # How To: Deploy to Production
 
-Production deployment requires a running TEENet service -- the real TEE-DAO infrastructure, not the mock service.
+Production deployment requires a running TEENet service -- not the mock service.
 
 Refer to the TEENet platform documentation for deploying applications on TEENet. (Note: this documentation is not yet available.)
 
