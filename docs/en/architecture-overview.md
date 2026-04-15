@@ -94,7 +94,6 @@ POST /api/wallets {chain}
         │
         ▼
   SDK GenerateKey(scheme, curve)
-  (ECDSA ~1-2 min, Ed25519 instant)
         │
         ▼
   Derive chain address from public key
