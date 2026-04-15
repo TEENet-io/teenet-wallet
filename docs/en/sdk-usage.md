@@ -17,7 +17,7 @@ sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
 ```
 
 - `serviceURL` comes from the `SERVICE_URL` environment variable (default: `http://localhost:8089`).
-- Both timeouts are set to 3 minutes to accommodate ECDSA distributed key generation, which can take 1--2 minutes on the TEE cluster.
+- Both timeouts are set to 3 minutes.
 - The client is closed on shutdown via `defer sdkClient.Close()`.
 
 After creation, the client loads its application identity:
@@ -102,7 +102,7 @@ The `PasskeyLoginVerifyAs` method is particularly important for the approval flo
 
 ## Key Deletion
 
-When a wallet or user account is deleted, the corresponding TEE key is cleaned up:
+When a wallet or user account is deleted, the corresponding key on the TEENet service is cleaned up:
 
 ```go
 sdkClient.DeletePublicKey(ctx, keyName)
