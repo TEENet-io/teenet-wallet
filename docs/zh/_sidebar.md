@@ -1,5 +1,11 @@
 - [概览](/en/overview.md)
 
+- **用户**
+  - [快速上手](/zh/user-getting-started.md)
+  - [和 OpenClaw 对话](/zh/user-commands.md)
+  - [审批与 Web 界面](/zh/user-approvals.md)
+  - [安全与常见问题](/zh/user-faq.md)
+
 - **开发者**
 
   - **快速上手**
@@ -37,9 +43,3 @@
   - [AI Agent 集成](/zh/agent-integration.md)
 
   - [社区与支持](/en/community.md)
-
-- **用户**
-  - [快速上手](/zh/user-getting-started.md)
-  - [和 OpenClaw 对话](/zh/user-commands.md)
-  - [审批与 Web 界面](/zh/user-approvals.md)
-  - [安全与常见问题](/zh/user-faq.md)

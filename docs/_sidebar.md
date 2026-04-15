@@ -1,5 +1,11 @@
 - [Overview](en/overview.md)
 
+- **Users**
+  - [Getting Started](en/user-getting-started.md)
+  - [What You Can Do](en/user-commands.md)
+  - [Web UI & Approvals](en/user-approvals.md)
+  - [FAQ](en/user-faq.md)
+
 - **Developers**
 
   - **Get Started**
@@ -37,9 +43,3 @@
   - [Agent Integration](en/agent-integration.md)
 
   - [Community & Support](en/community.md)
-
-- **Users**
-  - [Getting Started](en/user-getting-started.md)
-  - [What You Can Do](en/user-commands.md)
-  - [Web UI & Approvals](en/user-approvals.md)
-  - [FAQ](en/user-faq.md)
