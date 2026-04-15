@@ -1,4 +1,4 @@
-- [概览](/en/overview.md)
+- [概览](/zh/overview.md)
 
 - **用户**
   - [快速上手](/zh/user-getting-started.md)
@@ -10,18 +10,18 @@
 
   - **快速上手**
     - [快速开始](/zh/quick-start.md)
-    - [安装与配置](/en/installation.md)
-    - [故障排查](/en/troubleshooting.md)
+    - [安装与配置](/zh/installation.md)
+    - [故障排查](/zh/troubleshooting.md)
 
   - **核心概念**
-    - [架构概览](/en/architecture-overview.md)
-    - [TEENet SDK 使用](/en/sdk-usage.md)
-    - [签名与 TEE 信任模型](/en/signing-tee.md)
+    - [架构概览](/zh/architecture-overview.md)
+    - [TEENet SDK 使用](/zh/sdk-usage.md)
+    - [签名与 TEE 信任模型](/zh/signing-tee.md)
 
   - **操作指南**
-    - [添加链](/en/howto-add-chain.md)
-    - [添加插件工具](/en/howto-add-plugin-tool.md)
-    - [部署到生产环境](/en/howto-deploy.md)
+    - [添加链](/zh/howto-add-chain.md)
+    - [添加插件工具](/zh/howto-add-plugin-tool.md)
+    - [部署到生产环境](/zh/howto-deploy.md)
 
   - **参考**
     - [认证体系](/zh/authentication.md)
@@ -31,15 +31,15 @@
     - [智能合约交互](/zh/smart-contracts.md)
     - [审批系统](/zh/approvals.md)
     - [配置参考](/zh/configuration.md)
-    - [错误码与状态码](/en/error-codes.md)
-    - [审计日志](/en/audit-log.md)
-    - [chains.json Schema](/en/chains-schema.md)
-    - [数据模型](/en/data-model.md)
+    - [错误码与状态码](/zh/error-codes.md)
+    - [审计日志](/zh/audit-log.md)
+    - [chains.json Schema](/zh/chains-schema.md)
+    - [数据模型](/zh/data-model.md)
 
   - **贡献**
-    - [贡献流程与 PR 清单](/en/contributing-process.md)
-    - [编码规范与 CI](/en/coding-standards.md)
+    - [贡献流程与 PR 清单](/zh/contributing-process.md)
+    - [编码规范与 CI](/zh/coding-standards.md)
 
   - [AI Agent 集成](/zh/agent-integration.md)
 
-  - [社区与支持](/en/community.md)
+  - [社区与支持](/zh/community.md)

@@ -37,7 +37,7 @@ Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://opencl
 
 5. **全局代币列表**：查询代币余额时，收集同一链上所有钱包白名单合约的并集，用这个全局列表查询每个钱包——白名单只限制发送，不限制持有。
 
-6. **审批轮询**：收到 `pending_approval` 状态后，每 15 秒轮询一次 `GET /api/approvals/{id}`，向用户展示剩余等待时间。25 分钟无结果则停止轮询。
+6. **审批轮询**：收到 `pending_approval` 状态后，每 15 秒轮询一次 `GET /api/approvals/{id}`，向用户展示剩余等待时间。审批默认 24 小时过期（可通过 `APPROVAL_EXPIRY_MINUTES` 配置）。
 
 7. **动态链列表**：不要硬编码链名称，始终通过 `GET /api/chains` 获取可用链（包括用户添加的自定义链）。
 
@@ -48,7 +48,6 @@ Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://opencl
    - Solana 主网：`https://solscan.io/tx/{hash}`
    - Solana Devnet：`https://solscan.io/tx/{hash}?cluster=devnet`
 
-9. **申报 amount_usd**：调用 `/contract-call` 涉及价值转移时，始终包含 `amount_usd` 字段以触发阈值和日限额检查。
 
 ---
 
@@ -114,27 +113,3 @@ openclaw plugins inspect teenet-wallet   # 期望 Status: loaded
 - **所有写操作都在后端检查审批策略** -- 插件无法绕过 USD 阈值和日限额。
 - **自定义链 RPC URL 有 SSRF 防护** -- 内网 IP 和云元数据地址在后端被拦截。
 
----
-
-## Web UI
-
-TEENet Wallet 内置了一个完整的 Web 前端界面，开箱即用，无需单独部署。
-
-**访问方式：** 启动服务后直接访问 [`https://test.teenet.io/instance/wallet`](https://test.teenet.io/instance/wallet)。
-
-**主要功能：**
-- **账户管理**：Passkey 注册/登录、API Key 生成与管理
-- **钱包管理**：创建/查看/重命名/删除钱包，查看余额
-- **交易审批**：查看待审批列表、使用 Passkey 硬件认证审批或拒绝
-- **合约白名单**：添加/编辑/删除白名单条目
-- **审批策略**：设置 USD 阈值和日限额
-- **审计日志**：查看操作历史记录
-
-**安全头部：** Web UI 页面附带严格的安全头部配置：
-- `Content-Security-Policy`：限制资源加载来源
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`（防止点击劫持）
-- `Referrer-Policy: strict-origin-when-cross-origin`
-
----
-[上一页: 审批系统](/zh/approvals.md) | [下一页: API 参考](/zh/api-overview.md)
