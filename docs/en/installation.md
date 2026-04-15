@@ -73,7 +73,7 @@ The image uses a multi-stage build. `host.docker.internal` routes to the host ma
 
 ## Mock service
 
-The mock service stands in for the TEENet service during development. It implements the full consensus HTTP API with real cryptographic signing, so the wallet behaves as if talking to production.
+The mock service stands in for the TEENet service during development. It implements the full TEENet service HTTP API with real cryptographic signing, so the wallet behaves as if talking to production.
 
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
