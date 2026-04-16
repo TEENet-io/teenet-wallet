@@ -75,6 +75,7 @@ Passkey sessions are required for:
 - Deleting approval policies
 - Removing contracts from the whitelist
 - Approving or rejecting pending approval requests
+- Inviting new users (admin deployments)
 - Deleting the user account
 - Deleting address book entries
 - Adding or removing custom chains
