@@ -20,7 +20,7 @@ Common issues and how to fix them.
   # Alpine
   apk add sqlite-dev gcc musl-dev
   ```
-- Verify Go version is 1.24+: `go version`
+- Verify Go version is 1.25+: `go version`
 - Verify CGo is enabled: `go env CGO_ENABLED` should print `1`. If it prints `0`, run with `CGO_ENABLED=1 make build`. CGo is enabled by default, but some environments override it.
 
 ---

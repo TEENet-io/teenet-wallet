@@ -60,7 +60,7 @@ Wallet                    TEENet Service
 - **身份标识**：告知 TEENet service 哪个应用在发起请求，实现应用间的密钥隔离。
 - **签名模式**：该 ID 决定签名请求的处理方式。
 
-钱包在启动时从环境中读取 `APP_INSTANCE_ID`，并通过 `SetDefaultAppInstanceIDFromEnv()` 传递给 SDK。后续所有密钥生成和签名调用都使用此 ID。
+钱包在启动时通过 `Init()` 从环境中读取 `APP_INSTANCE_ID`。后续所有密钥生成和签名调用都使用此 ID。
 
 ### 签名模式
 

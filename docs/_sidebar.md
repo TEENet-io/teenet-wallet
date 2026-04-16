@@ -18,7 +18,7 @@
     - [Add a Plugin Tool](en/howto-add-plugin-tool.md)
 
   - **API Reference**
-    - [OpenAPI Spec](api/openapi.yaml)
+    - [OpenAPI Spec](api/openapi.yaml ':ignore')
     - [Authentication](en/authentication.md)
     - [Wallets](en/wallets.md)
     - [Transfers](en/transfers.md)

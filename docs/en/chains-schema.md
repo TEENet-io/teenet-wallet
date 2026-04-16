@@ -6,10 +6,8 @@
 |-------|----------|------|--------------|-------------|
 | `name` | Yes | string | any unique identifier | API identifier (e.g., `sepolia`, `solana-devnet`) |
 | `label` | Yes | string | -- | Human-readable name (e.g., `Sepolia Testnet`) |
-| `protocol` | Yes | string | `ecdsa`, `schnorr` | Signature scheme |
-| `curve` | Yes | string | `secp256k1`, `ed25519` | Cryptographic curve. Must match protocol: ecdsa→secp256k1, schnorr→ed25519 |
-
-> **Note:** The `protocol` value for Solana is currently `schnorr`. This will be renamed to `ed25519` in a future update.
+| `protocol` | Yes | string | `ecdsa`, `eddsa`, `schnorr`, `schnorr-bip340` | Signature scheme. Use `eddsa` for Ed25519 chains (Solana), `schnorr-bip340` for Bitcoin Taproot, `ecdsa` for EVM chains. |
+| `curve` | Yes | string | `secp256k1`, `ed25519`, `secp256r1` | Cryptographic curve. Must match protocol: ecdsa→secp256k1/secp256r1, eddsa→ed25519, schnorr-bip340→secp256k1 |
 | `currency` | Yes | string | -- | Native currency symbol (e.g., `ETH`, `SOL`, `tBNB`) |
 | `family` | Yes | string | `evm`, `solana` | Chain family, determines tx building logic |
 | `rpc_url` | Yes | string | -- | JSON-RPC endpoint URL |
@@ -32,8 +30,8 @@ The following chains are included in `chains.json` out of the box:
 | Polygon PoS | `polygon` | POL | ECDSA | secp256k1 | EVM |
 | BNB Smart Chain | `bsc` | BNB | ECDSA | secp256k1 | EVM |
 | Avalanche C-Chain | `avalanche` | AVAX | ECDSA | secp256k1 | EVM |
-| Solana Mainnet | `solana` | SOL | Schnorr | ed25519 | Solana |
-| Solana Devnet | `solana-devnet` | SOL | Schnorr | ed25519 | Solana |
+| Solana Mainnet | `solana` | SOL | EdDSA | ed25519 | Solana |
+| Solana Devnet | `solana-devnet` | SOL | EdDSA | ed25519 | Solana |
 
 ## Common Token Contract Addresses
 

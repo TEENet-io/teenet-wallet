@@ -11,7 +11,7 @@
   {
     "name": "solana",
     "label": "Solana Mainnet",
-    "protocol": "schnorr",
+    "protocol": "eddsa",
     "curve": "ed25519",
     "currency": "SOL",
     "family": "solana",
@@ -47,7 +47,7 @@
   {
     "name": "solana-devnet",
     "label": "Solana Devnet",
-    "protocol": "schnorr",
+    "protocol": "eddsa",
     "curve": "ed25519",
     "currency": "SOL",
     "family": "solana",

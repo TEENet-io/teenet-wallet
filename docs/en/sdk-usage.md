@@ -19,13 +19,13 @@ sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
 - `serviceURL` comes from the `SERVICE_URL` environment variable (default: `http://localhost:8089`).
 - The client is closed on shutdown via `defer sdkClient.Close()`.
 
-After creation, the client loads its application identity:
+After creation, the client loads its application identity from the environment:
 
 ```go
-sdkClient.SetDefaultAppInstanceIDFromEnv()
+sdkClient.Init()
 ```
 
-This reads `APP_INSTANCE_ID` from the environment.
+This reads `APP_INSTANCE_ID` from the environment. If not set, a warning is logged but the client remains usable for operations that provide an explicit app instance ID.
 
 ---
 
@@ -38,9 +38,8 @@ keyResult, err := sdkClient.GenerateKey(ctx, scheme, curve)
 | Chain family | Scheme | Curve | Example |
 |---|---|---|---|
 | EVM (Ethereum, Avalanche, etc.) | `ecdsa` | `secp256k1` | `GenerateKey(ctx, "ecdsa", "secp256k1")` |
-| Solana | `ed25519` | `ed25519` | `GenerateKey(ctx, "ed25519", "ed25519")` |
-
-> **Note:** The SDK key generation interface is being updated. The current code may still use `GenerateECDSAKey` / `GenerateSchnorrKey`. Verify the actual function signature against the code.
+| Solana | `eddsa` | `ed25519` | `GenerateKey(ctx, "eddsa", "ed25519")` |
+| Bitcoin Taproot (P2TR) | `schnorr-bip340` | `secp256k1` | `GenerateKey(ctx, "schnorr-bip340", "secp256k1")` |
 
 Returns:
 

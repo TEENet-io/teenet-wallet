@@ -156,11 +156,11 @@ components:
           example: "Sepolia Testnet"
         protocol:
           type: string
-          enum: [ecdsa, schnorr]
+          enum: [ecdsa, eddsa, schnorr, schnorr-bip340]
           example: "ecdsa"
         curve:
           type: string
-          enum: [secp256k1, ed25519]
+          enum: [secp256k1, ed25519, secp256r1]
           example: "secp256k1"
         currency:
           type: string
@@ -226,10 +226,10 @@ components:
           example: "My Sepolia Wallet"
         curve:
           type: string
-          enum: [secp256k1, ed25519]
+          enum: [secp256k1, ed25519, secp256r1]
         protocol:
           type: string
-          enum: [ecdsa, schnorr]
+          enum: [ecdsa, eddsa, schnorr, schnorr-bip340]
         status:
           type: string
           enum: [creating, ready, error]

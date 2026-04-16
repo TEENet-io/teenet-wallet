@@ -42,7 +42,7 @@ func seedSolWallet(t *testing.T, db *gorm.DB) (model.User, model.Wallet) {
 		KeyName:  fmt.Sprintf("sol-k%d", user.ID),
 		Address:  "11111111111111111111111111111111",
 		Curve:    "ed25519",
-		Protocol: "schnorr",
+		Protocol: "eddsa",
 		Status:   "ready",
 	}
 	if err := db.Create(&wallet).Error; err != nil {
@@ -93,7 +93,7 @@ func TestTransfer_SPL_Whitelisted_FailsAtRPC(t *testing.T) {
 	origCfg, _ := model.GetChain("solana-devnet")
 	model.SetChain("solana-devnet", model.ChainConfig{
 		Name: "solana-devnet", Label: "Solana Devnet", Family: "solana",
-		Currency: "SOL", Curve: "ed25519", Protocol: "schnorr",
+		Currency: "SOL", Curve: "ed25519", Protocol: "eddsa",
 		RPCURL: solRPC.URL,
 	})
 	t.Cleanup(func() { model.SetChain("solana-devnet", origCfg) })
@@ -212,7 +212,7 @@ func TestWrapSOL_FailsAtRPC(t *testing.T) {
 	origCfg, _ := model.GetChain("solana-devnet")
 	model.SetChain("solana-devnet", model.ChainConfig{
 		Name: "solana-devnet", Label: "Solana Devnet", Family: "solana",
-		Currency: "SOL", Curve: "ed25519", Protocol: "schnorr",
+		Currency: "SOL", Curve: "ed25519", Protocol: "eddsa",
 		RPCURL: solRPC.URL,
 	})
 	t.Cleanup(func() { model.SetChain("solana-devnet", origCfg) })
@@ -275,7 +275,7 @@ func TestUnwrapSOL_FailsAtRPC(t *testing.T) {
 	origCfg, _ := model.GetChain("solana-devnet")
 	model.SetChain("solana-devnet", model.ChainConfig{
 		Name: "solana-devnet", Label: "Solana Devnet", Family: "solana",
-		Currency: "SOL", Curve: "ed25519", Protocol: "schnorr",
+		Currency: "SOL", Curve: "ed25519", Protocol: "eddsa",
 		RPCURL: solRPC.URL,
 	})
 	t.Cleanup(func() { model.SetChain("solana-devnet", origCfg) })

@@ -19,13 +19,13 @@ sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
 - `serviceURL` 来自环境变量 `SERVICE_URL`（默认值：`http://localhost:8089`）。
 - 客户端在关闭时通过 `defer sdkClient.Close()` 释放。
 
-创建后，客户端加载应用身份标识：
+创建后，客户端从环境加载应用身份标识：
 
 ```go
-sdkClient.SetDefaultAppInstanceIDFromEnv()
+sdkClient.Init()
 ```
 
-此调用从环境中读取 `APP_INSTANCE_ID`。
+此调用从环境中读取 `APP_INSTANCE_ID`。如果未设置，仅记录警告日志，客户端仍可用于显式指定 app instance ID 的操作。
 
 ---
 
@@ -38,9 +38,8 @@ keyResult, err := sdkClient.GenerateKey(ctx, scheme, curve)
 | 链族 | Scheme | Curve | 示例 |
 |---|---|---|---|
 | EVM（Ethereum、Avalanche 等） | `ecdsa` | `secp256k1` | `GenerateKey(ctx, "ecdsa", "secp256k1")` |
-| Solana | `ed25519` | `ed25519` | `GenerateKey(ctx, "ed25519", "ed25519")` |
-
-> **注意：** SDK 密钥生成接口正在更新中。当前代码可能仍使用 `GenerateECDSAKey` / `GenerateSchnorrKey`。请以实际代码中的函数签名为准。
+| Solana | `eddsa` | `ed25519` | `GenerateKey(ctx, "eddsa", "ed25519")` |
+| Bitcoin Taproot (P2TR) | `schnorr-bip340` | `secp256k1` | `GenerateKey(ctx, "schnorr-bip340", "secp256k1")` |
 
 返回值：
 

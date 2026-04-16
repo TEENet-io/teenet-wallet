@@ -89,7 +89,7 @@ describe("Solana", () => {
   it("get solana wallet", async () => {
     const w = await api.getWallet(SOL_WALLET);
     assert.equal(w.curve, "ed25519");
-    assert.equal(w.protocol, "schnorr");
+    assert.equal(w.protocol, "eddsa");
   });
 
   it("solana balance", async () => {

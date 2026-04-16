@@ -18,7 +18,7 @@
     - [添加插件工具](/zh/howto-add-plugin-tool.md)
 
   - **API 参考**
-    - [OpenAPI 规范](/api/openapi.yaml)
+    - [OpenAPI 规范](/api/openapi.yaml ':ignore')
     - [认证体系](/zh/authentication.md)
     - [钱包管理](/zh/wallets.md)
     - [转账](/zh/transfers.md)

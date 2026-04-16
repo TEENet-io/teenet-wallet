@@ -6,10 +6,8 @@
 |------|------|------|--------|------|
 | `name` | 是 | string | 任意唯一标识符 | API 标识符（例如 `sepolia`、`solana-devnet`） |
 | `label` | 是 | string | -- | 人类可读名称（例如 `Sepolia Testnet`） |
-| `protocol` | 是 | string | `ecdsa`, `schnorr` | 签名方案 |
-| `curve` | 是 | string | `secp256k1`, `ed25519` | 密码学曲线。必须与协议匹配：ecdsa→secp256k1，schnorr→ed25519 |
-
-> **注意：** Solana 的 `protocol` 值目前为 `schnorr`。未来更新中将重命名为 `ed25519`。
+| `protocol` | 是 | string | `ecdsa`, `eddsa`, `schnorr`, `schnorr-bip340` | 签名方案。Solana 使用 `eddsa`，Bitcoin Taproot 使用 `schnorr-bip340`，EVM 链使用 `ecdsa`。 |
+| `curve` | 是 | string | `secp256k1`, `ed25519`, `secp256r1` | 密码学曲线。必须与协议匹配：ecdsa→secp256k1/secp256r1，eddsa→ed25519，schnorr-bip340→secp256k1 |
 | `currency` | 是 | string | -- | 原生代币符号（例如 `ETH`、`SOL`、`tBNB`） |
 | `family` | 是 | string | `evm`, `solana` | 链系列，决定交易构建逻辑 |
 | `rpc_url` | 是 | string | -- | JSON-RPC 端点 URL |
@@ -32,8 +30,8 @@
 | Polygon PoS | `polygon` | POL | ECDSA | secp256k1 | EVM |
 | BNB Smart Chain | `bsc` | BNB | ECDSA | secp256k1 | EVM |
 | Avalanche C-Chain | `avalanche` | AVAX | ECDSA | secp256k1 | EVM |
-| Solana Mainnet | `solana` | SOL | Schnorr | ed25519 | Solana |
-| Solana Devnet | `solana-devnet` | SOL | Schnorr | ed25519 | Solana |
+| Solana Mainnet | `solana` | SOL | EdDSA | ed25519 | Solana |
+| Solana Devnet | `solana-devnet` | SOL | EdDSA | ed25519 | Solana |
 
 ## 常用代币合约地址
 

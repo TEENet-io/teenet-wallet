@@ -15,7 +15,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets" \
 
 **注意事项：**
 - EVM 链（ECDSA）钱包创建需要分布式密钥生成，耗时约 1-2 分钟
-- Solana（Schnorr/Ed25519）钱包通常即时完成
+- Solana（EdDSA/Ed25519）钱包通常即时完成
 - 每个用户最多创建 10 个钱包（可通过 `MAX_WALLETS_PER_USER` 调整）
 - 钱包创建受独立速率限制（默认每分钟 5 个）
 
@@ -58,7 +58,7 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}" \
 创建钱包时，`chain` 字段决定了钱包所属的区块链网络：
 
 - EVM 链族（`family: "evm"`）：使用 ECDSA/secp256k1 协议，地址格式为 `0x...`
-- Solana 链族（`family: "solana"`）：使用 Schnorr/ed25519 协议，地址格式为 base58
+- Solana 链族（`family: "solana"`）：使用 EdDSA/ed25519 协议，地址格式为 base58
 
 可通过 `GET /api/chains` 动态获取当前可用链列表，包括内置链和运行时添加的自定义链。
 
