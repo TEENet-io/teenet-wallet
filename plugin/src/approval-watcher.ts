@@ -5,6 +5,8 @@
 // SSE listener for approval events.
 // On approval resolution, notifies the original session via subagent.run().
 
+import fs from "node:fs";
+import path from "node:path";
 import type { WalletAPI } from "./api-client.js";
 
 export interface ApprovalEvent {
@@ -27,6 +29,12 @@ type PluginLogger = {
   error?: (message: string, meta?: Record<string, unknown>) => void;
 };
 
+type ApprovalTrackingEntry = {
+  sessionKey: string;
+  context?: string;
+  createdAt: number;
+};
+
 export class ApprovalWatcher {
   private api: WalletAPI;
   private subagentRun: SubagentRun | null = null;
@@ -36,12 +44,19 @@ export class ApprovalWatcher {
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private connected = false;
   private reconnectDelay = 5000;
+  private storagePath = "";
 
   // approval_id → { sessionKey, context, createdAt } for subagent routing.
-  private sessionMap: Map<number, { sessionKey: string; context?: string; createdAt: number }> = new Map();
+  private sessionMap: Map<number, ApprovalTrackingEntry> = new Map();
 
   constructor(api: WalletAPI) {
     this.api = api;
+  }
+
+  /** Set the disk path for persisting approval tracking state. Call before start(). */
+  setStoragePath(p: string): void {
+    this.storagePath = p;
+    this.loadPersistedMap();
   }
 
   setSubagentRun(fn: SubagentRun): void {
@@ -55,11 +70,12 @@ export class ApprovalWatcher {
   /** Associate an approval ID with the session that created it and an optional context description. */
   trackApproval(approvalId: number, sessionKey: string, context?: string): void {
     this.sessionMap.set(approvalId, { sessionKey, context, createdAt: Date.now() });
+    this.persistMap();
     this.log("trackApproval", { approvalId, sessionKey, context });
   }
 
   start(): void {
-    this.log("start", { eventsUrl: this.api.eventsUrl });
+    this.log("start", { eventsUrl: this.api.eventsUrl, trackedCount: this.sessionMap.size });
     this.abortController = new AbortController();
     this.reconnectDelay = 5000;
     void this.connect();
@@ -67,12 +83,15 @@ export class ApprovalWatcher {
     // Periodic cleanup of stale sessionMap entries (older than 24 hours).
     this.cleanupTimer = setInterval(() => {
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      let changed = false;
       for (const [id, entry] of this.sessionMap) {
         if (entry.createdAt < cutoff) {
           this.log("cleanup.stale", { approvalId: id });
           this.sessionMap.delete(id);
+          changed = true;
         }
       }
+      if (changed) this.persistMap();
     }, 5 * 60 * 1000);
   }
 
@@ -178,15 +197,25 @@ export class ApprovalWatcher {
 
   private onApprovalResolved(event: ApprovalEvent): void {
     // Notify via subagent in the original session.
-    const tracked = this.sessionMap.get(event.approval_id);
+    let tracked = this.sessionMap.get(event.approval_id);
+    // If not in memory, another watcher instance may have written it to disk.
+    // Reload from disk and try again.
+    if (!tracked) {
+      this.loadPersistedMap();
+      tracked = this.sessionMap.get(event.approval_id);
+      if (tracked) {
+        this.log("notify.recovered-from-disk", { approvalId: event.approval_id });
+      }
+    }
     if (tracked) {
       this.sessionMap.delete(event.approval_id);
+      this.persistMap();
       const { sessionKey, context } = tracked;
       const message = formatApprovalMessage(event);
       const fullMessage = `System: ${message}`;
 
       if (this.subagentRun) {
-        this.log("notify.subagent", { approvalId: event.approval_id, sessionKey, message });
+        this.log("notify.subagent", { approvalId: event.approval_id, sessionKey, message, context });
         this.subagentRun({
           sessionKey,
           message: fullMessage,
@@ -201,6 +230,8 @@ export class ApprovalWatcher {
       } else {
         this.log("notify.no-subagent", { approvalId: event.approval_id, sessionKey });
       }
+    } else {
+      this.log("notify.missing-track", { approvalId: event.approval_id, status: event.status, mapSize: this.sessionMap.size });
     }
   }
 
@@ -236,6 +267,44 @@ export class ApprovalWatcher {
       if (r.status === "rejected") {
         this.log("reconcile.error", { error: String(r.reason) });
       }
+    }
+  }
+
+  private loadPersistedMap(): void {
+    if (!this.storagePath) return;
+    try {
+      if (!fs.existsSync(this.storagePath)) return;
+      const raw = fs.readFileSync(this.storagePath, "utf8");
+      const parsed = JSON.parse(raw) as Record<string, ApprovalTrackingEntry>;
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      let restored = 0;
+      for (const [approvalId, entry] of Object.entries(parsed || {})) {
+        const id = Number(approvalId);
+        if (!Number.isFinite(id) || !entry?.sessionKey) continue;
+        if (entry.createdAt < cutoff) continue; // skip stale entries
+        this.sessionMap.set(id, entry);
+        restored++;
+      }
+      if (restored > 0) {
+        this.log("persist.load", { restored, total: Object.keys(parsed || {}).length });
+      }
+    } catch (err) {
+      this.logger?.error?.(`[teenet-wallet] loadPersistedMap.error`, { error: String(err) });
+    }
+  }
+
+  private persistMap(): void {
+    if (!this.storagePath) return;
+    try {
+      const dir = path.dirname(this.storagePath);
+      fs.mkdirSync(dir, { recursive: true });
+      const obj: Record<string, ApprovalTrackingEntry> = {};
+      for (const [approvalId, entry] of this.sessionMap.entries()) {
+        obj[String(approvalId)] = entry;
+      }
+      fs.writeFileSync(this.storagePath, JSON.stringify(obj, null, 2));
+    } catch (err) {
+      this.logger?.error?.(`[teenet-wallet] persistMap.error`, { error: String(err) });
     }
   }
 

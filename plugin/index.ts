@@ -1,6 +1,7 @@
 // Copyright (C) 2026 TEENet Technology (Hong Kong) Limited. All rights reserved.
 // SPDX-License-Identifier: GPL-3.0-only
 
+import { join } from "node:path";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { WalletAPI } from "./src/api-client.js";
 import { ApprovalWatcher } from "./src/approval-watcher.js";
@@ -30,6 +31,10 @@ export default definePluginEntry({
     const walletApi = new WalletAPI({ apiUrl, apiKey });
     const watcher = new ApprovalWatcher(walletApi);
     watcher.setLogger(api.logger);
+
+    // Persist approval tracking to disk so it survives plugin re-registration / gateway restarts.
+    const dataDir = (api as any).dataDir || join(process.env.HOME || "/tmp", ".openclaw", "workspace", "memory");
+    watcher.setStoragePath(join(dataDir, "approval-notifications.json"));
 
     // Wire subagent API for approval notifications.
     if (api.runtime?.subagent?.run) {

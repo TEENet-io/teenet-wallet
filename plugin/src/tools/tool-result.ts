@@ -50,7 +50,7 @@ export function approvalOrResult(
   sessionKey?: string,
   context?: string,
 ): ToolResult {
-  const isPending = result.status === "pending_approval" && result.approval_id;
+  const isPending = result.status === "pending_approval" || (result.pending === true && result.approval_id);
   if (isPending && result.approval_id) {
     if (watcher && sessionKey) {
       watcher.trackApproval(result.approval_id, sessionKey, context);

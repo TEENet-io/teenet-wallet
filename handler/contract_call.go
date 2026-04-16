@@ -84,7 +84,7 @@ func (h *ContractCallHandler) ContractCall(c *gin.Context) {
 	}
 }
 
-var revertReasonRe = regexp.MustCompile(`execution reverted(?:: )?(.+)?$`)
+var revertReasonRe = regexp.MustCompile(`execution reverted(?:: )?([^\]\}]+)`)
 
 func extractRevertReason(err error) string {
 	if err == nil {
@@ -92,7 +92,10 @@ func extractRevertReason(err error) string {
 	}
 	m := revertReasonRe.FindStringSubmatch(err.Error())
 	if len(m) >= 2 {
-		return strings.TrimSpace(m[1])
+		reason := strings.TrimSpace(m[1])
+		if reason != "" {
+			return reason
+		}
 	}
 	return ""
 }
@@ -115,14 +118,18 @@ func contractCallDebug(wallet model.Wallet, contractAddr, methodName, funcSig st
 
 func respondContractCallStageError(c *gin.Context, status int, stage string, msg string, wallet model.Wallet, contractAddr, methodName, funcSig string, args []interface{}, value string, selector string, calldataLen int, err error) {
 	revertReason := extractRevertReason(err)
-	jsonErrorDetails(c, status, msg, gin.H{
+	details := gin.H{
 		"stage":         stage,
 		"contract":      contractAddr,
 		"func_sig":      funcSig,
 		"selector":      selector,
 		"revert_reason": revertReason,
 		"debug":         contractCallDebug(wallet, contractAddr, methodName, funcSig, args, value, selector, calldataLen),
-	})
+	}
+	if err != nil {
+		details["rpc_error"] = err.Error()
+	}
+	jsonErrorDetails(c, status, msg, details)
 }
 
 // contractCallEVM implements contract call logic for EVM chains.

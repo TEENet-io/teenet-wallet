@@ -222,6 +222,19 @@ System notification formats you will receive:
 - "System: Approval #456 approved. Transaction broadcast: 0xabc..." → transfer succeeded
 - "System: Approval #789 was rejected." → no action taken
 
+## Address Book Details
+
+The `to` field in transfers accepts both raw addresses and address book nicknames. When a user says "send 0.1 ETH to alice", use the nickname directly — the backend resolves it from the address book for the wallet's chain.
+
+**Nickname rules:** lowercase alphanumeric with `_`/`-`, max 100 chars. Chain is required when adding. If the nickname is not found for the wallet's chain, the API returns 400.
+
+**Adding/updating contacts via API key** creates a pending approval (HTTP 202). Deleting contacts requires Passkey via Web UI.
+
+## Delete Wallet
+
+**Do NOT call the delete API.** Wallet deletion requires Passkey hardware authentication and is irreversible. Direct the user to the Web UI:
+> Wallet deletion requires Passkey verification and can't be done through the API. Please delete it in the Web UI → Wallets → select wallet → Delete.
+
 ## Transfer Rules
 
 - **No chat confirmation needed** — the backend approval policy is the safety net
@@ -247,12 +260,52 @@ Common testnet tokens:
 | Sepolia | USDC | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | 6 |
 | Base Sepolia | USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 |
 
+## Approval Policy Details
+
+Each wallet has a single USD-denominated approval policy. Token amounts are converted to USD at request time using real-time prices: native coins (ETH, SOL, BNB, POL, AVAX) via CoinGecko, stablecoins (USDC/USDT/DAI/BUSD) pegged to $1, ERC-20 tokens via CoinGecko Token Price API, and Solana SPL tokens via Jupiter Price API as fallback. Check prices via `teenet_wallet_prices`.
+
+- `threshold_usd`: single transaction above this USD value requires Passkey approval
+- `daily_limit_usd` (optional): cumulative USD spend per UTC calendar day; if exceeded the transfer is **hard-blocked** (no approval path, not even Passkey can override)
+- One policy per wallet — covers all currencies (ETH, SOL, tokens)
+
+Ask the user for the threshold amount if not specified. If they also want a daily cap, ask for `daily_limit_usd`.
+
+## Balance Check Details
+
+When checking balance, **show both native and token balances together**.
+
+1. Call `teenet_wallet_balance` for native balance (ETH/SOL). This returns native gas token only — never present it as a token balance.
+2. Call `teenet_wallet_list_contracts` to get the token whitelist for the wallet's chain.
+3. For each whitelisted token, query `balanceOf(address)` **directly via public RPCs** using `web_fetch` — do NOT use `contract_call` for reads.
+
+**ERC-20 balanceOf calldata:** `0x70a08231` + 32-byte zero-padded wallet address (without `0x` prefix). The result is a hex-encoded uint256; convert using the token's `decimals`. Only show tokens with balance > 0.
+
+Use free public RPCs (e.g. `publicnode.com`, `llamarpc.com`). For custom chains, check `teenet_wallet_list_chains` for `rpc_url`. If all RPCs fail, report the query failed — do not guess.
+
+**Present all balances together:**
+> **Wallet** `0xabcd…1234` (Ethereum)
+> ├ ETH: **0.482 ETH**
+> ├ USDC: **250.00 USDC**
+> └ USDT: **100.00 USDT**
+
 ## Contract Calls
 
 For smart contract interactions (EVM):
 - Use `func_sig` with Solidity-style signatures: `transfer(address,uint256)`, `approve(address,uint256)`
+- **Always verify the real verified ABI before sending router/DeFi calls. Do not guess flattened vs tuple forms.**
 - For Uniswap V3 swaps, use **tuple ABI form**: `exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))`
-- Use public RPCs via web_fetch (eth_call) to check balances/allowances before sending state-changing calls
+- For **SwapRouter02**, `exactInputSingle` takes **7 tuple fields** in this order:
+  1. `tokenIn`
+  2. `tokenOut`
+  3. `fee`
+  4. `recipient`
+  5. `amountIn`
+  6. `amountOutMinimum`
+  7. `sqrtPriceLimitX96`
+- **Do not include `deadline`** for SwapRouter02 `exactInputSingle` on this ABI shape
+- Correct selector for the tuple form above is **`0x04e45aaf`**
+- If the observed selector differs, the `func_sig` and/or argument shape is wrong; fix ABI/signature first before retrying
+- Use public RPCs or explorer APIs via `web_fetch`/`exec` to check balances/allowances before sending state-changing calls
 - The contract must be whitelisted before calling
 
 For Solana programs:
@@ -266,41 +319,54 @@ For token swaps via DEX routers (e.g. Uniswap V3):
 **Preparation (all steps required before swap):**
 1. Ensure **input token is whitelisted** → `teenet_wallet_list_contracts`, add if missing
 2. Ensure **router contract is whitelisted** → add if missing
-3. Check **token balance** → use web_fetch to call `balanceOf(address)` via public RPC
-4. Check **allowance** for router → use web_fetch to call `allowance(owner, spender)` via public RPC
-5. If allowance insufficient → `teenet_wallet_approve_token`
-6. **Quote first** → use web_fetch to call QuoterV2 via public RPC before real swap
-7. Submit swap → `teenet_wallet_contract_call`
+3. Confirm the **real verified ABI**, parameter order, and selector before sending `teenet_wallet_contract_call`
+4. Check **token balance on chain** → use public RPC/explorer APIs (`web_fetch` or `exec` with curl) to call `balanceOf(address)` or explorer token balance endpoints
+5. Check **allowance** for router on chain → use public RPC/explorer APIs to call `allowance(owner, spender)` when available
+6. If allowance insufficient → `teenet_wallet_approve_token`
+7. **Quote first** when possible → use QuoterV2 or explorer/RPC quote tools before the real swap
+8. Submit a **small test swap first** → `teenet_wallet_contract_call`
+9. Only increase size after a successful small test
 
-**Uniswap V3 specifics:**
+**Uniswap V3 / SwapRouter02 specifics:**
 - Use **tuple ABI form**: `exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))`
-- NOT flattened: `exactInputSingle(address,address,uint24,...)` — this gives wrong selector
-- Correct selector: `0x04e45aaf`
-- Pass tuple as a **single array item** in args
+- **Do NOT use flattened form**: `exactInputSingle(address,address,uint24,...)`
+- For **SwapRouter02** on Base Sepolia, `exactInputSingle` uses **7 tuple fields** and **does not include `deadline`**
+- Correct selector: **`0x04e45aaf`**
+- Pass the tuple as a **single array item** in `args`
+- If a prior successful transaction exists, compare its on-chain input selector to your intended `func_sig` before retrying
+- If the selector differs, stop and fix the ABI/signature instead of retrying blindly
 
 **Safety:**
-- Start with **50% or less** of available balance — full-balance swaps often fail
-- Set conservative `amountOutMinimum` (50-80% of quote)
-- Don't assume testnet prices match mainnet
+- **Do not test swaps with 100% of balance or allowance**
+- Leave headroom; start with **50% or less** of available balance, often much less (for example `1 USDC`, `5 USDC`, `0.0005 WETH`)
+- Full-balance tests can fail with transfer helper errors even when balance and allowance look correct
+- Set conservative `amountOutMinimum` (50-80% of quote) when quoting is available
+- Don't assume testnet liquidity or prices match mainnet
 
 **Common swap errors:**
+- Wrong selector / wrong ABI shape → function signature or tuple shape is wrong; fix this first
 - `Too little received` → `amountOutMinimum` too high or quote stale
-- `STF` → `transferFrom` failed; check balance and allowance
-- `502` on contract-call → `eth_estimateGas` reverted on chain, not a backend crash
+- `STF` → `transferFrom` failed; check balance, allowance, and whether you tried to use the full balance
+- HTTP `502` on `/contract-call` often means `eth_estimateGas` reverted on chain, not that the backend crashed
+- `execution reverted` during `eth_estimateGas` → commonly balance/allowance/pool-liquidity/fee-tier/ABI mismatch
 
 ## Error Handling
 
-Tool errors include structured fields. Use `stage` to diagnose:
+Tool errors may include structured fields. Use `stage` first to diagnose where the failure happened.
 
 | `stage` | Meaning | What to do |
 |---------|---------|------------|
-| `build_tx` / `estimate_gas` | Transaction construction failed | Check `revert_reason`, verify args, check balance |
+| `build_tx` | Transaction assembly or ABI encoding failed before simulation | Verify `func_sig`, selector, tuple shape, argument count/order, and contract ABI |
+| `estimate_gas` | Transaction was built, but `eth_estimateGas` reverted on chain | Check `revert_reason`, balance, allowance, fee tier, pool liquidity, and `amountOutMinimum` |
 | `signing` | TEE signing failed | Retry; if persistent, TEE cluster may be busy |
-| `broadcast` | Chain RPC rejected tx | Check nonce conflicts, gas price |
+| `broadcast` | Chain RPC rejected tx | Check nonce conflicts, gas price, chain health |
 | `key_generation` | Wallet creation failed | Retry; ECDSA DKG takes 1-2 min |
-| `balance_query` | RPC query failed | Retry |
+| `balance_query` | RPC query failed | Retry or switch public RPC/explorer source |
 
 Common errors:
+- wrong selector / selector mismatch → ABI/signature or tuple shape is wrong; compare against verified ABI or a prior successful tx input
+- `failed to build contract call transaction` → often `func_sig`/tuple encoding/arg-shape problem on complex router calls
+- `execution reverted` during `eth_estimateGas` → on-chain simulation failed; not necessarily a backend crash
 - `insufficient funds` → check balance including gas
 - `daily spend limit exceeded` → resets at UTC midnight
 - `contract not whitelisted` → add via `teenet_wallet_add_contract`
@@ -312,10 +378,15 @@ Common errors:
 | Chain | Base URL |
 |-------|----------|
 | Ethereum | `https://etherscan.io` |
+| Optimism | `https://optimistic.etherscan.io` |
+| Arbitrum | `https://arbiscan.io` |
+| Base | `https://basescan.org` |
+| Polygon | `https://polygonscan.com` |
+| BSC | `https://bscscan.com` |
+| Avalanche | `https://snowtrace.io` |
 | Sepolia | `https://sepolia.etherscan.io` |
 | Holesky | `https://holesky.etherscan.io` |
 | Base Sepolia | `https://sepolia.basescan.org` |
-| Optimism | `https://optimistic.etherscan.io` |
 | BSC Testnet | `https://testnet.bscscan.com` |
 | Solana | `https://solscan.io` |
 | Solana Devnet | `https://solscan.io` (append `?cluster=devnet`) |
