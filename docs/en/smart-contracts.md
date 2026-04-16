@@ -132,24 +132,11 @@ Solana does not use a chain-level ABI standard like EVM. The caller provides the
 
 For read-only contract queries (e.g., `balanceOf`, `allowance`, `totalSupply`), use `eth_call` against public RPC endpoints directly. These calls do not require signing or gas, so there is no need to route them through the wallet service.
 
-### Approval Behavior
+### ERC-20 Allowance Helpers
 
-Contract operations use two layers of protection:
+These helper endpoints follow the same approval rule as `/contract-call`: API key requests require Passkey approval, while Passkey-session requests execute directly. See [Approval System](/en/approvals.md) for the full decision model.
 
-1. The contract or program must be on the whitelist.
-2. API-key-initiated contract operations require Passkey approval.
-
-This rule applies to:
-
-- `/contract-call`
-- `/approve-token`
-- `/revoke-approval`
-
-Passkey-session contract operations execute directly because the human approver is already present.
-
-### Convenience Endpoints
-
-**Approve ERC-20 token spending** (API key requests require approval):
+**Approve ERC-20 token spending:**
 
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/approve-token \
@@ -163,7 +150,7 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/approve-token \
   }'
 ```
 
-**Revoke ERC-20 token approval** (API key requests require approval):
+**Revoke ERC-20 token approval:**
 
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/revoke-approval \

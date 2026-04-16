@@ -140,25 +140,14 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contract-call" \
 
 Solana 不存在像 EVM 那样的链级 ABI 标准。调用方需要直接提供程序 ID、按顺序排列的账户元数据，以及该程序期望的原始指令字节。
 
-### 审批行为
+### ERC-20 授权辅助接口
 
-合约操作有两层保护：
+这些辅助接口与 `/contract-call` 遵循同样的审批规则：通过 API Key 发起时需要 Passkey 审批，通过 Passkey 会话发起时直接执行。完整决策模型见 [审批系统](/zh/approvals.md)。
 
-1. 目标合约或程序必须已加入白名单。
-2. 通过 API Key 发起的合约操作需要 Passkey 审批。
-
-这一规则适用于：
-
-- `/contract-call`
-- `/approve-token`
-- `/revoke-approval`
-
-通过 Passkey 会话发起的合约操作会直接执行，因为审批者已经在场。
-
-**便捷端点：**
+**接口示例：**
 
 ```bash
-# 授权 ERC-20 代币支出（通过 API Key 发起时需要审批）
+# 授权 ERC-20 代币支出
 curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/approve-token" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
@@ -169,7 +158,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/approve-token" \
     "decimals": 6
   }'
 
-# 撤销 ERC-20 代币授权（通过 API Key 发起时需要审批）
+# 撤销 ERC-20 代币授权
 curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/revoke-approval" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
