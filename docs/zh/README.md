@@ -76,7 +76,7 @@ TEENet Wallet 通过 [TEENet 平台](https://teenet.io) 支持区块链系统使
 
 | 方案 | 区块链 |
 |------|--------|
-| ECDSA secp256k1 | Ethereum **✓**、Optimism **✓**、Base **✓**、BNB Chain **✓**、Avalanche **✓**、Arbitrum、Polygon、Bitcoin 及所有 EVM 链 |
+| ECDSA / secp256k1 | Ethereum **✓**、Optimism **✓**、Base **✓**、BNB Chain **✓**、Avalanche **✓**、Arbitrum、Polygon、Bitcoin 及所有 EVM 链 |
 | EdDSA / ed25519 | Solana **✓** |
 
 ---
