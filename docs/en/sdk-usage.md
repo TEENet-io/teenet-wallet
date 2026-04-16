@@ -105,7 +105,7 @@ make run    # listens on 127.0.0.1:8089 with localhost Passkey defaults
 ```
 
 - Implements the same HTTP API as the production TEENet service.
-- Performs real cryptographic operations (ECDSA, Ed25519 signing).
+- Performs real cryptographic operations (ECDSA and EdDSA / ed25519 signing).
 - Uses deterministic keys for reproducible behavior.
 - Resets all state on restart (in-memory only).
 

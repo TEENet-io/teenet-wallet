@@ -31,9 +31,10 @@ You interact with your wallet by chatting with an AI agent. Just tell it what yo
 
 ## What Needs Approval?
 
-Most read operations (balances, history, prices) never need approval. Transactions below your USD threshold go through automatically. Everything else requires your Passkey:
+Most read operations (balances, history, prices) never need approval. Transactions below your USD threshold go through automatically. The main exceptions are:
 
-- Transactions above your threshold or daily limit
+- Transactions above your threshold
+- Transfers that would exceed your daily limit are blocked until the limit resets
 - All smart contract interactions (swaps, token approvals, DeFi)
 - Whitelist and policy changes
 - API key management

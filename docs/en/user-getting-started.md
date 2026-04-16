@@ -50,13 +50,15 @@ Provide your agent with the **API key** from Step 2 and the **wallet API URL** s
    Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
    ```
 
-3. When prompted, enter your **TEE_WALLET_API_KEY** -- the key you copied in Step 2. The wallet API URL is shown on your account page.
+3. When prompted, enter:
+   - **TEE_WALLET_API_URL** -- the wallet API URL shown on your account page
+   - **TEE_WALLET_API_KEY** -- the key you copied in Step 2
 
 <div align="center"><img src="picture/tg.png" alt="Connect OpenClaw via Telegram" width="360" /></div>
 
 ## Step 4: Test Your Wallet
 
-Ask your agent to run a quick test. On OpenClaw, type `/test`. The agent will create a wallet on Base Sepolia testnet for you if you don't have one, then walk you through:
+Ask your agent to run a quick test. On OpenClaw, type `/test`. The agent will create a testnet wallet for you if you don't have one, then walk you through:
 
 1. **Check balance** -- confirm the wallet is active
 2. **Get test tokens** -- from a faucet (free, testnet only)

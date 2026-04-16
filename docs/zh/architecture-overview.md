@@ -112,8 +112,9 @@ POST /api/wallets/:id/transfer {to, amount}
         │
         ▼
   Check approval policy ─── exceeds threshold ──► Save as pending
-        │                     or daily limit          approval,
+        │                                          approval,
         │                                          return HTTP 202
+        ├── exceeds daily limit ──► Reject request (HTTP 400)
         ▼                                         + approval_url
   SDK Sign(tx, keyName)
         │
@@ -155,7 +156,7 @@ PUT /api/wallets/:id/policy {threshold_usd, daily_limit_usd, enabled}
   Called via Passkey ──► Apply policy immediately
 ```
 
-未设置策略时，所有转账立即签名。设置后，超过阈值或超出每日限额的转账需要 Passkey 审批。
+未设置策略时，所有转账立即签名。设置后，超过阈值的转账需要 Passkey 审批，而超出每日限额的转账会被直接拒绝。
 
 ---
 

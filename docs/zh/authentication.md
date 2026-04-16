@@ -1,6 +1,6 @@
 # 认证体系
 
-TEENet Wallet 采用双层认证模型，分别服务于程序化访问和人类操作两种场景。
+TEENet Wallet 采用双层认证模型。许多钱包接口同时接受 API Key 和 Passkey 会话，但涉及账户管理或破坏性操作的敏感接口仅允许 Passkey 会话调用。
 
 ### API Key
 
@@ -33,14 +33,12 @@ curl -s -X PATCH "${TEE_WALLET_URL}/api/auth/apikey" \
   -H "Authorization: Bearer ps_session_token" \
   -H "X-CSRF-Token: csrf_token_value" \
   -H "Content-Type: application/json" \
-  -d '{"key_id": "KEY_ID_HERE", "label": "new-label"}'
+  -d '{"prefix": "ocw_a1b2c3d4", "label": "new-label"}'
 
 # 撤销 API Key（仅 Passkey 会话）
-curl -s -X DELETE "${TEE_WALLET_URL}/api/auth/apikey" \
+curl -s -X DELETE "${TEE_WALLET_URL}/api/auth/apikey?prefix=ocw_a1b2c3d4" \
   -H "Authorization: Bearer ps_session_token" \
-  -H "X-CSRF-Token: csrf_token_value" \
-  -H "Content-Type: application/json" \
-  -d '{"key_prefix": "ocw_xxxx"}'
+  -H "X-CSRF-Token: csrf_token_value"
 ```
 
 ### Passkey 会话
@@ -65,7 +63,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/auth/passkey/verify" \
 - 删除钱包、删除策略、删除合约白名单条目
 - 审批/拒绝待审批请求
 - 生成/撤销 API Key
-- 邀请新用户、删除账户
+- 邀请新用户（管理员场景）、删除账户
 
 ### CSRF 保护
 

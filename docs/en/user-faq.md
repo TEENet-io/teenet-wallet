@@ -37,10 +37,10 @@ Everything else requires your approval.
 
 ### What always needs my approval?
 
-The following actions always require your Passkey, regardless of spending limits:
+The following actions require your Passkey, and transfers that would exceed your daily spending limit are blocked entirely:
 
 - Transactions above your USD approval threshold.
-- Transactions that would exceed your daily spending limit.
+- Transfers that would exceed your daily spending limit are rejected until the limit resets at UTC midnight.
 - All smart contract interactions (swaps, token approvals, DeFi operations).
 - Adding a new contract or token to the whitelist.
 - Changing or disabling an approval policy.
@@ -61,7 +61,7 @@ Your private keys are split across multiple TEE (Trusted Execution Environment) 
 
 ### What if my agent tries to overspend?
 
-If your agent submits a transaction above your threshold, it is held in a pending state and nothing is sent until you approve it. If the transaction would also exceed your daily limit, it is blocked entirely -- even you cannot approve it until the next day. The daily limit is a hard cap enforced at the infrastructure level.
+If your agent submits a transaction above your threshold, it is held in a pending state and nothing is sent until you approve it. If the transaction would exceed your daily limit, it is blocked entirely until the limit resets at UTC midnight. The daily limit is a hard cap enforced at the infrastructure level.
 
 ### Can I see what my agent has done?
 
@@ -100,7 +100,7 @@ TEENet Wallet supports all major signature schemes used by blockchain systems. C
 | Scheme | Blockchains |
 |--------|-------------|
 | ECDSA secp256k1 | Ethereum **✓**, Optimism **✓**, Base **✓**, BNB Chain **✓**, Avalanche **✓**, Arbitrum, Polygon, Bitcoin, + any EVM chain |
-| Ed25519 | Solana **✓** |
+| EdDSA / ed25519 | Solana **✓** |
 
 Any EVM-compatible chain can be added at runtime. Ask your agent to list available chains, or check `GET /api/chains` in the API.
 

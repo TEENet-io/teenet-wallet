@@ -1,6 +1,6 @@
 # Authentication
 
-TEENet Wallet uses a dual authentication model. Every protected endpoint accepts either type of credential in the `Authorization` header.
+TEENet Wallet uses a dual authentication model. Many wallet endpoints accept either an API key or a Passkey session in the `Authorization` header, while sensitive account-management and destructive operations are Passkey-only.
 
 ### API Keys
 
@@ -38,17 +38,15 @@ curl -s -X PATCH ${TEE_WALLET_URL}/api/auth/apikey \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: ${CSRF_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"key_id": "KEY_ID_HERE", "label": "new-label"}'
+  -d '{"prefix": "ocw_a1b2c3d4", "label": "new-label"}'
 ```
 
 **Revoking a key:**
 
 ```bash
-curl -s -X DELETE ${TEE_WALLET_URL}/api/auth/apikey \
+curl -s -X DELETE ${TEE_WALLET_URL}/api/auth/apikey?prefix=ocw_a1b2c3d4 \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"key_id": "KEY_ID_HERE"}'
+  -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```
 
 API keys can perform most operations directly. However, certain sensitive operations (wallet deletion, policy deletion, contract removal, approval/reject actions) require a Passkey session. When an API key attempts to set a policy or add a contract to the whitelist, the request creates a pending approval that the Passkey owner must confirm.

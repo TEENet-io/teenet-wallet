@@ -105,7 +105,7 @@ make run    # listens on 127.0.0.1:8089 and sets localhost Passkey defaults
 ```
 
 - 实现与生产环境 TEENet service 相同的 HTTP API。
-- 执行真实的密码学运算（ECDSA、Ed25519 签名）。
+- 执行真实的密码学运算（ECDSA 与 EdDSA / ed25519 签名）。
 - 使用确定性密钥以获得可复现的行为。
 - 重启后清除所有状态（仅内存存储）。
 

@@ -112,8 +112,9 @@ POST /api/wallets/:id/transfer {to, amount}
         │
         ▼
   Check approval policy ─── exceeds threshold ──► Save as pending
-        │                     or daily limit          approval,
+        │                                          approval,
         │                                          return HTTP 202
+        ├── exceeds daily limit ──► Reject request (HTTP 400)
         ▼                                         + approval_url
   SDK Sign(tx, keyName)
         │
@@ -155,7 +156,7 @@ PUT /api/wallets/:id/policy {threshold_usd, daily_limit_usd, enabled}
   Called via Passkey ──► Apply policy immediately
 ```
 
-Without a policy, all transfers sign immediately. Once set, transfers above the threshold or exceeding the daily limit require Passkey approval.
+Without a policy, all transfers sign immediately. Once set, transfers above the threshold require Passkey approval, while transfers exceeding the daily limit are rejected.
 
 ---
 

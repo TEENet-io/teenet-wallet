@@ -2,7 +2,7 @@
 
 # 快速上手
 
-你告诉 OpenClaw 想做什么，它通过 TEENet Wallet 完成操作，大额交易需要你的指纹确认。以下是完整设置步骤。
+你告诉 AI Agent（例如 OpenClaw）想做什么，它通过 TEENet Wallet 完成操作，大额交易需要你的指纹确认。以下是完整设置步骤。
 
 ---
 
@@ -26,7 +26,7 @@
 
 ## 第二步：生成 API 密钥
 
-API 密钥是 OpenClaw 访问你钱包的凭证。
+API 密钥是 Agent 访问你钱包的凭证。
 
 1. 点击右上角的 **设置** 图标（齿轮）。
 
@@ -54,11 +54,11 @@ API 密钥是 OpenClaw 访问你钱包的凭证。
 
 <div align="center"><img src="picture/tg.png" alt="通过 Telegram 连接 OpenClaw" width="360" /></div>
 
-设置完成，OpenClaw 可以操作你的钱包了。
+设置完成，Agent 就可以操作你的钱包了。
 
 ## 第四步：创建钱包
 
-告诉 OpenClaw：
+告诉 Agent：
 
 - **"创建一个以太坊钱包"**
 - **"创建一个叫'日常开销'的 Solana 钱包"**
@@ -78,7 +78,7 @@ API 密钥是 OpenClaw 访问你钱包的凭证。
 3. 可选：设置 **日上限（USD）**（如 5000 美元）-- 每日硬性上限。
 4. 点击 **保存策略**。
 
-**或者直接告诉 OpenClaw：** "设置审批阈值为 100 美元" / "设置日限额为 5000 美元"
+**或者直接告诉 Agent：** “设置审批阈值为 100 美元” / “设置日限额为 5000 美元”
 
 <div align="center"><img src="picture/threshold.png" alt="通过 OpenClaw 设置阈值" width="480" /></div>
 
