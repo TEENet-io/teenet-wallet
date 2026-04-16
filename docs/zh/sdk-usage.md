@@ -9,23 +9,11 @@
 SDK 客户端在启动时创建一次：
 
 ```go
-opts := &sdk.ClientOptions{
-    RequestTimeout:     3 * time.Minute,
-    PendingWaitTimeout: 3 * time.Minute,
-}
-sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
+sdkClient := sdk.NewClient()
+defer sdkClient.Close()
 ```
 
-- `serviceURL` 来自环境变量 `SERVICE_URL`（默认值：`http://localhost:8089`）。
-- 客户端在关闭时通过 `defer sdkClient.Close()` 释放。
-
-创建后，客户端从环境加载应用身份标识：
-
-```go
-sdkClient.Init()
-```
-
-此调用从环境中读取 `APP_INSTANCE_ID`。如果未设置，仅记录警告日志，客户端仍可用于显式指定 app instance ID 的操作。
+`SERVICE_URL` 和 `APP_INSTANCE_ID` 自动从环境变量读取。
 
 ---
 

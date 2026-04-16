@@ -56,7 +56,6 @@ func main() {
 
 	raiseFileLimit()
 
-	serviceURL := envOrDefault("SERVICE_URL", "http://localhost:8089")
 	host := envOrDefault("HOST", "0.0.0.0")
 	port := envOrDefault("PORT", "8080")
 	dataDir := envOrDefault("DATA_DIR", "/data")
@@ -137,12 +136,7 @@ func main() {
 	}
 
 	// Init TEENet SDK.
-	opts := &sdk.ClientOptions{
-		RequestTimeout:     3 * time.Minute, // ECDSA DKG can take 1-2 min
-		PendingWaitTimeout: 3 * time.Minute,
-	}
-	sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
-	sdkClient.Init()
+	sdkClient := sdk.NewClient()
 	defer sdkClient.Close()
 
 	sessions := handler.NewSessionStore()
@@ -387,7 +381,7 @@ func main() {
 	addr := host + ":" + port
 	slog.Info("server starting",
 		"addr", addr,
-		"service_url", serviceURL,
+		"service_url", os.Getenv("SERVICE_URL"),
 		"base_url", baseURL,
 		"chains_file", chainsFile,
 		"chains_loaded", model.ChainsLen(),

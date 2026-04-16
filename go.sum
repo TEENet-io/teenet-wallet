@@ -8,6 +8,8 @@ github.com/TEENet-io/teenet-sdk/go v0.0.0-20260415033921-7825b4227898 h1:wR2A5VM
 github.com/TEENet-io/teenet-sdk/go v0.0.0-20260415033921-7825b4227898/go.mod h1:yFU1nxhSv5YOLsDEOXwCUCj4SrW9hwVmhWA7M15SsG8=
 github.com/TEENet-io/teenet-sdk/go v0.0.0-20260416043508-8db164271dab h1:i3gsKlif9vWOAlHp8yURvE/Q2JXMpOl1kWM6sWJqvyU=
 github.com/TEENet-io/teenet-sdk/go v0.0.0-20260416043508-8db164271dab/go.mod h1:yFU1nxhSv5YOLsDEOXwCUCj4SrW9hwVmhWA7M15SsG8=
+github.com/TEENet-io/teenet-sdk/go v0.0.0-20260416054659-cc622bc54262 h1:eiKJ6Nt9ue+aVROJtiVGF5ke6YrtK5/0Pwx7WwioIfE=
+github.com/TEENet-io/teenet-sdk/go v0.0.0-20260416054659-cc622bc54262/go.mod h1:yFU1nxhSv5YOLsDEOXwCUCj4SrW9hwVmhWA7M15SsG8=
 github.com/bits-and-blooms/bitset v1.20.0 h1:2F+rfL86jE2d/bmw7OhqUg2Sj/1rURkBn3MdfoPyRVU=
 github.com/bits-and-blooms/bitset v1.20.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/btcsuite/btcd/btcec/v2 v2.3.6 h1:IzlsEr9olcSRKB/n7c4351F3xHKxS2lma+1UFGCYd4E=

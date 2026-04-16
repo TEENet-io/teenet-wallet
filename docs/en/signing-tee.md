@@ -60,7 +60,7 @@ Each application registered with the TEENet service receives an **application in
 - **Identity**: it tells the TEENet service which application is making the request, allowing key isolation between applications.
 - **Signing mode**: the ID determines how signing requests are processed.
 
-The wallet reads its `APP_INSTANCE_ID` from the environment at startup via `Init()`. All subsequent key generation and signing calls use this ID.
+The wallet reads its `APP_INSTANCE_ID` from the environment automatically during client construction. All subsequent key generation and signing calls use this ID.
 
 ### Signing modes
 

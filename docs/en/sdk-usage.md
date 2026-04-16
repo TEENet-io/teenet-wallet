@@ -9,23 +9,11 @@ This page documents the TEENet SDK interface (`github.com/TEENet-io/teenet-sdk/g
 The SDK client is created once at startup:
 
 ```go
-opts := &sdk.ClientOptions{
-    RequestTimeout:     3 * time.Minute,
-    PendingWaitTimeout: 3 * time.Minute,
-}
-sdkClient := sdk.NewClientWithOptions(serviceURL, opts)
+sdkClient := sdk.NewClient()
+defer sdkClient.Close()
 ```
 
-- `serviceURL` comes from the `SERVICE_URL` environment variable (default: `http://localhost:8089`).
-- The client is closed on shutdown via `defer sdkClient.Close()`.
-
-After creation, the client loads its application identity from the environment:
-
-```go
-sdkClient.Init()
-```
-
-This reads `APP_INSTANCE_ID` from the environment. If not set, a warning is logged but the client remains usable for operations that provide an explicit app instance ID.
+`SERVICE_URL` and `APP_INSTANCE_ID` are read from environment variables automatically.
 
 ---
 
