@@ -62,7 +62,7 @@ Never skip showing results. Every step gets output. Never leave the user wonderi
 
 ---
 
-**Steps 1-3 — Basic Tests**
+**Steps 1-4 — Basic Tests**
 
 > **Step 1: Check wallet balance**
 > ✅ **Result:** Balance **{amount} ETH**
@@ -70,34 +70,38 @@ Never skip showing results. Every step gets output. Never leave the user wonderi
 > **Step 2: Get test tokens from faucet (wait 15s for confirmation, skip if balance is enough)**
 > ✅ **Result:** Received **{amount} ETH** — [**View transaction**]({explorer}/tx/{tx_hash_S2})
 >
-> **Step 3: Send 0.0001 ETH to self to test TEE signing**
-> ✅ **Result:** TEE signing successful — [**View transaction**]({explorer}/tx/{tx_hash_S3})
+> **Step 3: Create a second wallet on the same chain**
+> This wallet serves as the transfer recipient for all subsequent tests (self-transfers are blocked by the backend).
+> ✅ **Result:** Second wallet created — `{address_2}`
 >
-> **Step 4: Set $1 USD approval threshold**
+> **Step 4: Send 0.0001 ETH to the second wallet to test TEE signing**
+> ✅ **Result:** TEE signing successful — [**View transaction**]({explorer}/tx/{tx_hash_S4})
+>
+> **Step 5: Set $1 USD approval threshold**
 > 🔐 **Result:** Needs approval! Approval ID: {approval_id}
 > 👉 → [Approve $1 threshold policy]({approval_url})
 
-After system notification confirms Step 4 approved:
-> **Step 4: Set $1 USD approval threshold**
+After system notification confirms Step 5 approved:
+> **Step 5: Set $1 USD approval threshold**
 > ✅ **Result:** Approval policy set! Threshold: **$1 USD**
 >
-> **Step 5: Send 0.0001 ETH (below $1, no approval needed)** ⚠️ Note: 0.0001 not 0.001
-> ✅ **Result:** Transfer successful! Amount: **0.0001 ETH** (~$0.20) — [**View transaction**]({explorer}/tx/{tx_hash_S5})
+> **Step 6: Send 0.0001 ETH to second wallet (below $1, no approval needed)** ⚠️ Note: 0.0001 not 0.001
+> ✅ **Result:** Transfer successful! Amount: **0.0001 ETH** (~$0.20) — [**View transaction**]({explorer}/tx/{tx_hash_S6})
 >
-> **Step 6: Send 0.001 ETH (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
+> **Step 7: Send 0.001 ETH to second wallet (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
 > 🔐 **Result:** Needs approval! Approval ID: {approval_id}
 > 👉 → [Approve this 0.001 ETH transfer]({approval_url})
 
-After system notification confirms Step 6 approved:
-> **Step 6: Send 0.001 ETH (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
-> ✅ **Result:** Transfer approved! TX: {tx_hash_S6} — [**View transaction**]({explorer}/tx/{tx_hash_S6})
+After system notification confirms Step 7 approved:
+> **Step 7: Send 0.001 ETH to second wallet (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
+> ✅ **Result:** Transfer approved! TX: {tx_hash_S7} — [**View transaction**]({explorer}/tx/{tx_hash_S7})
 >
-> **Step 7: Add USDC to whitelist**
+> **Step 8: Add USDC to whitelist**
 > 🔐 **Result:** Needs approval! Approval ID: {approval_id}
 > 👉 → [Approve adding USDC to whitelist]({approval_url})
 
-After system notification confirms Step 7 approved:
-> **Step 7: Add USDC to whitelist**
+After system notification confirms Step 8 approved:
+> **Step 8: Add USDC to whitelist**
 > ✅ **Result:** USDC added to whitelist! Contract: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
 > 💡 Get test USDC from [Circle Faucet](https://faucet.circle.com)
 
@@ -109,11 +113,12 @@ After system notification confirms Step 7 approved:
 >
 > 1. ✅ Balance check
 > 2. ✅ Faucet tokens received
-> 3. ✅ TEE distributed signing
-> 4. ✅ Approval policy ($1 threshold)
-> 5. ✅ Small transfer (no approval)
-> 6. ✅ Large transfer (Passkey approval)
-> 7. ✅ Token whitelist
+> 3. ✅ Second wallet created (transfer recipient)
+> 4. ✅ TEE distributed signing
+> 5. ✅ Approval policy ($1 threshold)
+> 6. ✅ Small transfer (no approval)
+> 7. ✅ Large transfer (Passkey approval)
+> 8. ✅ Token whitelist
 >
 > Type `/wallets` to see wallets or `/balance` to check balances.
 
