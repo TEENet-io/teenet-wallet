@@ -34,7 +34,7 @@
 
 - 测试使用内存 SQLite（`file::memory:`）和 nil SDK 客户端。
 - Handler 在签名步骤会优雅地失败 -- 这是设计使然。测试验证签名发生之前的所有行为。
-- 对于需要真实加密签名的集成测试，请使用 [teenet-sdk/mock-server](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server) 中的 mock 共识服务器。
+- 对于需要真实加密签名的集成测试，请使用 [teenet-sdk/mock-server](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server) 中的 mock server。
 - 所有新功能都应包含测试。参见 `handler/*_test.go` 中的示例。
 
 ## CI 流水线

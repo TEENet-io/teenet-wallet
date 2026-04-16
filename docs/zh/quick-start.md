@@ -31,14 +31,17 @@ Mock 服务在开发期间替代 TEENet 服务。打开一个终端：
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
-go build && ./mock-server
+make run
 ```
 
 预期输出：
 
 ```
-Mock server listening on 127.0.0.1:8089
+Mock server starting on port 8089
+Available test App IDs: ...
 ```
+
+启动后，mock server 会打印可用的 app ID。把其中一个值作为启动钱包时的 `APP_INSTANCE_ID`。
 
 保持此终端运行。
 
@@ -54,13 +57,15 @@ cd teenet-wallet
 git submodule update --init --recursive
 make frontend
 make build
-SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
+APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
+
+`DATA_DIR=./data` 会把 SQLite 数据库存放到当前项目中可写的目录。
 
 预期输出：
 
 ```
-[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+..."msg":"server starting","addr":"0.0.0.0:8080"...
 ```
 
 ---
@@ -75,6 +80,8 @@ curl -s http://localhost:8080/api/health
 
 ```json
 {
+  "db": true,
+  "service": "teenet-wallet",
   "status": "ok"
 }
 ```

@@ -80,7 +80,7 @@ The mock service stands in for the TEENet service during development. It impleme
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
-go build && ./mock-server
+make run
 ```
 
 The mock service listens on `127.0.0.1:8089` by default.
@@ -107,6 +107,8 @@ The most important variables:
 | `DATA_DIR` | `/data` | Directory for the SQLite database file (`wallet.db`) |
 | `BASE_URL` | `http://localhost:<PORT>` | Public-facing URL used in approval links |
 | `FRONTEND_URL` | _(empty)_ | Allowed CORS origin for the web UI |
+
+For local development against `teenet-sdk/mock-server`, also set `APP_INSTANCE_ID` to one of the app IDs printed by the mock server at startup. When running from source outside Docker, set `DATA_DIR` to a writable local path such as `./data`.
 
 See [Configuration](configuration.md) for the full environment variable reference.
 

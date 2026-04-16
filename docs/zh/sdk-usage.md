@@ -102,7 +102,7 @@ sdkClient.DeletePasskeyUser(ctx, passkeyUserID)
 
 ```bash
 cd teenet-sdk/mock-server
-go build && ./mock-server    # listens on 127.0.0.1:8089
+make run    # listens on 127.0.0.1:8089 and sets localhost Passkey defaults
 ```
 
 - 实现与生产环境 TEENet service 相同的 HTTP API。

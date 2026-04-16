@@ -34,7 +34,7 @@ For API key operations that require human approval, use `createPendingApproval` 
 
 - Tests use in-memory SQLite (`file::memory:`) and a nil SDK client.
 - Handlers fail gracefully at the signing step -- this is by design. Tests verify behavior up to the point where signing would occur.
-- For integration tests that need real cryptographic signing, use the mock consensus server from [teenet-sdk/mock-server](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server).
+- For integration tests that need real cryptographic signing, use the mock server from [teenet-sdk/mock-server](https://github.com/TEENet-io/teenet-sdk/tree/main/mock-server).
 - All new features should include tests. See `handler/*_test.go` for examples.
 
 ## CI Pipeline

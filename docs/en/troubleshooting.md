@@ -33,10 +33,10 @@ Common issues and how to fix them.
 
 **Fix:**
 
-- Start the mock service: `cd teenet-sdk/mock-server && go build && ./mock-server`
+- Start the mock service: `cd teenet-sdk/mock-server && make run`
 - If you used a custom port (`MOCK_SERVER_PORT=9090`), update the wallet's `SERVICE_URL` to match:
   ```bash
-  SERVICE_URL=http://127.0.0.1:9090 ./teenet-wallet
+  APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.0.1:9090 ./teenet-wallet
   ```
 
 ---

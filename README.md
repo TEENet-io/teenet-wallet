@@ -54,19 +54,47 @@ See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/over
 ### Prerequisites
 
 - Go 1.25+
+- Node.js + npm (required for `make frontend`)
 - SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
 - A TEENet service endpoint (`teenet-sdk/mock-server` for local development)
 
-### Build and Run
+### Start the Mock Service
 
 ```bash
+git clone https://github.com/TEENet-io/teenet-sdk.git
+cd teenet-sdk/mock-server
+make run
+```
+
+The mock service listens on `http://127.0.0.1:8089` by default and `make run` sets the localhost Passkey defaults it needs for local development. Leave it running in a separate terminal.
+When the mock server starts, it prints the available test app instance IDs.
+Use one of those printed values as `APP_INSTANCE_ID` in the wallet start command below.
+
+### Build and Run the Wallet
+
+```bash
+git clone https://github.com/TEENet-io/teenet-wallet.git
+cd teenet-wallet
 git submodule update --init --recursive
 make frontend
 make build
-SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
+APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
 
-The wallet service starts on `http://0.0.0.0:8080` by default. Open `http://localhost:8080`, register a Passkey, and generate an API key.
+The wallet service listens on `0.0.0.0:8080` by default. Open `http://localhost:8080`, register a Passkey, and generate an API key.
+For local development against `teenet-sdk/mock-server`, `DATA_DIR=./data` keeps the SQLite database in a writable local directory.
+
+### Verify the Service
+
+```bash
+curl -s http://localhost:8080/api/health
+```
+
+Expected response:
+
+```json
+{"status":"ok","service":"teenet-wallet","db":true}
+```
 
 For the complete local setup, including starting `teenet-sdk/mock-server` and creating your first wallet, see the [full Quick Start guide](https://teenet-io.github.io/teenet-wallet/#/en/quick-start).
 
@@ -75,12 +103,14 @@ For the complete local setup, including starting `teenet-sdk/mock-server` and cr
 ```bash
 make docker
 docker run -p 8080:8080 \
+  -e APP_INSTANCE_ID=<mock-app-instance-id> \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
 
 The Docker image still requires a reachable TEENet service endpoint via `SERVICE_URL`.
+On Linux, `host.docker.internal` may require `--add-host=host.docker.internal:host-gateway` or an equivalent host-networking setup.
 
 ## Documentation
 

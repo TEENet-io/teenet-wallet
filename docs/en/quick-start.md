@@ -31,14 +31,17 @@ The mock service stands in for the TEENet service during development. Open a ter
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
-go build && ./mock-server
+make run
 ```
 
 Expected output:
 
 ```
-Mock server listening on 127.0.0.1:8089
+Mock server starting on port 8089
+Available test App IDs: ...
 ```
+
+Use one of the printed app IDs as `APP_INSTANCE_ID` when starting the wallet.
 
 Leave this running.
 
@@ -54,13 +57,15 @@ cd teenet-wallet
 git submodule update --init --recursive
 make frontend
 make build
-SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
+APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
+
+`DATA_DIR=./data` keeps the SQLite database in a writable project directory.
 
 Expected output:
 
 ```
-[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+..."msg":"server starting","addr":"0.0.0.0:8080"...
 ```
 
 ---
@@ -75,6 +80,8 @@ Expected response:
 
 ```json
 {
+  "db": true,
+  "service": "teenet-wallet",
   "status": "ok"
 }
 ```

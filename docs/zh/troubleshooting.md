@@ -33,10 +33,10 @@
 
 **解决方法：**
 
-- 启动 mock 服务：`cd teenet-sdk/mock-server && go build && ./mock-server`
+- 启动 mock 服务：`cd teenet-sdk/mock-server && make run`
 - 如果你使用了自定义端口（`MOCK_SERVER_PORT=9090`），需要更新钱包的 `SERVICE_URL`：
   ```bash
-  SERVICE_URL=http://127.0.0.1:9090 ./teenet-wallet
+  APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.0.1:9090 ./teenet-wallet
   ```
 
 ---
