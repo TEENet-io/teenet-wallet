@@ -1,10 +1,31 @@
 # TEENet Wallet
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg?logo=go&logoColor=white)](https://go.dev)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE) 
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) 
 [![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange.svg)]()
 
-A wallet your AI agent can use -- without putting your assets at risk. Your agent handles routine tasks like balances, transfers, and activity checks, while you set the rules: transfer limits, contract allowlists, and approval requirements. When an action exceeds your rules, you step in with a single Passkey confirmation.
+```text
+
+
++-------------+      +--------------------------+    outside    +--------+---------+
+| Agent / App | ---> | TEENet Wallet            | -- policy --> | User Approval    |
+| API key     |      | Policy engine            |               | Passkey          |
+| - balances  |      | - transfer limits        |               +--------+---------+
+| - transfers |      | - contract allowlists    |                        |
+| - contracts |      | - daily spend caps       |                        | approved
++-------------+      | - approval queue         |                        v
+                     | - audit log / routing    |          +-------------+--------------+    
+                     +-------------+------------+          | TEE Threshold Sign         |       
+                                   |                       | - key shares stay inside   |
+                                   |---------------------> |   enclaves                 |       
+                                       within policy       | - no full key on any one   |
+                                                           |   machine                  |
+                                                           +----------------------------+
+
+
+```
+
+A wallet your AI agent can use without handing over your assets. Your agent handles balances, transfers, and contract calls through one API, while TEENet Wallet enforces transfer limits, contract allowlists, daily spend caps, and approval rules before anything reaches signing. Low-risk actions can execute automatically; anything outside policy pauses for a single Passkey confirmation.
 
 Open source. Hardware-enforced rules. Passkey approval.
 
@@ -12,29 +33,10 @@ Open source. Hardware-enforced rules. Passkey approval.
 
 ## How It Works
 
-```
-AI Agent / App                       User (Browser)
-    |  (API Key)                         |  (Passkey Session)
-    v                                    v
-+--------------------------------------------------+
-|                 TEENet Platform                   |
-|  +--------------------------------------------+  |
-|  |  TEENet Wallet (application)               |  |
-|  |  - Builds transactions                     |  |
-|  |  - Enforces contract whitelist              |  |
-|  |  - Manages approval policies + daily limits |  |
-|  |  - Routes to approval queue or direct sign  |  |
-|  +--------------------------------------------+  |
-|                       |                           |
-|  +--------------------------------------------+  |
-|  |  Key Custody & Signing                     |  |
-|  |  - Keys sharded across TEE nodes           |  |
-|  |  - Threshold signing (no full key anywhere)|  |
-|  +--------------------------------------------+  |
-|                                                   |
-|  Hardware TEE Layer (Intel TDX / AMD SEV)         |
-+--------------------------------------------------+
-```
+- An agent or application authenticates with an API key and submits a balance check, transfer, or contract call.
+- TEENet Wallet evaluates transfer limits, daily spend caps, contract allowlists, and approval rules before signing.
+- Requests that satisfy policy go directly to threshold signing inside TEEs.
+- Requests that exceed policy wait for a browser-based Passkey approval, then continue to signing.
 
 Private keys are sharded across independent TEE nodes, never exported, and the hardware guarantees that the running code cannot be modified or bypassed.
 
@@ -47,7 +49,12 @@ Private keys are sharded across independent TEE nodes, never exported, and the h
 - **Address book** -- nickname-based transfers with per-chain validation
 - **Agent-ready** -- [OpenClaw](https://openclaw.ai) plugin and skill integration, idempotent transfers, SSE event stream, audit logging
 
-See the [full documentation](https://teenet-io.github.io/teenet-wallet/#/en/overview) for details.
+## Start Here
+
+- [Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start) -- local setup, first wallet, first API key
+- [Architecture Overview](https://teenet-io.github.io/teenet-wallet/#/en/architecture-overview) -- system model, policy flow, trust boundaries
+- [OpenAPI Spec](docs/api/openapi.yaml) -- machine-readable API schema
+- [Full Documentation](https://teenet-io.github.io/teenet-wallet/#/en/overview) -- user guides, deployment notes, and API reference
 
 ## Quick Start
 
