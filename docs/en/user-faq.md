@@ -37,15 +37,9 @@ Everything else requires your approval.
 
 ### What always needs my approval?
 
-The following actions require your Passkey, and transfers that would exceed your daily spending limit are blocked entirely:
+Your Passkey is required for transactions above your USD approval threshold, all smart contract interactions, and wallet security or policy changes such as whitelist updates, policy edits, wallet deletion, and API key management.
 
-- Transactions above your USD approval threshold.
-- Transfers that would exceed your daily spending limit are rejected until the limit resets at UTC midnight.
-- All smart contract interactions (swaps, token approvals, DeFi operations).
-- Adding a new contract or token to the whitelist.
-- Changing or disabling an approval policy.
-- Deleting a wallet.
-- Generating or revoking API keys.
+Transfers that would exceed your daily spending limit are rejected until the limit resets at UTC midnight. For the approval screen and review flow, see [Web UI & Approvals](/en/user-approvals.md).
 
 ### Can I use multiple agents?
 
