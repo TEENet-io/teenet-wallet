@@ -6,7 +6,7 @@
 |-------|----------|------|--------------|-------------|
 | `name` | Yes | string | any unique identifier | API identifier (e.g., `sepolia`, `solana-devnet`) |
 | `label` | Yes | string | -- | Human-readable name (e.g., `Sepolia Testnet`) |
-| `protocol` | Yes | string | `ecdsa`, `eddsa`, `schnorr`, `schnorr-bip340` | Signature scheme. Use `eddsa` for EdDSA / ed25519 chains (Solana), `schnorr-bip340` for Bitcoin Taproot, `ecdsa` for EVM chains. |
+| `protocol` | Yes | string | `ecdsa`, `eddsa`, `schnorr-bip340` | Signature scheme. Use `eddsa` for EdDSA / ed25519 chains (Solana), `schnorr-bip340` for Bitcoin Taproot, `ecdsa` for EVM chains. |
 | `curve` | Yes | string | `secp256k1`, `ed25519`, `secp256r1` | Cryptographic curve. Must match protocol: ecdsa→secp256k1/secp256r1, eddsa→ed25519, schnorr-bip340→secp256k1 |
 | `currency` | Yes | string | -- | Native currency symbol (e.g., `ETH`, `SOL`, `tBNB`) |
 | `family` | Yes | string | `evm`, `solana` | Chain family, determines tx building logic |
