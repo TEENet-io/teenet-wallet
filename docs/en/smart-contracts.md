@@ -5,6 +5,8 @@
 Before calling any smart contract, the contract address (EVM), token mint (SPL), or program ID (Solana) must be added to the contract whitelist.
 
 > **Scope:** the whitelist is **per user + chain**, not per wallet. All wallets you own on the same chain share a single whitelist, and deleting a wallet does **not** remove its whitelist entries. The wallet ID in the URL is only used to derive the chain.
+>
+> **Role:** the whitelist is admission control only. It decides whether a contract or program can be called at all. It does not auto-approve methods or bypass Passkey approval for API-key-initiated contract operations.
 
 **List whitelisted contracts:**
 
@@ -68,6 +70,15 @@ curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts/CONTRACT_ID 
 | `decimals` | No | Token decimals (6 for USDC, 18 for WETH, 9 for most SPL tokens) |
 | `label` | No | Human-readable label |
 
+### Why No ABI File Is Required (EVM)
+
+The wallet does not require a full ABI JSON file for contract calls. Instead, callers provide:
+
+- `func_sig`, such as `transfer(address,uint256)`
+- `args`, as a positional array matching that signature
+
+This works because the function signature already contains the type information needed to encode calldata. The wallet's backend ABI encoder uses `func_sig` and `args` to build the EVM call data directly.
+
 ### Contract Calls (EVM)
 
 Call any whitelisted smart contract function using the `/contract-call` endpoint with `func_sig` and `args`:
@@ -86,7 +97,6 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contract-call \
       "0xRecipientAddress..."
     ],
     "value": "0.1",
-    "amount_usd": "250.00",
     "memo": "DEX swap"
   }'
 ```
@@ -110,37 +120,36 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contract-call \
       {"pubkey": "Account2Base58...", "is_signer": false, "is_writable": false}
     ],
     "data": "a1b2c3d4e5f6...",
-    "amount_usd": "100.00",
     "memo": "program interaction"
   }'
 ```
 
-The program ID must be whitelisted. The wallet's own address is added as a signer automatically if required. The `data` field contains hex-encoded instruction data (discriminator + encoded arguments).
+The program ID must be whitelisted. The wallet's own address is added as a signer automatically if required. The `data` field contains hex-encoded instruction data.
+
+Solana does not use a chain-level ABI standard like EVM. The caller provides the program ID, the ordered account metadata, and the raw instruction bytes expected by that program.
 
 ### Read-Only Queries
 
 For read-only contract queries (e.g., `balanceOf`, `allowance`, `totalSupply`), use `eth_call` against public RPC endpoints directly. These calls do not require signing or gas, so there is no need to route them through the wallet service.
 
-### The `amount_usd` Field for Threshold Enforcement
+### Approval Behavior
 
-When a contract call involves transferring value (e.g., a DeFi swap, a deposit, a token transfer via contract), include the `amount_usd` field with the approximate USD value so the wallet can enforce threshold and daily-limit policies.
+Contract operations use two layers of protection:
 
-```json
-{
-  "contract": "0x...",
-  "func_sig": "deposit(uint256)",
-  "args": ["1000000000"],
-  "amount_usd": "1000.00"
-}
-```
+1. The contract or program must be on the whitelist.
+2. API-key-initiated contract operations require Passkey approval.
 
-If both `value` (native ETH sent with the call) and `amount_usd` are present, the wallet uses whichever is larger. If neither is provided, threshold and daily-limit checks are skipped for that call.
+This rule applies to:
 
-You can check current prices via `GET /api/prices` to help compute the USD value.
+- `/contract-call`
+- `/approve-token`
+- `/revoke-approval`
+
+Passkey-session contract operations execute directly because the human approver is already present.
 
 ### Convenience Endpoints
 
-**Approve ERC-20 token spending** (always requires Passkey approval):
+**Approve ERC-20 token spending** (API key requests require approval):
 
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/approve-token \
@@ -154,7 +163,7 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/approve-token \
   }'
 ```
 
-**Revoke ERC-20 token approval** (always requires Passkey approval):
+**Revoke ERC-20 token approval** (API key requests require approval):
 
 ```bash
 curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/revoke-approval \

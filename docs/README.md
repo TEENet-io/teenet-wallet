@@ -30,12 +30,34 @@ Use TEENet Wallet through [OpenClaw](https://openclaw.ai) -- no coding required.
 
 Build on TEENet Wallet with the REST API, integrate it into agent platforms, or prepare it for deployment on TEENet.
 
-- [Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
-- [Quick Start](en/quick-start.md) -- Zero to running in 5 minutes
-- [OpenAPI Spec](api/openapi.yaml) -- Machine-readable API schema
-- [Architecture Overview](en/architecture-overview.md) -- How the system works
-- [Authentication](en/authentication.md) -- API reference starting point
-- [Deploy Your Wallet App on TEENet](en/howto-deploy.md) -- Deployment scope and prerequisites
+- **Getting Started**
+  - [Quick Start](en/quick-start.md) -- Zero to running in 5 minutes
+  - [Installation & Setup](en/installation.md) -- Build options, environment variables, and Docker
+  - [Troubleshooting](en/troubleshooting.md) -- Common setup and runtime issues
+- **Integrations**
+  - [Agent Integration](en/agent-integration.md) -- Best practices for agent platforms
+  - [TEENet SDK Usage](en/sdk-usage.md) -- How the wallet uses the SDK and mock service
+- **Concepts**
+  - [Architecture Overview](en/architecture-overview.md) -- How the system works
+  - [Signing & TEE Trust Model](en/signing-tee.md) -- Threshold signing and custody model
+- **How-To Guides**
+  - [Add a Chain](en/howto-add-chain.md) -- Extend chain support safely
+  - [Add a Plugin Tool](en/howto-add-plugin-tool.md) -- Extend the OpenClaw plugin
+  - [Deploy Your Wallet App on TEENet](en/howto-deploy.md) -- Deployment scope and prerequisites
+- **API Reference**
+  - [OpenAPI Spec](api/openapi.yaml) -- Machine-readable API schema
+  - [Authentication](en/authentication.md) -- API reference starting point
+  - [Wallets](en/wallets.md) -- Wallet lifecycle endpoints
+  - [Transfers](en/transfers.md) -- Native-asset transfer endpoints
+  - [Address Book](en/addressbook.md) -- Saved recipient management
+  - [Smart Contracts](en/smart-contracts.md) -- Contract call and token interaction endpoints
+  - [Approval System](en/approvals.md) -- Approval request and confirmation flow
+- **Reference**
+  - [Configuration](en/configuration.md) -- Environment variables and runtime behavior
+  - [Error Codes & Status Codes](en/error-codes.md) -- Error model and HTTP semantics
+  - [Audit Log](en/audit-log.md) -- Audit trail endpoints and usage
+  - [chains.json Schema](en/chains-schema.md) -- Chain definition format
+  - [Data Model](en/data-model.md) -- Database entities and relationships
 
 ## Contribute
 

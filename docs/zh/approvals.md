@@ -2,7 +2,7 @@
 
 ### USD 阈值
 
-每个钱包可设置一个 USD 计价的审批策略，覆盖所有币种：
+每个钱包可设置一个 USD 计价的审批策略。该策略用于控制转账阈值和每日转账限额：
 
 ```bash
 curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/policy" \
@@ -15,21 +15,33 @@ curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/policy" \
   }'
 ```
 
-- `threshold_usd`：单笔交易超过此 USD 值需要 Passkey 审批
-- `daily_limit_usd`（可选）：每 UTC 日累计 USD 支出上限，超出则硬性拒绝
+- `threshold_usd`：单笔转账超过此 USD 值需要 Passkey 审批
+- `daily_limit_usd`（可选）：每 UTC 日累计 USD 转账支出上限，超出则硬性拒绝
 - `enabled`：策略启用/禁用开关
 
-**价格换算规则：**
+### 决策模型
+
+| 操作 | API Key 行为 | Passkey 行为 |
+|------|--------------|--------------|
+| `/transfer` | 低于阈值直接执行；超过阈值进入审批 | 直接执行 |
+| 无法定价的代币转账 | 进入审批（fail-closed） | 直接执行 |
+| `/contract-call` | 始终需要审批 | 直接执行 |
+| `/approve-token` | 始终需要审批 | 直接执行 |
+| `/revoke-approval` | 始终需要审批 | 直接执行 |
+
+通过 API Key 发起的合约白名单新增和更新也会创建待审批请求。通过 Passkey 会话发起则立即生效。
+
+**转账价格换算规则：**
 - 原生代币（ETH、SOL、BNB 等）：通过 CoinGecko API 获取实时价格（10 秒缓存）
 - 稳定币（USDC、USDT、DAI、BUSD）：固定按 $1 计价
 - ERC-20 代币：通过 CoinGecko Token Price API 按合约地址查价
 - Solana SPL 代币：优先 CoinGecko，无数据时回退到 Jupiter Price API
-- 价格不可用时，交易需要审批（fail-closed）
+- 代币转账价格不可用时，该笔转账需要审批（fail-closed）
 - 可通过 `GET /api/prices` 查看当前使用的价格
 
 ### 日限额
 
-日限额以 UTC 日历日为周期运作：
+日限额仅适用于转账，并以 UTC 日历日为周期运作：
 
 - 每笔转账发起时，系统预扣相应 USD 额度
 - 若签名或广播失败，预扣额度自动回退（auth/capture 模式）
@@ -116,7 +128,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/approvals/${APPROVAL_ID}/reject" \
 
 通过 Passkey 会话发起的合约调用则立即执行（人类已在场）。
 
-便捷端点 `approve-token` 和 `revoke-approval` 同样始终需要 Passkey 审批，因为它们涉及授权或撤销第三方支出权限。
+便捷端点 `approve-token` 和 `revoke-approval` 也遵循同样的规则：通过 API Key 发起时需要审批，通过 Passkey 会话发起时直接执行。
 
 ---
 [上一页: 智能合约交互](/zh/smart-contracts.md) | [下一页: AI Agent 集成](/zh/agent-integration.md)

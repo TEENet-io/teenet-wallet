@@ -7,15 +7,23 @@
   - [安全与常见问题](/zh/user-faq.md)
 
 - **构建与集成**
-  - [AI Agent 集成](/zh/agent-integration.md)
+  - **快速开始**
+    - [快速开始](/zh/quick-start.md)
+    - [安装与配置](/zh/installation.md)
+    - [故障排查](/zh/troubleshooting.md)
+
+  - **集成**
+    - [AI Agent 集成](/zh/agent-integration.md)
+    - [TEENet SDK 使用](/zh/sdk-usage.md)
 
   - **核心概念**
     - [架构概览](/zh/architecture-overview.md)
-    - [TEENet SDK 使用](/zh/sdk-usage.md)
     - [签名与 TEE 信任模型](/zh/signing-tee.md)
 
   - **操作指南**
+    - [添加链](/zh/howto-add-chain.md)
     - [添加插件工具](/zh/howto-add-plugin-tool.md)
+    - [在 TEENet 上部署你的钱包应用](/zh/howto-deploy.md)
 
   - **API 参考**
     - [OpenAPI 规范](/api/openapi.yaml ':ignore')

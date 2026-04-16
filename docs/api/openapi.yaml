@@ -2095,9 +2095,6 @@ paths:
            calls via Passkey session execute immediately.
 
         Works on both EVM (ABI-encoded function calls) and Solana (program instructions).
-
-        The optional `amount_usd` field lets callers report the USD value of DeFi
-        operations for threshold and daily-limit enforcement.
       operationId: contractCall
       security:
         - ApiKeyAuth: []
@@ -2129,10 +2126,6 @@ paths:
                   type: string
                   description: "ETH to send with the call (EVM only, in ETH units)"
                   example: "0.1"
-                amount_usd:
-                  type: string
-                  description: "Caller-reported USD value for threshold/daily-limit checks"
-                  example: "150.00"
                 memo:
                   type: string
                   example: "Swap USDC for ETH"

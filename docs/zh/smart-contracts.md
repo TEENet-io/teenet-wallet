@@ -5,6 +5,8 @@
 合约白名单是安全门控：所有合约调用（包括 ERC-20/SPL 代币转账）都必须先将目标合约/铸造地址/程序 ID 加入白名单。
 
 > **作用范围：** 白名单按 **用户 + 链** 划分,不按 wallet 划分。同一用户在同一条链上的所有 wallet **共享同一份白名单**,删除某个 wallet 也**不会**移除其白名单条目。URL 中的 wallet ID 仅用于推导所属链。
+>
+> **作用边界：** 白名单只负责准入控制，只决定“能不能调用这个合约/程序”。它不会自动放行具体方法，也不会绕过 API Key 合约操作所需的 Passkey 审批。
 
 **列出白名单合约：**
 
@@ -71,6 +73,15 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts/${CONTRA
 | `decimals` | 否 | 代币精度（如 USDC 为 6，WETH 为 18，大多数 SPL 为 9） |
 | `label` | 否 | 人类可读标签 |
 
+### 为什么 EVM 不需要 ABI 文件
+
+钱包不要求调用方上传完整 ABI JSON 文件，而是只要求提供：
+
+- `func_sig`，例如 `transfer(address,uint256)`
+- `args`，按该签名顺序排列的参数数组
+
+原因是函数签名本身已经包含了 calldata 编码所需的类型信息。钱包后端会根据 `func_sig` 和 `args` 直接完成 ABI 编码。
+
 ### 合约调用（EVM）
 
 调用已白名单的 EVM 智能合约函数：
@@ -84,7 +95,6 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contract-call" \
     "func_sig": "transfer(address,uint256)",
     "args": ["0xRecipient...", "1000000"],
     "value": "0",
-    "amount_usd": "150.00",
     "memo": "DeFi 操作"
   }'
 ```
@@ -94,7 +104,6 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contract-call" \
 - `func_sig`（必填）：Solidity 风格函数签名，如 `transfer(address,uint256)`
 - `args`（必填）：参数数组，按函数签名顺序排列
 - `value`（可选）：附带发送的 ETH 数量
-- `amount_usd`（可选）：此调用涉及的 USD 价值，用于阈值和日限额判断
 - `memo`（可选）：备注
 
 **支持的参数类型：** `address`、`uint256`（及其他 `uintN`）、`int256`（及其他 `intN`）、`bool`、`bytes32`（及其他 `bytesN`）、`bytes`、`string`、动态数组、定长数组（`T[N]`）、元组（tuple）。
@@ -116,7 +125,6 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contract-call" \
       {"pubkey": "Account2Base58...", "is_signer": false, "is_writable": false}
     ],
     "data": "hex_encoded_instruction_data",
-    "amount_usd": "50.00",
     "memo": "Solana 程序调用"
   }'
 ```
@@ -124,35 +132,33 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contract-call" \
 **参数说明：**
 - `contract`（必填）：Solana 程序 ID（base58，必须在白名单中）
 - `accounts`（必填）：账户元数据数组，按指令顺序排列；钱包地址作为签名者自动添加
-- `data`（必填）：十六进制编码的指令数据（鉴别器 + 编码参数）
-- `amount_usd`（可选）：USD 价值申报
+- `data`（必填）：十六进制编码的指令数据
 
 ### 只读查询
 
 对于只读合约查询（如 `balanceOf`、`allowance`、`totalSupply`），请直接通过公共 RPC 端点使用 `eth_call`。这些调用不需要签名或 Gas，因此无需通过钱包服务路由。
 
-### amount_usd 阈值申报
+Solana 不存在像 EVM 那样的链级 ABI 标准。调用方需要直接提供程序 ID、按顺序排列的账户元数据，以及该程序期望的原始指令字节。
 
-当合约调用涉及价值转移（如 DeFi 交换、代币转账）时，应在请求中包含 `amount_usd` 字段申报近似 USD 价值，以便钱包执行阈值和日限额策略：
+### 审批行为
 
-```json
-{
-  "contract": "0x...",
-  "func_sig": "swap(address,uint256)",
-  "args": ["0x...", "1000000"],
-  "amount_usd": "1500.00"
-}
-```
+合约操作有两层保护：
 
-**规则：**
-- 若同时存在 `value`（原生 ETH）和 `amount_usd`，钱包取两者中较大的 USD 值
-- 若省略 `amount_usd` 且未附带 `value`，该调用不受阈值/日限额检查
-- 可通过 `GET /api/prices` 获取当前 ETH/SOL 价格用于计算
+1. 目标合约或程序必须已加入白名单。
+2. 通过 API Key 发起的合约操作需要 Passkey 审批。
+
+这一规则适用于：
+
+- `/contract-call`
+- `/approve-token`
+- `/revoke-approval`
+
+通过 Passkey 会话发起的合约操作会直接执行，因为审批者已经在场。
 
 **便捷端点：**
 
 ```bash
-# 授权 ERC-20 代币支出（始终需要 Passkey 审批）
+# 授权 ERC-20 代币支出（通过 API Key 发起时需要审批）
 curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/approve-token" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
@@ -163,7 +169,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/approve-token" \
     "decimals": 6
   }'
 
-# 撤销 ERC-20 代币授权（始终需要 Passkey 审批）
+# 撤销 ERC-20 代币授权（通过 API Key 发起时需要审批）
 curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/revoke-approval" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \

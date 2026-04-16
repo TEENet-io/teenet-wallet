@@ -30,12 +30,34 @@
 
 基于 TEENet Wallet 的 REST API 构建应用，将其集成到 Agent 平台中，或为部署到 TEENet 做准备。
 
-- [AI Agent 集成](/zh/agent-integration.md) -- Agent 平台最佳实践
-- [快速开始](/zh/quick-start.md) -- 5 分钟从零开始运行
-- [OpenAPI 规范](/api/openapi.yaml) -- 机器可读的 API schema
-- [架构概览](/zh/architecture-overview.md) -- 系统工作原理
-- [认证体系](/zh/authentication.md) -- API 参考入口
-- [在 TEENet 上部署你的钱包应用](/zh/howto-deploy.md) -- 部署边界与前提条件
+- **快速开始**
+  - [快速开始](/zh/quick-start.md) -- 5 分钟从零开始运行
+  - [安装与配置](/zh/installation.md) -- 构建方式、环境变量与 Docker
+  - [故障排查](/zh/troubleshooting.md) -- 常见安装与运行问题
+- **集成**
+  - [AI Agent 集成](/zh/agent-integration.md) -- Agent 平台最佳实践
+  - [TEENet SDK 使用](/zh/sdk-usage.md) -- 钱包如何使用 SDK 和 mock server
+- **核心概念**
+  - [架构概览](/zh/architecture-overview.md) -- 系统工作原理
+  - [签名与 TEE 信任模型](/zh/signing-tee.md) -- 门限签名与托管模型
+- **操作指南**
+  - [添加链](/zh/howto-add-chain.md) -- 安全扩展链支持
+  - [添加插件工具](/zh/howto-add-plugin-tool.md) -- 扩展 OpenClaw 插件能力
+  - [在 TEENet 上部署你的钱包应用](/zh/howto-deploy.md) -- 部署边界与前提条件
+- **API 参考**
+  - [OpenAPI 规范](/api/openapi.yaml) -- 机器可读的 API schema
+  - [认证体系](/zh/authentication.md) -- API 参考入口
+  - [钱包管理](/zh/wallets.md) -- 钱包生命周期接口
+  - [转账](/zh/transfers.md) -- 原生资产转账接口
+  - [地址簿](/zh/addressbook.md) -- 收款人管理
+  - [智能合约交互](/zh/smart-contracts.md) -- 合约调用与代币交互接口
+  - [审批系统](/zh/approvals.md) -- 审批请求与确认流程
+- **参考**
+  - [配置参考](/zh/configuration.md) -- 环境变量与运行时行为
+  - [错误码与状态码](/zh/error-codes.md) -- 错误模型与 HTTP 语义
+  - [审计日志](/zh/audit-log.md) -- 审计轨迹接口与用法
+  - [chains.json Schema](/zh/chains-schema.md) -- 链定义格式
+  - [数据模型](/zh/data-model.md) -- 数据库实体与关系
 
 ## 贡献
 

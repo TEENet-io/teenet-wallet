@@ -7,15 +7,23 @@
   - [FAQ](en/user-faq.md)
 
 - **Build & Integrate**
-  - [Agent Integration](en/agent-integration.md)
+  - **Getting Started**
+    - [Quick Start](en/quick-start.md)
+    - [Installation & Setup](en/installation.md)
+    - [Troubleshooting](en/troubleshooting.md)
+
+  - **Integrations**
+    - [Agent Integration](en/agent-integration.md)
+    - [TEENet SDK Usage](en/sdk-usage.md)
 
   - **Concepts**
     - [Architecture Overview](en/architecture-overview.md)
-    - [TEENet SDK Usage](en/sdk-usage.md)
     - [Signing & TEE Trust Model](en/signing-tee.md)
 
   - **How-To Guides**
+    - [Add a Chain](en/howto-add-chain.md)
     - [Add a Plugin Tool](en/howto-add-plugin-tool.md)
+    - [Deploy Your Wallet App on TEENet](en/howto-deploy.md)
 
   - **API Reference**
     - [OpenAPI Spec](api/openapi.yaml ':ignore')

@@ -2,7 +2,7 @@
 
 ### USD Thresholds
 
-Each wallet can have a single USD-denominated approval policy. When a transfer or contract call exceeds the threshold, it enters a pending state requiring Passkey approval.
+Each wallet can have a single USD-denominated approval policy. This policy governs transfer thresholds and daily transfer limits.
 
 ```bash
 curl -s -X PUT ${TEE_WALLET_URL}/api/wallets/WALLET_ID/policy \
@@ -15,16 +15,28 @@ curl -s -X PUT ${TEE_WALLET_URL}/api/wallets/WALLET_ID/policy \
   }'
 ```
 
-- `threshold_usd`: Transactions above this USD value require Passkey approval.
+- `threshold_usd`: Transfers above this USD value require Passkey approval.
 - `daily_limit_usd` (optional): Cumulative USD spend per UTC calendar day. Transfers that would exceed this limit are hard-blocked (no approval path).
 - `enabled`: Enable or disable the policy.
 
-**Price conversion:**
+### Decision Model
+
+| Operation | API Key behavior | Passkey behavior |
+|----------|------------------|------------------|
+| `/transfer` | Auto-executes below threshold; requires approval above threshold | Executes directly |
+| Token transfer with unknown price | Requires approval (fail-closed) | Executes directly |
+| `/contract-call` | Always requires approval | Executes directly |
+| `/approve-token` | Always requires approval | Executes directly |
+| `/revoke-approval` | Always requires approval | Executes directly |
+
+Contract whitelist additions and updates made via API key also create pending approval requests. Passkey-authenticated changes apply immediately.
+
+**Transfer pricing for policy checks:**
 - Native currencies (ETH, SOL, BNB, etc.) are priced via CoinGecko API with a 10-second cache.
 - Stablecoins (USDC, USDT, DAI, BUSD) are hardcoded at $1.
 - ERC-20 tokens are priced via CoinGecko token price API by contract address.
 - Solana SPL tokens use CoinGecko first, then fall back to Jupiter Price API.
-- If a price is unavailable, the transaction requires approval (fail-closed).
+- If a token transfer price is unavailable, the transfer requires approval (fail-closed).
 - View current prices: `GET /api/prices`.
 
 **View the current policy:**
@@ -44,7 +56,7 @@ curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID/policy \
 
 ### Daily Limits
 
-Daily limits use a pre-deduction (auth/capture) pattern:
+Daily limits apply to transfers and use a pre-deduction (auth/capture) pattern:
 
 1. Before signing, the wallet pre-deducts the USD amount from the daily budget.
 2. If signing or broadcast fails, the pre-deduction is rolled back.
@@ -134,4 +146,4 @@ All contract calls made via API key require Passkey approval. This is by design 
 
 Contract calls made via a Passkey session execute immediately (the human is already present).
 
-The convenience endpoints `approve-token` and `revoke-approval` also always require Passkey approval because they grant or revoke third-party spending access.
+The convenience endpoints `approve-token` and `revoke-approval` follow the same rule: API key requests require approval, while Passkey-session requests execute directly.
