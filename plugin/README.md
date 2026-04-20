@@ -79,7 +79,7 @@ openclaw plugins inspect teenet-wallet
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `apiUrl` | Yes | Wallet backend URL (e.g. `https://test.teenet.io/instance/xxx/`) |
+| `apiUrl` | Yes | Wallet backend URL (e.g. `https://wallet.teenet.app`) |
 | `apiKey` | Yes | API Key with `ocw_` prefix |
 
 ### tools.profile
@@ -182,7 +182,7 @@ plugin/
 │   │   └── tool-result.ts    # Shared approval result handling
 │   └── __tests__/            # Unit and E2E tests
 ├── skill/
-│   └── tee-wallet/
+│   └── teenet-wallet/
 │       └── SKILL.md          # Agent instructions (when and how to use each tool)
 ├── SOLUTION.md               # Technical design document
 └── DEVLOG.md                 # Development log and lessons learned

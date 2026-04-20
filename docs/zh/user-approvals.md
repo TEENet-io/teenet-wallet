@@ -1,4 +1,4 @@
-[wallet-url]: https://test.teenet.io/instance/wallet/
+[wallet-url]: https://wallet.teenet.app
 
 # 审批与 Web 界面
 

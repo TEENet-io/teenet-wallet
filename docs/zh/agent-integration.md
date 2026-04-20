@@ -13,8 +13,8 @@ Skill 定义位于 `skill/teenet-wallet/` 目录，兼容 [OpenClaw](https://ope
 
 | 变量 | 说明 |
 |------|------|
-| `TEE_WALLET_API_URL` | 钱包服务地址（如 `https://test.teenet.io/instance/f8e649535e1d2838ae2817992f946d6a`） |
-| `TEE_WALLET_API_KEY` | API Key（`ocw_` 前缀） |
+| `TEENET_WALLET_API_URL` | 钱包服务地址（如 `https://wallet.teenet.app`） |
+| `TEENET_WALLET_API_KEY` | API Key（`ocw_` 前缀） |
 
 **Agent 可执行的操作：**
 - 创建钱包、查看钱包列表
@@ -70,7 +70,7 @@ openclaw plugins inspect teenet-wallet   # 期望 Status: loaded
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `apiUrl` | 是 | 钱包后端地址（如 `https://test.teenet.io/instance/xxx/`） |
+| `apiUrl` | 是 | 钱包后端地址（如 `https://wallet.teenet.app`） |
 | `apiKey` | 是 | 带 `ocw_` 前缀的 API Key |
 
 > **注意 `tools.profile`**。插件要求 `full` profile（默认值）。如果被设为 `coding`、`messaging` 或 `minimal`，工具会被静默屏蔽且不会报错。可通过 `openclaw config get tools.profile` 检查，必要时 `openclaw config unset tools.profile` 清除。

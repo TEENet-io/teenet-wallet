@@ -1,17 +1,17 @@
 ---
-name: tee-wallet
+name: teenet-wallet
 description: "Manage crypto wallets secured by TEE. Use when user asks to create wallet, check balance, send crypto, or manage crypto assets. Supports Ethereum and Solana."
 metadata:
   openclaw:
     emoji: "🔐"
     requires:
       env:
-        - TEE_WALLET_API_URL
-        - TEE_WALLET_API_KEY
+        - TEENET_WALLET_API_URL
+        - TEENET_WALLET_API_KEY
       anyBins:
         - python3
         - curl
-    primaryEnv: TEE_WALLET_API_KEY
+    primaryEnv: TEENET_WALLET_API_KEY
 ---
 
 # TEE Wallet Skill
@@ -24,8 +24,8 @@ as a whole outside secure hardware.
 
 ## Configuration
 
-- `TEE_WALLET_API_URL`: The wallet service URL (required — no default)
-- `TEE_WALLET_API_KEY`: Your API key (starts with `ocw_`)
+- `TEENET_WALLET_API_URL`: The wallet service URL (required — no default)
+- `TEENET_WALLET_API_KEY`: Your API key (starts with `ocw_`)
 
 RPC URLs are configured in the wallet service's `chains.json` file (or via the `CHAINS_FILE` env var on the server), not as client-side environment variables. The wallet service handles all blockchain RPC communication internally.
 
@@ -37,13 +37,13 @@ When a user interacts with the wallet skill for the first time (no prior wallet 
 
 Before making any API calls, verify both required environment variables are set.
 
-**If `TEE_WALLET_API_URL` is missing**, stop and ask the user to set it — there is no default. Tell them:
-> ⚙️ **`TEE_WALLET_API_URL` is not configured.**
+**If `TEENET_WALLET_API_URL` is missing**, stop and ask the user to set it — there is no default. Tell them:
+> ⚙️ **`TEENET_WALLET_API_URL` is not configured.**
 >
 > Set it to the wallet service URL you were given (for example, the deployed instance URL from your administrator), then try again.
 
-**If `TEE_WALLET_API_KEY` is missing**, stop and tell the user:
-> 🔑 **`TEE_WALLET_API_KEY` is not configured.**
+**If `TEENET_WALLET_API_KEY` is missing**, stop and tell the user:
+> 🔑 **`TEENET_WALLET_API_KEY` is not configured.**
 >
 > Set it to your wallet API key (starts with `ocw_`), then try again. You should have received this key when you generated it in the wallet Web UI.
 
@@ -55,17 +55,17 @@ Tell the user:
 > 🔗 **Checking wallet service connection...**
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/health"
+curl -s "${TEENET_WALLET_API_URL}/api/health"
 ```
 
 On success, tell the user:
-> ✅ **Connected to wallet service** at `${TEE_WALLET_API_URL}`
+> ✅ **Connected to wallet service** at `${TEENET_WALLET_API_URL}`
 
 If the request fails or `status` is not `ok`, tell the user:
-> ❌ Cannot reach the wallet service at `${TEE_WALLET_API_URL}`. Check that the URL is correct and the service is running.
+> ❌ Cannot reach the wallet service at `${TEENET_WALLET_API_URL}`. Check that the URL is correct and the service is running.
 
 If a subsequent authenticated call returns `invalid API key`, tell the user:
-> ❌ API key rejected. Check that `TEE_WALLET_API_KEY` is correct (should start with `ocw_`).
+> ❌ API key rejected. Check that `TEENET_WALLET_API_KEY` is correct (should start with `ocw_`).
 
 ### Step 2 — Check existing wallets
 
@@ -73,8 +73,8 @@ Tell the user:
 > 📋 **Checking your wallets...**
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 **If the user already has wallets**, tell them:
@@ -94,7 +94,7 @@ Tell the user:
 > 🔍 **Looking up available chains...**
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/chains"
+curl -s "${TEENET_WALLET_API_URL}/api/chains"
 ```
 
 Then present the results and ask the user to pick one:
@@ -160,7 +160,7 @@ Never skip showing results. Every step gets output. Never leave the user wonderi
 >
 > **Step 5: Set $1 USD approval threshold**
 > 🔐 **Result:** Needs approval! Approval ID: {approval_id}
-> 👉 → [Approve $1 threshold policy]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+> 👉 → [Approve $1 threshold policy]({TEENET_WALLET_API_URL}/#/approve/{approval_id})
 
 After user approves:
 > **Step 5: Set $1 USD approval threshold**
@@ -171,7 +171,7 @@ After user approves:
 >
 > **Step 7: Send 0.001 ETH to second wallet (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
 > 🔐 **Result:** Needs approval! Approval ID: {approval_id}
-> 👉 → [Approve this 0.001 ETH transfer]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+> 👉 → [Approve this 0.001 ETH transfer]({TEENET_WALLET_API_URL}/#/approve/{approval_id})
 
 After user approves Step 7:
 > **Step 7: Send 0.001 ETH to second wallet (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
@@ -179,7 +179,7 @@ After user approves Step 7:
 >
 > **Step 8: Add USDC to whitelist**
 > 🔐 **Result:** Needs approval! Approval ID: {approval_id}
-> 👉 → [Approve adding USDC to whitelist]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+> 👉 → [Approve adding USDC to whitelist]({TEENET_WALLET_API_URL}/#/approve/{approval_id})
 
 After user approves Step 8:
 > **Step 8: Add USDC to whitelist**
@@ -212,7 +212,7 @@ Skip the full flow and go directly to the requested operation if:
 
 ### If the user has no API key yet
 
-The agent talks to the wallet via `TEE_WALLET_API_KEY`, which the user generates in the wallet Web UI **after** registering an account. New accounts are created in the Web UI through a 3-step flow: **enter email → submit the 6-digit verification code emailed to them → register a Passkey**. If the user says they haven't created an account yet, point them to the wallet Web UI, walk them through that flow, and ask them to come back with the generated API key.
+The agent talks to the wallet via `TEENET_WALLET_API_KEY`, which the user generates in the wallet Web UI **after** registering an account. New accounts are created in the Web UI through a 3-step flow: **enter email → submit the 6-digit verification code emailed to them → register a Passkey**. If the user says they haven't created an account yet, point them to the wallet Web UI, walk them through that flow, and ask them to come back with the generated API key.
 
 ## Smart Wallet Selection
 
@@ -249,8 +249,8 @@ Only interpret a UUID as the real wallet `id` if the user explicitly provides on
 When user asks to create a new wallet:
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"chain":"<chain_name>","label":"<user description>"}'
 ```
@@ -269,8 +269,8 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets" \
 ### 2. List Wallets
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 **Always** present wallets as a numbered list so the user can refer to wallets by number. Use this exact format:
@@ -288,15 +288,15 @@ Do **not** show the raw wallet `id` (UUID) in normal chat responses. Keep it int
 ### 3. Get Wallet Details
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 ### 3.1 Rename Wallet
 
 ```bash
-curl -s -X PATCH "${TEE_WALLET_API_URL}/api/wallets/<id>" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X PATCH "${TEENET_WALLET_API_URL}/api/wallets/<id>" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"label":"<new label>"}'
 ```
@@ -314,8 +314,8 @@ The **backend constructs the transaction, signs it via TEE, and broadcasts it** 
 If `balance < amount + estimated_gas (0.0005 ETH buffer)`, warn the user before sending.
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/transfer" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/transfer" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "<recipient_address_or_nickname>",
@@ -347,23 +347,23 @@ Use this when the user asks to send a token (ERC-20 on Ethereum, or SPL token on
 
 **Step 1 — Ensure the contract/mint is whitelisted** (see Section 6):
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 If the contract/mint is not in the list, you can propose adding it via API key (creates a pending approval — see Section 6):
 
 For Ethereum ERC-20:
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"contract_address":"<0x...>","symbol":"<SYMBOL>","decimals":<N>}'
 ```
 
 For Solana SPL tokens, use the token mint address (base58):
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"contract_address":"<mint_address_base58>","symbol":"<SYMBOL>","decimals":<N>}'
 ```
@@ -372,8 +372,8 @@ Then follow the approval polling flow (Section 12, `contract_add` type). Alterna
 
 **Step 2 — Call `/transfer` with the `token` field** (no chat confirmation needed — backend enforces approval policies):
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/transfer" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/transfer" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "<recipient_address>",
@@ -413,14 +413,14 @@ Removing entries requires **Passkey hardware authentication**. Adding can be don
 
 **List whitelisted contracts** (API key works for reading):
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 **Add a contract via API key** (creates pending approval):
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract_address": "<0x...>",
@@ -430,7 +430,7 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
   }'
 ```
 
-A 202 response means pending approval — tell the user with the contract address, symbol, explorer link, and approval link `{TEE_WALLET_API_URL}/#/approve/{approval_id}`.
+A 202 response means pending approval — tell the user with the contract address, symbol, explorer link, and approval link `{TEENET_WALLET_API_URL}/#/approve/{approval_id}`.
 
 Then start **background approval polling** (Section 12). Once `approved`, the contract/mint/program is whitelisted and token transfers or program calls can proceed.
 
@@ -443,8 +443,8 @@ Then start **background approval polling** (Section 12). Once `approved`, the co
 
 **Update a contract via API key** (creates pending approval):
 ```bash
-curl -s -X PUT "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts/<cid>" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X PUT "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts/<cid>" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "label": "Updated label",
@@ -464,8 +464,8 @@ Use when the user wants to call any smart contract function (EVM) or invoke a So
 
 **EVM (Ethereum) — use `func_sig` and `args`:**
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/contract-call" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "<0x...>",
@@ -528,8 +528,8 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
 
 **Solana — use `accounts` and `data` instead of `func_sig`/`args`:**
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/contract-call" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/contract-call" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "<program_id_base58>",
@@ -555,8 +555,8 @@ The program must be added to the whitelist before calling (same API as Section 6
 Shorthand for calling `approve(spender, amount)` on an ERC-20 contract:
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/approve-token" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/approve-token" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "<token contract 0x...>",
@@ -573,8 +573,8 @@ curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/approve-token" \
 Shorthand for calling `approve(spender, 0)` to revoke a previously granted allowance:
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/revoke-approval" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/revoke-approval" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "<token contract 0x...>",
@@ -591,8 +591,8 @@ Wraps native SOL into wSOL (Wrapped SOL SPL token). Use when the user asks to wr
 The backend creates the wSOL Associated Token Account (ATA) automatically if it does not yet exist.
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/wrap-sol" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/wrap-sol" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"amount": "<SOL amount, e.g. 0.1>"}'
 ```
@@ -604,8 +604,8 @@ On success, show tx hash + Solscan link. If `pending_approval`, follow Section 1
 Closes the wSOL ATA and returns all wSOL back to native SOL. Use when the user asks to unwrap wSOL or convert wSOL back to SOL. The entire wSOL balance in the ATA is unwrapped in one operation.
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/unwrap-sol" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/unwrap-sol" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -627,8 +627,8 @@ Query contract state without signing or sending a transaction. No gas, no approv
 - Do not assume testnet pool prices resemble mainnet
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/call-read" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/call-read" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "contract": "<0x...>",
@@ -653,16 +653,16 @@ The address book lets users save frequently used addresses with nicknames. Users
 
 **List address book entries:**
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/addressbook" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/addressbook" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 Optional query params: `?nickname=alice`, `?chain=ethereum`
 
 **Add an entry via API key** (creates pending approval):
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/addressbook" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/addressbook" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "nickname": "alice",
@@ -676,8 +676,8 @@ A 202 response means pending approval — follow Section 12.
 
 **Update an entry via API key** (creates pending approval):
 ```bash
-curl -s -X PUT "${TEE_WALLET_API_URL}/api/addressbook/<id>" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X PUT "${TEENET_WALLET_API_URL}/api/addressbook/<id>" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"address": "0xnewaddress...", "memo": "updated memo"}'
 ```
@@ -691,8 +691,8 @@ Only include the fields you want to change (`nickname`, `address`, `memo`). A 20
 The `/transfer` endpoint accepts a nickname in the `to` field. If the value doesn't look like a raw address, the backend resolves it from the address book for the wallet's chain:
 
 ```bash
-curl -s -X POST "${TEE_WALLET_API_URL}/api/wallets/<id>/transfer" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/transfer" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"to": "alice", "amount": "0.1"}'
 ```
@@ -707,7 +707,7 @@ If the nickname is not found for the wallet's chain, the API returns 400 with an
 
 **Do NOT call the delete API.** Wallet deletion requires Passkey hardware authentication and is irreversible. Tell the user to do it themselves in the Web UI:
 
-> Wallet deletion requires Passkey verification and can't be done through the API key. Please delete it in the [Web UI]({TEE_WALLET_API_URL}) → Wallets → select wallet → Delete.
+> Wallet deletion requires Passkey verification and can't be done through the API key. Please delete it in the [Web UI]({TEENET_WALLET_API_URL}) → Wallets → select wallet → Delete.
 
 ### 9. Check Balance
 
@@ -715,8 +715,8 @@ When the user asks for a wallet's balance, **show both native and token balances
 
 **Step 1 — Native balance:**
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/balance" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/balance" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 > ⚠️ `/balance` returns the wallet's **native gas token** only (ETH / SOL). Never present this as a token balance.
@@ -726,8 +726,8 @@ curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/balance" \
 Query the contract whitelist for this wallet's chain to get its token list. The whitelist is **scoped per user + chain** — all wallets on the same chain share the same whitelist, and deleting a wallet does **not** remove these entries. Only tokens in the whitelist are checked for balances.
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/contracts" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/contracts" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 Use the returned contracts as the token list for on-chain balance queries (see Section 9.1). If the whitelist is empty, only the native balance is shown.
@@ -740,8 +740,8 @@ Use the returned contracts as the token list for on-chain balance queries (see S
 
 **After a transfer**: the balance reflects the latest confirmed block. Wait ~15 seconds before checking:
 ```bash
-sleep 15 && curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/balance" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+sleep 15 && curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/balance" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 ### 9.1. Check ERC-20 Token Balances On-Chain (Client-Side)
@@ -770,8 +770,8 @@ Use free public RPCs for each chain (e.g. `publicnode.com`, `llamarpc.com`, or t
 Each wallet has a single USD-denominated approval policy. Token amounts are converted to USD at request time using real-time prices: native coins (ETH, SOL, BNB, POL, AVAX) via CoinGecko, stablecoins (USDC/USDT/DAI/BUSD) pegged to $1, ERC-20 tokens via CoinGecko Token Price API (17 EVM chains), and Solana SPL tokens via Jupiter Price API as fallback. Check native/stablecoin prices via `GET /api/prices`.
 
 ```bash
-curl -s -X PUT "${TEE_WALLET_API_URL}/api/wallets/<id>/policy" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}" \
+curl -s -X PUT "${TEENET_WALLET_API_URL}/api/wallets/<id>/policy" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "threshold_usd": "<USD amount, e.g. 100>",
@@ -795,8 +795,8 @@ Ask user for the threshold amount if not specified. If they also want a daily ca
 Query how much USD has been spent today (UTC) against the wallet's daily limit:
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/wallets/<id>/daily-spent" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/daily-spent" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 Returns `spent_usd`, `daily_limit_usd`, `remaining_usd`, and `resets_at` (next UTC midnight). Check proactively before large transfers.
@@ -804,8 +804,8 @@ Returns `spent_usd`, `daily_limit_usd`, `remaining_usd`, and `resets_at` (next U
 ### 11. View Pending Approvals
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/approvals/pending" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/approvals/pending" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 Show: wallet, amount, currency, created time, expiry, approval link.
@@ -826,25 +826,25 @@ For transfer/sign:
 > **Amount:** {amount} {currency}
 > **Memo:** {memo or "—"}
 > **Expires in:** 30 minutes
-> 👉 → [Approve this {amount} {currency} transfer]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+> 👉 → [Approve this {amount} {currency} transfer]({TEENET_WALLET_API_URL}/#/approve/{approval_id})
 
 For policy change:
 > 🔐 **Approval required** (ID: {approval_id})
 > **Threshold:** ${threshold_usd} USD
-> 👉 → [Approve policy change]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+> 👉 → [Approve policy change]({TEENET_WALLET_API_URL}/#/approve/{approval_id})
 
 For contract/token whitelist:
 > 🔐 **Approval required** (ID: {approval_id})
 > **Contract:** `{contract_address}` ({symbol})
-> 👉 → [Approve adding {symbol} to whitelist]({TEE_WALLET_API_URL}/#/approve/{approval_id})
+> 👉 → [Approve adding {symbol} to whitelist]({TEENET_WALLET_API_URL}/#/approve/{approval_id})
 
 **After showing the link, tell the user:**
 > Please approve via the link above, then let me know when done.
 
 **When the user says they've approved**, check the result:
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/approvals/${APPROVAL_ID}" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/approvals/${APPROVAL_ID}" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 Then act on the result:
@@ -862,8 +862,8 @@ Then act on the result:
 Users can view a history of all their past operations.
 
 ```bash
-curl -s "${TEE_WALLET_API_URL}/api/audit/logs?page=1&limit=20" \
-  -H "Authorization: Bearer ${TEE_WALLET_API_KEY}"
+curl -s "${TEENET_WALLET_API_URL}/api/audit/logs?page=1&limit=20" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
 Optional query parameters:
@@ -933,7 +933,7 @@ Commands are case-insensitive. Natural language also works (e.g., "send 0.1 ETH 
 | `daily spend limit exceeded` | Daily USD spend limit reached. Limit resets at UTC midnight. |
 | `contract not whitelisted` | This token contract/program/mint isn't whitelisted. Request approval via API key (`POST /contracts`) or open Web UI → Wallets → Contracts tab → Add to Whitelist. |
 | `wallet is not ready` | Wallet is still being created. Wait a moment and try again. |
-| `invalid API key` | Invalid API key. Check `TEE_WALLET_API_KEY` in your environment. |
+| `invalid API key` | Invalid API key. Check `TEENET_WALLET_API_KEY` in your environment. |
 | `approval has expired` | The approval window expired (30 min). Please initiate the transfer again. |
 | `pending_approval` on policy | Policy change is pending Passkey approval. Share the approval link with the wallet owner. |
 | `nickname not found` | Nickname not in address book for this chain. Add via `/contacts`. |
@@ -990,4 +990,4 @@ These are global rules that override or supplement the per-section guidance abov
 9. **Approve/reject is hardware-only** — each action requires a fresh Passkey assertion via Web UI
 10. **Dynamic chains** — never hardcode chain names; use `GET /api/chains`
 11. **Always include explorer link** after successful transfers and contract operations
-12. **Never call DELETE APIs** — all destructive operations (delete wallet, remove contract, delete address book entry, delete policy, delete account) require Passkey and cannot be done via API key. Direct the user to the [Web UI]({TEE_WALLET_API_URL}) instead
+12. **Never call DELETE APIs** — all destructive operations (delete wallet, remove contract, delete address book entry, delete policy, delete account) require Passkey and cannot be done via API key. Direct the user to the [Web UI]({TEENET_WALLET_API_URL}) instead

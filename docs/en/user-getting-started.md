@@ -1,4 +1,4 @@
-[wallet-url]: https://test.teenet.io/instance/wallet/
+[wallet-url]: https://wallet.teenet.app
 
 # Getting Started
 
@@ -51,8 +51,8 @@ Provide your agent with the **API key** from Step 2 and the **wallet API URL** s
    ```
 
 3. When prompted, enter:
-   - **TEE_WALLET_API_URL** -- the wallet API URL shown on your account page
-   - **TEE_WALLET_API_KEY** -- the key you copied in Step 2
+   - **TEENET_WALLET_API_URL** -- the wallet API URL shown on your account page
+   - **TEENET_WALLET_API_KEY** -- the key you copied in Step 2
 
 <div align="center"><img src="picture/tg.png" alt="Connect OpenClaw via Telegram" width="360" /></div>
 

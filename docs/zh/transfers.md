@@ -38,7 +38,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/transfer" \
 {
   "status": "pending_approval",
   "approval_id": 4839271056,
-  "approval_url": "https://test.teenet.io/instance/wallet/#/approve/4839271056"
+  "approval_url": "https://wallet.teenet.app/#/approve/4839271056"
 }
 ```
 

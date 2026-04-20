@@ -1,4 +1,4 @@
-[wallet-url]: https://test.teenet.io/instance/wallet/
+[wallet-url]: https://wallet.teenet.app
 
 # FAQ
 

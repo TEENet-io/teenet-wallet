@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { WalletAPI } from "../api-client.js";
 import { ApprovalWatcher } from "../approval-watcher.js";
 
-const API_URL = process.env.TEENET_TEST_API_URL || "https://test.teenet.io/instance/wallet";
+const API_URL = process.env.TEENET_TEST_API_URL || "https://wallet.teenet.app";
 const API_KEY = process.env.TEENET_TEST_API_KEY || "ocw_test_placeholder";
 const api = new WalletAPI({ apiUrl: API_URL, apiKey: API_KEY });
 

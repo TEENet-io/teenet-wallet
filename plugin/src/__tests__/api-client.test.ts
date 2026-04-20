@@ -111,13 +111,13 @@ describe("WalletAPI", () => {
   });
 
   it("eventsUrl and authHeader getters", () => {
-    const api = new WalletAPI({ apiUrl: "https://test.teenet.io/wallet", apiKey: "ocw_abc" });
-    assert.equal(api.eventsUrl, "https://test.teenet.io/wallet/api/events/stream");
+    const api = new WalletAPI({ apiUrl: "https://wallet.teenet.app", apiKey: "ocw_abc" });
+    assert.equal(api.eventsUrl, "https://wallet.teenet.app/api/events/stream");
     assert.equal(api.authHeader, "Bearer ocw_abc");
   });
 
   it("strips trailing slash from apiUrl", () => {
-    const api = new WalletAPI({ apiUrl: "https://test.teenet.io/wallet/", apiKey: "ocw_abc" });
-    assert.equal(api.eventsUrl, "https://test.teenet.io/wallet/api/events/stream");
+    const api = new WalletAPI({ apiUrl: "https://wallet.teenet.app/", apiKey: "ocw_abc" });
+    assert.equal(api.eventsUrl, "https://wallet.teenet.app/api/events/stream");
   });
 });

@@ -78,7 +78,7 @@ curl -s "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/daily-spent" \
 {
   "status": "pending_approval",
   "approval_id": 42,
-  "approval_url": "https://test.teenet.io/instance/wallet/#/approve/42"
+  "approval_url": "https://wallet.teenet.app/#/approve/42"
 }
 ```
 

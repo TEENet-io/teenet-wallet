@@ -7,7 +7,7 @@ TEENet Wallet is designed to serve as the custody layer for AI agents. Two integ
 
 ### How It Works
 
-1. The agent platform (e.g., OpenClaw) provides two environment variables: `TEE_WALLET_API_URL` (the wallet service URL) and `TEE_WALLET_API_KEY` (an `ocw_` API key).
+1. The agent platform (e.g., OpenClaw) provides two environment variables: `TEENET_WALLET_API_URL` (the wallet service URL) and `TEENET_WALLET_API_KEY` (an `ocw_` API key).
 2. The AI agent reads the skill definition, which describes all available operations with curl examples.
 3. When a user asks the agent to "send 0.1 ETH to 0x...", the agent calls the `/transfer` endpoint.
 4. If the transfer is below the policy threshold, it completes immediately. If above, the agent shows the user an approval link and polls until approved.
@@ -49,7 +49,7 @@ Configuration schema (from `openclaw.plugin.json`):
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `apiUrl` | Yes | Wallet backend URL (e.g. `https://test.teenet.io/instance/xxx/`) |
+| `apiUrl` | Yes | Wallet backend URL (e.g. `https://wallet.teenet.app`) |
 | `apiKey` | Yes | API key with `ocw_` prefix |
 
 > **Watch out for `tools.profile`.** The plugin requires the `full` profile (the default). If it's set to `coding`, `messaging`, or `minimal`, tools are silently blocked with no error. Check with `openclaw config get tools.profile` and clear it via `openclaw config unset tools.profile` if needed.

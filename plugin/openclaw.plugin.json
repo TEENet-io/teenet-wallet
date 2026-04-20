@@ -9,7 +9,7 @@
     "properties": {
       "apiUrl": {
         "type": "string",
-        "description": "Wallet service URL (e.g. https://test.teenet.io/instance/wallet)"
+        "description": "Wallet service URL (e.g. https://wallet.teenet.app)"
       },
       "apiKey": {
         "type": "string",
@@ -18,5 +18,5 @@
     },
     "required": ["apiUrl", "apiKey"]
   },
-  "skills": ["skill/tee-wallet"]
+  "skills": ["skill/teenet-wallet"]
 }
