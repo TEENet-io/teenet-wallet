@@ -47,7 +47,7 @@ Provide your agent with the **API key** from Step 2 and the **wallet API URL** s
 2. Copy and paste this message:
 
    ```
-   Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
+   Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/main/skill/teenet-wallet/SKILL.md
    ```
 
 3. When prompted, enter:

@@ -2,7 +2,7 @@
 
 TEENet Wallet is designed to serve as the custody layer for AI agents. Two integration paths are supported:
 
-1. **Skill-based (REST)** -- `skill/tee-wallet/SKILL.md` describes every operation with curl examples. The agent reads the skill and makes HTTP calls directly. Works with any agent platform that supports skills.
+1. **Skill-based (REST)** -- `skill/teenet-wallet/SKILL.md` describes every operation with curl examples. The agent reads the skill and makes HTTP calls directly. Works with any agent platform that supports skills.
 2. **OpenClaw plugin (native tools)** -- `plugin/` contains a first-class [OpenClaw](https://openclaw.io) plugin written in TypeScript. Each wallet operation is exposed as a strongly-typed tool, and an SSE approval watcher lets the agent continue automatically after the user approves via Passkey.
 
 ### How It Works
@@ -91,4 +91,3 @@ User (chat)  →  Agent  →  Plugin tool  →  Wallet backend
 - **SSE events are user-scoped** -- each user only sees their own approval events.
 - **All write paths check approval policies** on the backend; the plugin cannot bypass USD thresholds or daily limits.
 - **SSRF protection** on custom chain RPC URLs (private IPs and cloud metadata addresses are blocked backend-side).
-

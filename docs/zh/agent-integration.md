@@ -2,12 +2,12 @@
 
 TEENet Wallet 原生支持 AI Agent 集成，提供两种接入方式：
 
-1. **Skill 方式（REST）** -- `skill/tee-wallet/SKILL.md` 用 curl 示例描述所有操作，Agent 读取 Skill 后直接发 HTTP 请求，任何支持 Skill 的 Agent 平台都能用。
+1. **Skill 方式（REST）** -- `skill/teenet-wallet/SKILL.md` 用 curl 示例描述所有操作，Agent 读取 Skill 后直接发 HTTP 请求，任何支持 Skill 的 Agent 平台都能用。
 2. **OpenClaw 插件（原生工具）** -- `plugin/` 目录提供用 TypeScript 编写的一等 [OpenClaw](https://openclaw.io) 插件，每个钱包操作都是强类型工具，并通过 SSE 事件流让 Agent 在用户完成 Passkey 审批后自动继续执行。
 
 ### OpenClaw Skill
 
-Skill 定义位于 `skill/tee-wallet/` 目录，兼容 [OpenClaw](https://openclaw.io) AI 助手平台。
+Skill 定义位于 `skill/teenet-wallet/` 目录，兼容 [OpenClaw](https://openclaw.io) AI 助手平台。
 
 **配置 AI Agent 所需的环境变量：**
 
@@ -112,4 +112,3 @@ openclaw plugins inspect teenet-wallet   # 期望 Status: loaded
 - **SSE 事件按用户隔离** -- 每个用户只能收到自己的审批事件。
 - **所有写操作都在后端检查审批策略** -- 插件无法绕过 USD 阈值和日限额。
 - **自定义链 RPC URL 有 SSRF 防护** -- 内网 IP 和云元数据地址在后端被拦截。
-

@@ -13,7 +13,7 @@ Generate an API key in the [TEENet Wallet][wallet-url] **Settings** panel and pr
 **OpenClaw example:** Open your OpenClaw chat and send:
 
 ```
-Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
+Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/main/skill/teenet-wallet/SKILL.md
 ```
 
 OpenClaw will ask for your API key (starts with `ocw_`) and wallet API URL. Once provided, the skill is installed and ready.

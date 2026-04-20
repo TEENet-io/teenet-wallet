@@ -13,7 +13,7 @@
 **OpenClaw 示例：** 打开 OpenClaw 对话，发送：
 
 ```
-Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/master/skill/tee-wallet/SKILL.md
+Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/main/skill/teenet-wallet/SKILL.md
 ```
 
 OpenClaw 会要求你输入 API 密钥（以 `ocw_` 开头）和钱包 API URL。输入后，skill 就安装完成并可以使用。
