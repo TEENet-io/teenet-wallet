@@ -242,14 +242,34 @@ func main() {
 	authH.SetMaxUsers(maxUsers)
 
 	// Email verification service: SMTP if SMTP_HOST is set, otherwise mock mode.
+	//
+	// Password source precedence:
+	//   1. SMTP_PASSWORD_KEY — name of a TEE-backed API key; value fetched via SDK
+	//      at startup. Preferred for production; keeps the secret out of docker env.
+	//   2. SMTP_PASSWORD — plain env. Useful for local dev; visible to anyone who
+	//      can docker inspect or read process env.
 	var emailSender handler.EmailSender
 	var devFixedCode string
 	if smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST")); smtpHost != "" {
+		smtpPassword := os.Getenv("SMTP_PASSWORD")
+		if keyName := strings.TrimSpace(os.Getenv("SMTP_PASSWORD_KEY")); keyName != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			res, err := sdkClient.GetAPIKey(ctx, keyName)
+			cancel()
+			if err != nil {
+				log.Fatalf("SMTP_PASSWORD_KEY=%q: fetch from TEE failed: %v", keyName, err)
+			}
+			if !res.Success {
+				log.Fatalf("SMTP_PASSWORD_KEY=%q: TEE returned error: %s", keyName, res.Error)
+			}
+			smtpPassword = res.APIKey
+			slog.Info("SMTP password loaded from TEE-backed API key store", "key_name", keyName)
+		}
 		emailSender = &handler.SmtpEmailSender{
 			Host:     smtpHost,
 			Port:     envOrDefault("SMTP_PORT", "587"),
 			Username: os.Getenv("SMTP_USERNAME"),
-			Password: os.Getenv("SMTP_PASSWORD"),
+			Password: smtpPassword,
 			From:     os.Getenv("SMTP_FROM"),
 		}
 	} else {

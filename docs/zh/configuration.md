@@ -20,6 +20,7 @@
 | `MAX_API_KEYS_PER_USER` | `10` | 每个用户最大 API Key 数量 |
 | `MAX_USERS` | `500` | 最大注册用户数（0 表示不限制） |
 | `SMTP_HOST` | （空） | 邮箱验证码的 SMTP 服务器地址。为空时启用 mock 模式，验证码会打印到 stdout 而不发送邮件。`SMTP_PORT`、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_FROM` 配置发件账户。 |
+| `SMTP_PASSWORD_KEY` | （空） | **生产环境推荐。** 存在 TEE 中的 API key 名称，其 value 作为 SMTP 密码使用。配置后，启动时通过 `sdk.GetAPIKey(name)` 拉取，密码不再出现在 `docker inspect` 或进程 env 中。优先级高于 `SMTP_PASSWORD`。key 拉不到或 TEE 不可达时启动失败。key 必须在部署前以对应 `APP_INSTANCE_ID` 的身份创建——可通过 TEENet 管理平台（实例页面的 API Keys 标签）录入，或程序化调用 `sdk.CreateAPIKey`（示例见 [`teenet-sdk/go/examples/apikey`](https://github.com/TEENet-io/teenet-sdk) / `examples/admin`）。 |
 | `DEV_FIXED_CODE` | `999999`（仅 mock 模式） | **仅用于开发。** 在 mock 模式下（即 `SMTP_HOST` 未配置），所有邮箱验证码固定为该值，而非随机 6 位数字——方便本地注册测试，无需 SMTP 也无需翻日志。若 `999999` 与测试数据冲突可覆盖为其它 6 位值。配置了 SMTP 时自动忽略。**生产环境禁止设置。** |
 
 区块链 RPC URL 在 `chains.json` 文件中定义，不作为独立环境变量。可通过 `CHAINS_FILE` 环境变量指定自定义路径。也可在运行时通过 `POST /api/chains` 动态添加自定义 EVM 链。
