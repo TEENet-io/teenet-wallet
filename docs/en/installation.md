@@ -63,7 +63,7 @@ make frontend
 
 ```bash
 make docker
-docker run -p 8080:8080 \
+docker run -p 18080:18080 \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
@@ -140,10 +140,10 @@ Frontend files must be in the `./frontend/` directory for the server to serve th
 **Health check:**
 
 ```bash
-curl -s http://localhost:8080/api/health
+curl -s http://localhost:18080/api/health
 ```
 
-**Create a user:** Open [http://localhost:8080](http://localhost:8080) and complete the Passkey registration flow.
+**Create a user:** Open [http://localhost:18080](http://localhost:18080), enter your email → submit the 6-digit code (defaults to `999999` in mock mode — see [`DEV_FIXED_CODE`](configuration.md)) → register with a Passkey.
 
 **Create a wallet:** Generate an API key from Settings, then create a wallet via the API.
 

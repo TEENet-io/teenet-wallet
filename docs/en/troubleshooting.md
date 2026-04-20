@@ -83,7 +83,7 @@ API_KEY_RATE_LIMIT=1000 WALLET_CREATE_RATE_LIMIT=50 ./teenet-wallet
 
 ## Frontend not loading
 
-**Problem:** Opening http://localhost:8080 shows a blank page or 404.
+**Problem:** Opening http://localhost:18080 shows a blank page or 404.
 
 **Cause:** The frontend submodule has not been initialized, or the built files are missing.
 

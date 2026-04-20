@@ -38,16 +38,16 @@ RUN mkdir -p /data && chown app:app /data
 
 VOLUME /data
 
-EXPOSE 8080
+EXPOSE 18080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:8080/api/health || exit 1
+    CMD wget -qO- http://localhost:18080/api/health || exit 1
 
 ENV HOST=0.0.0.0 \
-    PORT=8080 \
+    PORT=18080 \
     DATA_DIR=/data \
     SERVICE_URL=http://localhost:8089 \
-    FAUCET_URL="" \
+    FAUCET_URL="https://console.teenet.app/instance/faucet" \
     SMTP_HOST="" \
     SMTP_PORT=587 \
     SMTP_USERNAME="" \

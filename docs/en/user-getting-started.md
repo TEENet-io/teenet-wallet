@@ -8,17 +8,19 @@
 
 > **Note:** TEENet Wallet is currently in testing phase with a limit of 500 users. Registration is first-come, first-served.
 
-2. Enter your name or email in the required field.
+2. Enter your email address and click **Send code**.
 
 <div align="center"><img src="picture/register.png" alt="Registration page" width="360" /></div>
 
-3. Click **Register with Passkey**. Your browser will ask you to set up a **Passkey**:
+3. Check your inbox for the 6-digit verification code, then enter it on the wallet page.
+
+4. Click **Register with Passkey**. Your browser will ask you to set up a **Passkey**:
    - On a phone or laptop with biometrics: scan your fingerprint or use Face ID.
    - On a desktop: use a security key (USB device) or scan a QR code with your phone.
 
 <div align="center"><img src="picture/register2.png" alt="Passkey creation prompt" width="360" /></div>
 
-4. Done. Your account is created and you're logged in -- no password to remember.
+5. Done. Your account is created and you're logged in -- no password to remember.
 
 > **What is a Passkey?** A Passkey replaces passwords with your fingerprint, Face ID, or a security key. Your biometric data never leaves your device. Passkeys can't be phished, guessed, or stolen in a data breach.
 

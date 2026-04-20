@@ -63,7 +63,7 @@ make frontend
 
 ```bash
 make docker
-docker run -p 8080:8080 \
+docker run -p 18080:18080 \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
@@ -140,10 +140,10 @@ make frontend
 **健康检查：**
 
 ```bash
-curl -s http://localhost:8080/api/health
+curl -s http://localhost:18080/api/health
 ```
 
-**创建用户：** 打开 [http://localhost:8080](http://localhost:8080) 并完成 Passkey 注册流程。
+**创建用户：** 打开 [http://localhost:18080](http://localhost:18080)，输入邮箱 → 填入 6 位验证码（mock 模式下默认 `999999`，见 [`DEV_FIXED_CODE`](configuration.md)）→ 使用 Passkey 完成注册。
 
 **创建钱包：** 从 **设置** 中生成 API key，然后通过 API 创建钱包。
 

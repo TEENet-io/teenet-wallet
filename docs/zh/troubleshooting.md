@@ -83,7 +83,7 @@ API_KEY_RATE_LIMIT=1000 WALLET_CREATE_RATE_LIMIT=50 ./teenet-wallet
 
 ## 前端无法加载
 
-**问题：** 打开 http://localhost:8080 显示空白页面或 404。
+**问题：** 打开 http://localhost:18080 显示空白页面或 404。
 
 **原因：** 前端子模块未初始化，或构建后的文件缺失。
 

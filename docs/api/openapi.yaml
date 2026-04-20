@@ -42,7 +42,7 @@ info:
     url: https://opensource.org/licenses/GPL-3.0
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:18080
     description: Local development
 
 tags:
@@ -459,7 +459,7 @@ components:
           type: object
         approval_url:
           type: string
-          example: "http://localhost:8080/#/approve/4839271056"
+          example: "http://localhost:18080/#/approve/4839271056"
 
     BalanceResult:
       type: object
@@ -976,7 +976,7 @@ paths:
                     example: "inv_abc123..."
                   register_url:
                     type: string
-                    example: "http://localhost:8080/#/register?token=inv_abc123..."
+                    example: "http://localhost:18080/#/register?token=inv_abc123..."
                   expires_at:
                     type: string
                     format: date-time

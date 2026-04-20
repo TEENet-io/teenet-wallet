@@ -57,7 +57,7 @@ func main() {
 	raiseFileLimit()
 
 	host := envOrDefault("HOST", "0.0.0.0")
-	port := envOrDefault("PORT", "8080")
+	port := envOrDefault("PORT", "18080")
 	dataDir := envOrDefault("DATA_DIR", "/data")
 	baseURL := envOrDefault("BASE_URL", "http://localhost:"+port)
 	frontendURL := envOrDefault("FRONTEND_URL", "")
@@ -243,6 +243,7 @@ func main() {
 
 	// Email verification service: SMTP if SMTP_HOST is set, otherwise mock mode.
 	var emailSender handler.EmailSender
+	var devFixedCode string
 	if smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST")); smtpHost != "" {
 		emailSender = &handler.SmtpEmailSender{
 			Host:     smtpHost,
@@ -253,15 +254,23 @@ func main() {
 		}
 	} else {
 		emailSender = &handler.MockEmailSender{}
+		devFixedCode = strings.TrimSpace(os.Getenv("DEV_FIXED_CODE"))
+		if devFixedCode == "" {
+			devFixedCode = "999999"
+		}
 	}
 	emailSvc := handler.NewEmailVerificationService(db, emailSender, handler.EmailVerificationConfig{
 		CodeTTL:        time.Duration(envOrDefaultInt("EMAIL_CODE_TTL", 600)) * time.Second,
 		ResendCooldown: time.Duration(envOrDefaultInt("EMAIL_CODE_RESEND_COOLDOWN", 60)) * time.Second,
 		MaxAttempts:    envOrDefaultInt("EMAIL_CODE_MAX_ATTEMPTS", 5),
+		FixedCode:      devFixedCode,
 	})
 	authH.SetEmailVerificationService(emailSvc)
 	emailH := handler.NewEmailVerificationHandler(emailSvc)
 	slog.Info("email verification configured", "mode", emailSender.Mode())
+	if devFixedCode != "" {
+		slog.Warn("DEV_FIXED_CODE is set: all email verification codes will equal this value — do not set in production", "code", devFixedCode)
+	}
 
 	ipLimiter := handler.NewIPRateLimiter(registrationRateLimit, time.Minute)
 	defer ipLimiter.Stop()

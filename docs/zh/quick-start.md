@@ -65,7 +65,7 @@ APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.
 预期输出：
 
 ```
-..."msg":"server starting","addr":"0.0.0.0:8080"...
+..."msg":"server starting","addr":"0.0.0.0:18080"...
 ```
 
 ---
@@ -73,7 +73,7 @@ APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.
 ## 3. 验证运行状态
 
 ```bash
-curl -s http://localhost:8080/api/health
+curl -s http://localhost:18080/api/health
 ```
 
 预期响应：
@@ -90,13 +90,19 @@ curl -s http://localhost:8080/api/health
 
 ## 4. 创建你的第一个钱包
 
-在浏览器中打开 [http://localhost:8080](http://localhost:8080)。使用 Passkey 注册，然后进入**设置**生成 API key。密钥以 `ocw_` 开头，仅显示一次——请妥善保存。
+在浏览器中打开 [http://localhost:18080](http://localhost:18080)，按以下步骤注册：
+
+1. 输入邮箱，点击 **发送验证码**
+2. 填入 6 位验证码。**mock 模式下默认固定为 `999999`**，无需查收邮件（可通过 [`DEV_FIXED_CODE`](configuration.md) 覆盖；配置了 `SMTP_HOST` 则走真实邮件）
+3. 使用 Passkey 完成注册
+
+注册成功后进入**设置**生成 API key。密钥以 `ocw_` 开头，仅显示一次——请妥善保存。
 
 然后创建钱包：
 
 ```bash
 export API_KEY="ocw_..."
-curl -s -X POST http://localhost:8080/api/wallets \
+curl -s -X POST http://localhost:18080/api/wallets \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"chain": "sepolia", "label": "Test Wallet"}'

@@ -25,6 +25,11 @@ type EmailVerificationConfig struct {
 	CodeTTL        time.Duration // default 10 min
 	ResendCooldown time.Duration // default 60 s
 	MaxAttempts    int           // default 5
+	// FixedCode, when non-empty, replaces the random 6-digit code with this
+	// value for every send. Dev-only convenience so a developer without SMTP
+	// doesn't have to tail server logs to grab the code. main.go only wires
+	// this from DEV_FIXED_CODE when SMTP_HOST is unset.
+	FixedCode string
 }
 
 // EmailVerificationService owns the full code lifecycle.
@@ -163,6 +168,9 @@ func (s *EmailVerificationService) SendCode(rawEmail string) error {
 
 	// Step 5: insert + send inside a transaction so SMTP failure rolls back.
 	code := GenerateVerificationCode()
+	if s.cfg.FixedCode != "" {
+		code = s.cfg.FixedCode
+	}
 	row := model.EmailVerification{
 		Email:      email,
 		CodeHash:   HashCode(code),

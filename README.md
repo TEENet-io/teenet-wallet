@@ -88,13 +88,13 @@ make build
 APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.0.1:8089 ./teenet-wallet
 ```
 
-The wallet service listens on `0.0.0.0:8080` by default. Open `http://localhost:8080`, register a Passkey, and generate an API key.
+The wallet service listens on `0.0.0.0:18080` by default. Open `http://localhost:18080`, enter your email, submit the 6-digit verification code (defaults to `999999` in mock mode — see [`DEV_FIXED_CODE`](docs/en/configuration.md)), register a Passkey, and generate an API key.
 For local development against `teenet-sdk/mock-server`, `DATA_DIR=./data` keeps the SQLite database in a writable local directory.
 
 ### Verify the Service
 
 ```bash
-curl -s http://localhost:8080/api/health
+curl -s http://localhost:18080/api/health
 ```
 
 Expected response:
@@ -109,7 +109,7 @@ For the complete local setup, including starting `teenet-sdk/mock-server` and cr
 
 ```bash
 make docker
-docker run -p 8080:8080 \
+docker run -p 18080:18080 \
   -e APP_INSTANCE_ID=<mock-app-instance-id> \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \

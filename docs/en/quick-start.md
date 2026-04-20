@@ -65,7 +65,7 @@ APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.
 Expected output:
 
 ```
-..."msg":"server starting","addr":"0.0.0.0:8080"...
+..."msg":"server starting","addr":"0.0.0.0:18080"...
 ```
 
 ---
@@ -73,7 +73,7 @@ Expected output:
 ## 3. Verify it's running
 
 ```bash
-curl -s http://localhost:8080/api/health
+curl -s http://localhost:18080/api/health
 ```
 
 Expected response:
@@ -90,13 +90,19 @@ Expected response:
 
 ## 4. Create your first wallet
 
-Open the web UI at [http://localhost:8080](http://localhost:8080). Register with a Passkey, then go to **Settings** and generate an API key. The key starts with `ocw_` and is shown only once -- save it.
+Open the web UI at [http://localhost:18080](http://localhost:18080) and register:
+
+1. Enter your email and click **Send code**
+2. Enter the 6-digit verification code. **In mock mode (no SMTP) the code is always `999999`** by default, so you don't have to check any inbox (override via [`DEV_FIXED_CODE`](configuration.md); real email is sent only when `SMTP_HOST` is set)
+3. Register with a Passkey
+
+After registration, go to **Settings** and generate an API key. The key starts with `ocw_` and is shown only once -- save it.
 
 Then create a wallet:
 
 ```bash
 export API_KEY="ocw_..."
-curl -s -X POST http://localhost:8080/api/wallets \
+curl -s -X POST http://localhost:18080/api/wallets \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"chain": "sepolia", "label": "Test Wallet"}'
