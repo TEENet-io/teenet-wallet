@@ -1,5 +1,5 @@
 # Binaries
-teenet-wallet
+./teenet-wallet
 *.exe
 *.tar.gz
 
