@@ -86,6 +86,23 @@ export function registerContractTools(
 
 
 
+  registerTool({
+    name: "teenet_wallet_call_read",
+    description:
+      "Read-only contract call (EVM eth_call). No signing, no gas, no approval, and no contract whitelist required. Use for balanceOf, allowance, totalSupply, pool quotes, and any view/pure function. Returns hex-encoded result.",
+    parameters: Type.Object({
+      wallet_id: Type.String({ description: "Wallet UUID (must be on an EVM chain)" }),
+      contract: Type.String({ description: "Contract address (0x...)" }),
+      func_sig: Type.String({ description: "Function signature, e.g. 'balanceOf(address)' or 'quoteExactInputSingle((address,address,uint256,uint24,uint160))'" }),
+      args: Type.Optional(Type.Array(Type.Unknown({ description: "Function argument value" }), { description: "Function arguments in declaration order" })),
+    }),
+    async execute(_id: string, params: any) {
+      return jsonResult(
+        await api.callRead(params.wallet_id, params.contract, params.func_sig, params.args),
+      );
+    },
+  });
+
   registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_approve_token",
     description: "Approve a spender to spend tokens on behalf of the wallet (ERC-20 approve). May return pending_approval.",

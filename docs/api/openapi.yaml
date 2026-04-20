@@ -2198,6 +2198,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/wallets/{id}/call-read:
+    post:
+      tags: [Contract Calls]
+      summary: Read-only contract call (eth_call)
+      description: |
+        Executes a read-only `eth_call` against an EVM contract. No signing,
+        no gas, no approval, and **no contract whitelist** required -- reads
+        never move funds or mutate state.
+
+        Use this as the default path for on-chain reads (balances, allowances,
+        pool quotes, view/pure getters). Requests route through the backend's
+        managed RPC so clients don't need to manage per-chain RPC endpoints.
+
+        EVM chains only -- Solana wallets return HTTP 400.
+      operationId: callRead
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/WalletId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contract, func_sig]
+              properties:
+                contract:
+                  type: string
+                  description: EVM contract address (0x...)
+                  example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                func_sig:
+                  type: string
+                  description: Solidity function signature
+                  example: "balanceOf(address)"
+                args:
+                  type: array
+                  items: {}
+                  description: Function arguments in declaration order
+                  example: ["0xd7e27B678206c0EE45C2678A88923c8a6F343C21"]
+      responses:
+        "200":
+          description: Call executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  result:
+                    type: string
+                    description: Hex-encoded return data from eth_call
+                    example: "0x00000000000000000000000000000000000000000000000000000000000f4240"
+                  contract:
+                    type: string
+                    example: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                  method:
+                    type: string
+                    example: "balanceOf"
+        "400":
+          description: Validation error (non-EVM chain, invalid address, unparseable func_sig)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream RPC failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/wallets/{id}/approve-token:
     post:
       tags: [Contract Calls]

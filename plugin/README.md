@@ -145,7 +145,7 @@ Say "run the test flow" and the agent will walk you through:
 |----------|-------|-------------|
 | Wallet | `create`, `list`, `get`, `rename`, `balance` | Wallet CRUD and balance queries |
 | Transfer | `transfer`, `wrap_sol`, `unwrap_sol` | Send native coins and tokens |
-| Contracts | `list_contracts`, `add_contract`, `update_contract`, `contract_call`, `approve_token`, `revoke_approval` | Whitelist and interact with smart contracts |
+| Contracts | `list_contracts`, `add_contract`, `update_contract`, `contract_call`, `call_read`, `approve_token`, `revoke_approval` | Whitelist and interact with smart contracts (read-only `call_read` needs no whitelist) |
 | Policy | `get_policy`, `set_policy`, `daily_spent` | Approval thresholds and spending limits |
 | Address Book | `list_contacts`, `add_contact`, `update_contact` | Save and use address nicknames |
 | Approvals | `pending_approvals`, `check_approval` | Monitor approval status |

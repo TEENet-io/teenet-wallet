@@ -347,6 +347,7 @@ func main() {
 	contractCallH.SetPriceService(priceService)
 	transferRL := handler.UserRateLimitMiddleware(transferRateLimiter)
 	auth.POST("/wallets/:id/contract-call", transferRL, contractCallH.ContractCall)
+	auth.POST("/wallets/:id/call-read", contractCallH.CallRead) // read-only eth_call; no signing, no whitelist
 	auth.POST("/wallets/:id/approve-token", transferRL, contractCallH.ApproveToken)
 	auth.POST("/wallets/:id/revoke-approval", transferRL, contractCallH.RevokeApproval)
 	auth.POST("/wallets/:id/transfer", transferRL, walletH.Transfer) // backend builds+broadcasts tx

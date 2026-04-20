@@ -150,6 +150,7 @@ After system notification confirms Step 8 approved:
 | `teenet_wallet_add_contract` | Whitelist a new token/contract |
 | `teenet_wallet_update_contract` | Update contract metadata |
 | `teenet_wallet_contract_call` | Call a smart contract function (state-changing) |
+| `teenet_wallet_call_read` | Read-only EVM `eth_call` — balances, allowances, quotes, view/pure getters. No whitelist, no approval, no gas |
 | `teenet_wallet_approve_token` | Approve ERC-20 token allowance |
 | `teenet_wallet_revoke_approval` | Revoke a token approval |
 
@@ -276,11 +277,11 @@ When checking balance, **show both native and token balances together**.
 
 1. Call `teenet_wallet_balance` for native balance (ETH/SOL). This returns native gas token only — never present it as a token balance.
 2. Call `teenet_wallet_list_contracts` to get the token whitelist for the wallet's chain.
-3. For each whitelisted token, query `balanceOf(address)` **directly via public RPCs** using `web_fetch` — do NOT use `contract_call` for reads.
+3. For each whitelisted token, call `teenet_wallet_call_read` with `func_sig: "balanceOf(address)"` and `args: [<wallet_address>]`. No whitelist, no approval, no gas. **Do not** use `teenet_wallet_contract_call` for reads.
 
-**ERC-20 balanceOf calldata:** `0x70a08231` + 32-byte zero-padded wallet address (without `0x` prefix). The result is a hex-encoded uint256; convert using the token's `decimals`. Only show tokens with balance > 0.
+`call_read` returns a hex-encoded uint256 `result` — convert using the token's `decimals`. Only show tokens with balance > 0.
 
-Use free public RPCs (e.g. `publicnode.com`, `llamarpc.com`). For custom chains, check `teenet_wallet_list_chains` for `rpc_url`. If all RPCs fail, report the query failed — do not guess.
+If `call_read` fails (e.g. service unreachable), fall back to hitting a public RPC directly with `web_fetch` using `eth_call` and the `0x70a08231` selector.
 
 **Present all balances together:**
 > **Wallet** `0xabcd…1234` (Ethereum)
@@ -305,8 +306,8 @@ For smart contract interactions (EVM):
 - **Do not include `deadline`** for SwapRouter02 `exactInputSingle` on this ABI shape
 - Correct selector for the tuple form above is **`0x04e45aaf`**
 - If the observed selector differs, the `func_sig` and/or argument shape is wrong; fix ABI/signature first before retrying
-- Use public RPCs or explorer APIs via `web_fetch`/`exec` to check balances/allowances before sending state-changing calls
-- The contract must be whitelisted before calling
+- Use `teenet_wallet_call_read` to check balances / allowances / quotes before sending state-changing calls. `call_read` needs no whitelist; `contract_call` does.
+- The contract must be whitelisted before calling `contract_call`
 
 For Solana programs:
 - Use `accounts` and `data` instead of `func_sig`/`args`
@@ -320,10 +321,10 @@ For token swaps via DEX routers (e.g. Uniswap V3):
 1. Ensure **input token is whitelisted** → `teenet_wallet_list_contracts`, add if missing
 2. Ensure **router contract is whitelisted** → add if missing
 3. Confirm the **real verified ABI**, parameter order, and selector before sending `teenet_wallet_contract_call`
-4. Check **token balance on chain** → use public RPC/explorer APIs (`web_fetch` or `exec` with curl) to call `balanceOf(address)` or explorer token balance endpoints
-5. Check **allowance** for router on chain → use public RPC/explorer APIs to call `allowance(owner, spender)` when available
+4. Check **token balance on chain** → `teenet_wallet_call_read` with `balanceOf(address)`
+5. Check **allowance** for router on chain → `teenet_wallet_call_read` with `allowance(address,address)`
 6. If allowance insufficient → `teenet_wallet_approve_token`
-7. **Quote first** when possible → use QuoterV2 or explorer/RPC quote tools before the real swap
+7. **Quote first** when possible → `teenet_wallet_call_read` against QuoterV2 (or similar) before the real swap
 8. Submit a **small test swap first** → `teenet_wallet_contract_call`
 9. Only increase size after a successful small test
 
@@ -428,7 +429,7 @@ Natural language works ("send 0.1 ETH to alice"), but users may also type:
 3. **No chat confirmation for transfers** — backend approval policy is the safety net
 4. **Smart Wallet Selection always** — never ask for wallet ID; use numbered list indices
 5. **Token transfers MUST include `token` fields** — omitting sends native ETH/SOL (irreversible)
-6. **Read-only contract queries MUST use web_fetch, NEVER contract_call** — `balanceOf`, `allowance`, `decimals`, `symbol`, and any other read-only (`eth_call`) queries go through web_fetch to public RPCs directly. `contract_call` is ONLY for state-changing transactions (swap, approve, etc.). Using `contract_call` for reads wastes gas and may trigger unnecessary approvals
+6. **Read-only contract queries use `teenet_wallet_call_read`, NOT `contract_call`** — `balanceOf`, `allowance`, `decimals`, `symbol`, and any other view/pure query goes through `call_read`. No whitelist, no approval, no gas. `contract_call` is ONLY for state-changing transactions (swap, approve, etc.). `web_fetch` to a public RPC is only a fallback if `call_read` is unavailable
 7. **Never call DELETE APIs** — destructive operations require Passkey via Web UI
 8. **All API Key write operations may need Passkey approval** — show the approval link
 9. **Dynamic chains** — never hardcode chain names; use `teenet_wallet_list_chains`

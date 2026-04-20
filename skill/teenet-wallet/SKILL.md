@@ -512,7 +512,7 @@ curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/contract-call" \
 3. Ensure the **router contract is whitelisted**.
 4. Check **token balance** on chain.
 5. Check **allowance** for the router.
-6. Use `call-read` / RPC quote tools first (for example QuoterV2 on Uniswap).
+6. Use `/call-read` to quote / simulate first (for example `QuoterV2` on Uniswap) — see Section 6.7.
 7. Only then submit the real `/contract-call` swap.
 
 **Do not test swaps with 100% of balance/allowance.**
@@ -614,7 +614,9 @@ No body parameters — closes the entire wSOL ATA. On success, show tx hash + So
 
 ### 6.7. Read-Only Contract Call
 
-Query contract state without signing or sending a transaction. No gas, no approval needed.
+Query contract state without signing or sending a transaction. No gas, no approval needed. **No whitelist required** — read calls don't touch keys and aren't restricted to whitelisted contracts.
+
+**Use this as the default for all on-chain reads** (token balances, allowances, pool quotes, metadata). It routes through the backend's managed RPC, so you get a single trusted endpoint with no per-chain RPC juggling on the client side.
 
 **For swap prep, prefer read-only checks before sending a real trade:**
 - Token `balanceOf(wallet)`
@@ -637,7 +639,7 @@ curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/call-read" \
   }'
 ```
 
-Returns hex-encoded `result`. Use for querying allowances, `totalSupply()`, `name()`, `symbol()`, `decimals()`, etc. **Do NOT use for token balance checks** — use client-side RPC instead (Section 9.1).
+Returns hex-encoded `result`. Use for querying balances, allowances, `totalSupply()`, `name()`, `symbol()`, `decimals()`, etc. EVM only — Solana reads are not supported here.
 
 ### 7. Address Book
 
@@ -744,26 +746,28 @@ sleep 15 && curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/balance" \
   -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}"
 ```
 
-### 9.1. Check ERC-20 Token Balances On-Chain (Client-Side)
+### 9.1. Check ERC-20 Token Balances On-Chain
 
-Query token balances **directly via public RPCs** — do NOT use `/call-read` for balance checks, as that routes through the backend RPC and can hit rate limits.
+**Default: use the backend `/call-read` endpoint.** It's the single trusted path for on-chain reads — the backend uses a managed paid RPC, so there are no client-side rate-limit concerns. Reads do **not** require contract whitelisting and do **not** need approvals.
 
-**Do this whenever the user asks for a token balance. Do not rely on `/balance`.**
+**Do this whenever the user asks for a token balance. Do not rely on `/balance`** (which returns only the native gas token).
 
-For each token in the wallet's whitelist (`GET /api/wallets/<id>/contracts`), call `balanceOf(address)` via `eth_call`:
+For each token in the wallet's contract list (`GET /api/wallets/<id>/contracts`), call `balanceOf(wallet_address)` via `/call-read`:
 
 ```bash
-curl -s -X POST "<rpc_url>" \
+curl -s -X POST "${TEENET_WALLET_API_URL}/api/wallets/<id>/call-read" \
+  -H "Authorization: Bearer ${TEENET_WALLET_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc":"2.0","id":1,"method":"eth_call",
-    "params":[{"to":"<contract_address>","data":"0x70a08231000000000000000000000000<wallet_address_no_0x>"},"latest"]
+    "contract": "<token_contract_address>",
+    "func_sig": "balanceOf(address)",
+    "args": ["<wallet_address>"]
   }'
 ```
 
 The `result` is a hex-encoded uint256. Convert to human-readable amount using the token's `decimals`. Only show tokens with balance > 0.
 
-Use free public RPCs for each chain (e.g. `publicnode.com`, `llamarpc.com`, or the chain's official RPC). Try multiple endpoints with fallback. For custom chains, check `GET /api/chains` for `rpc_url`. If all RPCs fail, report the query failed — do **not** guess.
+**Fallback (only when `/call-read` is unavailable):** you may hit public RPCs directly with `eth_call` against `<chain.rpc_url>` (from `GET /api/chains`) using the raw `0x70a08231` selector. Not the default path — prefer `/call-read`.
 
 ### 10. Set Approval Policy
 
@@ -983,7 +987,7 @@ These are global rules that override or supplement the per-section guidance abov
 3. **No chat confirmation for transfers** — backend approval policy is the safety net; don't double-confirm
 4. **Smart Wallet Selection always** — never ask for wallet ID; use numbered list indices; re-fetch `/api/wallets` before account-wide views
 5. **Token transfers MUST include `token` field** — omitting it sends native ETH/SOL instead (irreversible)
-6. **Token balances: client-side RPC** — use public RPCs with `eth_call balanceOf`, NOT `/call-read`, to avoid backend rate limits (Section 9.1)
+6. **Token balances: default to `/call-read`** — use `POST /api/wallets/<id>/call-read` with `balanceOf(address)`; no whitelist needed for reads (Section 9.1)
 7. **No background polling** — when approval is needed, show the link and wait for the user to confirm they've approved. Do NOT start background polling scripts
 8. **All API Key write operations need Passkey approval** — the backend returns 202; you MUST show the approval link and ask the user to confirm when done (Section 12)
 

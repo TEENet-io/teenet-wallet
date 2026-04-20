@@ -377,6 +377,21 @@ export class WalletAPI {
     );
   }
 
+  async callRead(
+    walletId: string,
+    contract: string,
+    funcSig: string,
+    args?: unknown[]
+  ): Promise<{ success: boolean; result: string; contract: string; method: string }> {
+    const body: Record<string, unknown> = { contract, func_sig: funcSig };
+    if (args !== undefined) body.args = args;
+    return this.request<{ success: boolean; result: string; contract: string; method: string }>(
+      "POST",
+      `/api/wallets/${walletId}/call-read`,
+      body
+    );
+  }
+
 
   async approveToken(
     walletId: string,
