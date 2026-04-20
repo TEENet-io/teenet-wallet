@@ -1,72 +1,78 @@
-# Deploy Your Wallet App on TEENet
+# Request a TEENet Deployment
 
-This page explains how TEENet Wallet deployment is scoped and what you need before deploying it on TEENet.
+Running your own wallet instance on self-hosted infrastructure against the mock service is covered in [Quick Start](quick-start.md) and [Installation & Setup](installation.md). That path is useful for local development, integration testing, and internal evaluation — but it uses deterministic keys from the mock service and is **not safe for real funds**.
 
-## Current Status
+This page is about **production deployment on the TEENet platform**, where real TEE nodes hold your key shares and perform threshold signing across independent enclaves.
 
-TEENet Wallet is deployed as an application on the **TEENet platform**. This page covers the wallet-side deployment requirements.
+> The managed deployment process described below applies to **this wallet** as well as **any application built on the [TEENet SDK](https://github.com/TEENet-io/teenet-sdk)** (Go or TypeScript). If you've built a custom agent, trading system, custody service, or other SDK-based app, you can request the same managed deployment using the link at the bottom of this page.
 
-Production deployment requires a running **TEENet service** for:
+## Managed, Not Self-Serve
 
-- key generation
-- threshold signing
-- Passkey management
-- approval-time verification
+TEENet-platform deployment is handled by the TEENet team end-to-end. We take care of:
 
-The local mock service is for development only. It uses deterministic keys and must never be used with real funds.
+- Provisioning TEE nodes and secure networking
+- Registering your application with the TEENet service
+- Bootstrapping key material and Passkey infrastructure
+- Configuring your production base URL, approval callbacks, and monitoring
+- Ongoing platform operations and upgrades
 
-If you do not yet have access to a TEENet environment, start with the TEENet platform access/onboarding page when it is available. That page should explain how to obtain access and prepare an environment. This page assumes you are already deploying into TEENet.
+You describe your requirements; we hand back a live instance with admin access.
 
-## What This Page Covers
+## What You Get
 
-- what TEENet Wallet needs in order to run on TEENet
-- how deployment on TEENet differs from local development
-- which local docs still matter before deployment
+- Your application (this wallet, or your custom SDK-based app) running on the TEENet platform
+- Real threshold signing across TEE nodes — keys never leave enclave hardware
+- Platform maintenance handled by the TEENet team
 
-This page does not cover:
+For **wallet deployments** specifically, this also includes:
 
-- how to obtain access to the TEENet platform
-- how to provision a TEENet environment
-- TEENet platform operator workflows outside the wallet app itself
+- The wallet's public URL, where users self-register (email → 6-digit code → Passkey) and manage their own API keys from the Settings page
+- A pre-configured chain set, customizable per request
 
-## Prerequisites for TEENet Deployment
+## What We Need From You
 
-Before deploying on TEENet, you need:
+- Organization or project requesting the deployment
+- A primary contact
+- What you're deploying (this wallet / a custom SDK-based app) and your use case
+- Expected user count or load profile
+- Chains needed, if deploying the wallet and the default set isn't enough
+- Compliance or data-residency requirements
+- Target timeline
 
-- a TEENet environment with a reachable TEENet service endpoint
-- the wallet application built from this repository
-- chain RPC configuration appropriate for the networks you want to support
-- a public base URL for approval links and browser access
-- the TEENet platform access/onboarding steps completed
+## How to Request
 
-For local build instructions and runtime configuration, see [Installation & Setup](installation.md) and [Configuration](configuration.md).
+Open a deployment request issue on GitHub:
+
+**[→ Request a Deployment](https://github.com/TEENet-io/teenet-wallet/issues/new?template=deployment-request.yml)**
+
+The form collects everything we need to scope your deployment — whether it's this wallet or a custom SDK-based app. We'll follow up on the issue itself or via the contact you provide.
+
+## After Deployment
+
+Once your instance is live, you'll receive:
+
+- Your application's public URL
+- SDK and integration configuration for your agents or applications
+
+For wallet deployments, the first user signs up via the public URL the same way as everyone else (email → code → Passkey); there is no separate admin account. After that, standard wallet usage applies — see [Getting Started](user-getting-started.md).
 
 ## Development vs Production
 
-Use the mock service only for:
+Use the **mock service** for:
 
-- local development
-- integration testing
+- Local development
+- Integration testing
 - API experimentation
 
-Do not use the mock service for:
+Do **not** use the mock service for:
 
-- mainnet wallets
-- real assets
-- production demos with real value
+- Mainnet wallets
+- Real assets
+- Any production flow with real value
 
-## Before You Deploy
+## Related
 
-Review these wallet-specific pages first:
-
-- [Installation & Setup](installation.md) for build requirements and the local development workflow
-- [Configuration](configuration.md) for runtime environment variables
-- [Architecture Overview](architecture-overview.md) for how the wallet depends on the TEENet service
-
-Then use the TEENet platform access/onboarding page to obtain access and prepare your TEENet environment.
-
-## Where To Go Next
-
-- TEENet platform access/onboarding page for environment access and platform-side setup
-- [TEENet Platform docs](https://teenet-io.github.io/#/) for platform context
-- [Community & Support](community.md) for project links and maintainer contacts
+- [TEENet Platform](https://teenet.io) — platform overview
+- [TEENet SDK](https://github.com/TEENet-io/teenet-sdk) — build your own SDK-based app
+- [Architecture Overview](architecture-overview.md) — how the wallet depends on TEE nodes
+- [Community & Support](community.md) — general project channels

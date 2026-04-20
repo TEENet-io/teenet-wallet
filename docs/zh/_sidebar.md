@@ -23,7 +23,7 @@
   - **操作指南**
     - [添加链](/zh/howto-add-chain.md)
     - [添加插件工具](/zh/howto-add-plugin-tool.md)
-    - [在 TEENet 上部署你的钱包应用](/zh/howto-deploy.md)
+    - [申请 TEENet 部署](/zh/howto-deploy.md)
 
   - **API 参考**
     - [OpenAPI 规范](/api/openapi.yaml ':ignore')

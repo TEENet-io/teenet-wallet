@@ -1,0 +1,92 @@
+name: Deployment Request
+description: Request a managed deployment on the TEENet platform — this wallet or any application built on the TEENet SDK
+title: "[Deployment Request] <organization or project>"
+labels: ["deployment-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in a TEENet platform deployment.
+
+        This form requests a **managed deployment** on the TEENet platform — the TEENet team will provision TEE nodes, register your application with the TEENet service, bootstrap key material, and hand you a live instance with admin access.
+
+        This covers:
+        - **TEENet Wallet** (this repository)
+        - **Any application built with the [TEENet SDK](https://github.com/TEENet-io/teenet-sdk)** (Go or TypeScript)
+
+        For local development or self-hosted evaluation with the mock service, no issue is needed — see the [Wallet Quick Start](https://teenet-io.github.io/teenet-wallet/#/en/quick-start) or the [TEENet SDK repository](https://github.com/TEENet-io/teenet-sdk).
+
+  - type: dropdown
+    id: what
+    attributes:
+      label: What are you deploying?
+      options:
+        - TEENet Wallet (this repository)
+        - Custom application using TEENet SDK
+        - Other — describe in "Use case"
+    validations:
+      required: true
+
+  - type: input
+    id: org
+    attributes:
+      label: Organization or project
+      description: Who is this deployment for?
+      placeholder: "e.g. Acme Labs, MyAgent Project"
+    validations:
+      required: true
+
+  - type: input
+    id: contact
+    attributes:
+      label: Primary contact
+      description: Email or other channel we can reach you on (in addition to this GitHub thread)
+      placeholder: "name@example.com"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What are you building? (AI agent wallet, trading system, custody service, custom SDK-based app, internal tooling, etc.)
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: Source repository (if custom app)
+      description: Link to the repo of your SDK-based application, if applicable. Leave blank for TEENet Wallet deployments.
+      placeholder: "https://github.com/your-org/your-app"
+
+  - type: input
+    id: users
+    attributes:
+      label: Expected user / load profile at launch
+      placeholder: "e.g. 50 internal users / 500 beta / 10k+ public / ~100 signs per day"
+
+  - type: textarea
+    id: chains
+    attributes:
+      label: Chains needed (wallet deployments only)
+      description: The wallet's default set covers Ethereum (+ Sepolia), Solana, Optimism, Arbitrum, Base, Polygon, BNB Chain, and Avalanche. Leave blank for non-wallet apps.
+      placeholder: "Default set is fine / Also need <custom EVM chain with RPC>"
+
+  - type: textarea
+    id: compliance
+    attributes:
+      label: Compliance or data-residency requirements
+      description: KYC, jurisdiction, audit logging, retention — anything that constrains where or how we deploy. Leave blank if none.
+
+  - type: input
+    id: timeline
+    attributes:
+      label: Target timeline
+      placeholder: "e.g. Want to ship by Q3 2026 / ASAP / Exploring"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Additional context, questions, or constraints.

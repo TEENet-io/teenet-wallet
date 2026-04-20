@@ -133,6 +133,31 @@ make test
 
 ---
 
+## 6. 连接本地 OpenClaw Agent（可选）
+
+拿到第 4 步的 API key 后，可以把本地 OpenClaw 指向这个钱包，跑一次完整的 Agent 端到端测试。
+
+在 OpenClaw 对话里安装 skill：
+
+```
+Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/main/skill/teenet-wallet/SKILL.md
+```
+
+按提示填入：
+
+- **TEENET_WALLET_API_URL** —— `http://localhost:18080`（若 OpenClaw 跑在其它机器上，改成本机 LAN IP）
+- **TEENET_WALLET_API_KEY** —— 第 4 步生成的 `ocw_...` key
+
+然后让 Agent 跑一次端到端快速检查：
+
+```
+/test
+```
+
+这会依次走一遍余额查询、测试网 faucet、转账、审批阈值、合约白名单流程,整条链路都打通。
+
+---
+
 ## 开始使用
 
 - [安装与配置](installation.md) -- 完整构建选项、Docker、环境变量

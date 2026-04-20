@@ -23,7 +23,7 @@
   - **How-To Guides**
     - [Add a Chain](en/howto-add-chain.md)
     - [Add a Plugin Tool](en/howto-add-plugin-tool.md)
-    - [Deploy Your Wallet App on TEENet](en/howto-deploy.md)
+    - [Request a TEENet Deployment](en/howto-deploy.md)
 
   - **API Reference**
     - [OpenAPI Spec](api/openapi.yaml ':ignore')

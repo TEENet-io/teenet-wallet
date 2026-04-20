@@ -1,72 +1,78 @@
-# 在 TEENet 上部署你的钱包应用
+# 申请 TEENet 部署
 
-本页说明 TEENet Wallet 的部署边界，以及在 TEENet 上部署前需要准备的内容。
+如果你想在自己的基础设施上跑一个连接 mock 服务的钱包实例，参见 [快速开始](quick-start.md) 和 [安装与配置](installation.md)。这条路径适合本地开发、集成测试、内部评估——但它使用 mock 服务生成的确定性密钥，**不适用于真实资金**。
 
-## 当前状态
+本页讲的是另一件事：**在 TEENet 平台上部署生产实例**，由真实 TEE 节点持有密钥分片并在多个独立 enclave 之间完成门限签名。
 
-TEENet Wallet 作为 **TEENet 平台**上的应用进行部署。本页只覆盖钱包应用自身的部署要求。
+> 本页介绍的托管部署流程**同时适用于本钱包**以及**任何基于 [TEENet SDK](https://github.com/TEENet-io/teenet-sdk) 构建的应用**（Go 或 TypeScript）。如果你写了自己的 Agent、交易系统、托管服务或其它 SDK 集成应用，同样可以通过本页底部的链接发起托管部署申请。
 
-生产部署依赖真实的 **TEENet service**，用于：
+## 托管交付，不自助
 
-- 密钥生成
-- 门限签名
-- Passkey 管理
-- 审批时的身份验证
+TEENet 平台部署由 TEENet 团队端到端交付。我们负责：
 
-本地 mock 服务仅供开发使用。它使用确定性密钥，绝不能用于真实资金。
+- 开通 TEE 节点与安全网络
+- 把你的应用注册到 TEENet 服务
+- 引导密钥材料与 Passkey 基础设施
+- 配置生产 base URL、审批回调、监控
+- 平台侧日常运维与升级
 
-如果你尚未获得 TEENet 环境访问权限，请先阅读未来提供的 TEENet 平台接入 / 开通页面。该页面应说明如何申请访问权限并准备环境。本页假设你已经在 TEENet 环境中部署钱包应用。
+你描述需求；我们交付一个带管理员访问的运行中实例。
 
-## 本页覆盖的内容
+## 你会拿到什么
 
-- TEENet Wallet 在 TEENet 上运行所需的条件
-- TEENet 部署与本地开发的区别
-- 部署前仍需要阅读的本地文档
+- 运行在 TEENet 平台上的应用实例（本钱包，或你的 SDK 集成应用）
+- 跨 TEE 节点的真实门限签名——密钥从不离开 enclave 硬件
+- 平台维护由 TEENet 团队负责
 
-本页不覆盖：
+对于**钱包部署**，还包括：
 
-- 如何获得 TEENet 平台访问权限
-- 如何开通或初始化 TEENet 环境
-- 钱包应用之外的 TEENet 平台运维流程
+- 钱包的公开 URL，用户在上面自助注册（邮箱 → 6 位验证码 → Passkey），并在自己的设置页生成 API key
+- 预配置的链集合，可按需定制
 
-## 在 TEENet 上部署前的前提条件
+## 你需要提供什么
 
-在 TEENet 上部署之前，你需要：
+- 申请方的组织 / 项目名
+- 一个主要联系人
+- 部署的内容（本钱包 / 自定义 SDK 应用）以及使用场景
+- 预期用户量或负载情况
+- 所需链（仅钱包部署；默认集合不够时填写）
+- 合规或数据驻留要求
+- 目标时间线
 
-- 一个可访问的 TEENet 环境，并能连通对应的 TEENet service
-- 从本仓库构建好的钱包应用
-- 与目标链匹配的 RPC 配置
-- 用于审批链接和浏览器访问的公开 base URL
-- 已完成 TEENet 平台接入 / 开通流程
+## 如何申请
 
-本地构建方式和运行时配置请参阅[安装与配置](installation.md)和[配置参考](configuration.md)。
+在 GitHub 上提交一个部署申请 issue：
+
+**[→ 提交部署申请](https://github.com/TEENet-io/teenet-wallet/issues/new?template=deployment-request.yml)**
+
+表单会收集我们评估所需的所有信息——无论是本钱包还是自定义 SDK 应用。我们会在该 issue 上回复，或通过你提供的联系方式跟进。
+
+## 交付之后
+
+实例上线后，你会收到：
+
+- 应用的公开 URL
+- 供 Agent 或应用使用的 SDK / 集成配置
+
+钱包部署时，首个用户和其他用户一样通过公开 URL 自助注册（邮箱 → 验证码 → Passkey），没有单独的管理员账号。之后就是常规使用流程——参见 [快速上手](user-getting-started.md)。
 
 ## 开发环境与生产环境
 
-mock 服务只适用于：
+**Mock 服务**适用于：
 
 - 本地开发
 - 集成测试
 - API 调试与实验
 
-不要将 mock 服务用于：
+**不要**在以下场景使用 mock 服务：
 
 - 主网钱包
 - 真实资产
-- 任何涉及真实价值的生产演示
+- 任何涉及真实价值的生产流程
 
-## 部署前建议先阅读
+## 相关链接
 
-建议先阅读这些钱包侧文档：
-
-- [安装与配置](installation.md) -- 构建要求与本地开发流程
-- [配置参考](configuration.md) -- 运行时环境变量
-- [架构概览](architecture-overview.md) -- 钱包如何依赖 TEENet service
-
-然后再阅读 TEENet 平台接入 / 开通页面，完成环境访问和平台侧准备工作。
-
-## 下一步
-
-- TEENet 平台接入 / 开通页面 -- 获取环境访问权限并完成平台侧设置
-- [TEENet Platform 文档](https://teenet-io.github.io/#/) -- 了解平台背景
-- [社区与支持](community.md) -- 查看项目链接和维护者信息
+- [TEENet Platform](https://teenet.io) —— 平台概览
+- [TEENet SDK](https://github.com/TEENet-io/teenet-sdk) —— 构建自己的 SDK 应用
+- [架构概览](architecture-overview.md) —— 钱包如何依赖 TEE 节点
+- [社区与支持](community.md) —— 项目通用沟通渠道
