@@ -959,7 +959,6 @@ Commands are case-insensitive. Natural language also works (e.g., "send 0.1 ETH 
 | BSC | `https://bscscan.com` |
 | Avalanche | `https://snowtrace.io` |
 | Sepolia | `https://sepolia.etherscan.io` |
-| Holesky | `https://holesky.etherscan.io` |
 | Base Sepolia | `https://sepolia.basescan.org` |
 | BSC Testnet | `https://testnet.bscscan.com` |
 | Solana | `https://solscan.io` |

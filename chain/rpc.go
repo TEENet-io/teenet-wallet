@@ -7,12 +7,16 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -165,9 +169,65 @@ func ETHCall(rpcURL, fromAddr, toAddr string, calldata []byte) ([]byte, error) {
 	return hex.DecodeString(strings.TrimPrefix(resultHex, "0x"))
 }
 
-// jsonRPCWithRetry wraps jsonRPC with up to 3 attempts and exponential backoff.
-// Suitable for read-only queries (balance, chain params) where retrying is safe.
-func jsonRPCWithRetry(url string, payload interface{}) (map[string]interface{}, error) {
+// rpcAppError wraps JSON-RPC application errors (the "error" field in the
+// response body — e.g. "execution reverted", "nonce too low"). These are
+// deterministic and any fallback RPC would return the same thing, so the
+// fallback path is NOT triggered for them. Transport / HTTP errors use plain
+// error values and DO trigger fallback.
+type rpcAppError struct{ msg string }
+
+func (e *rpcAppError) Error() string { return e.msg }
+
+// rpcFallbacks maps a primary RPC URL → fallback URL. Populated at startup
+// in main.go when QuickNode overrides a chain's original RPC — the publicnode
+// URL is registered here so transient QuickNode transport failures transparently
+// fall back. Unset chains behave as before (single URL, no fallback).
+var rpcFallbacks sync.Map // map[string]string
+
+// SetRPCFallback registers fallback for primary. Idempotent; empty or identical
+// pairs are ignored. Call once per chain at startup.
+func SetRPCFallback(primary, fallback string) {
+	if primary == "" || fallback == "" || primary == fallback {
+		return
+	}
+	rpcFallbacks.Store(primary, fallback)
+}
+
+// ClearRPCFallbacks removes all registered fallbacks. Test helper.
+func ClearRPCFallbacks() {
+	rpcFallbacks.Range(func(k, _ any) bool { rpcFallbacks.Delete(k); return true })
+}
+
+// jsonRPCWithRetry runs up to 3 attempts (exponential backoff) against the
+// primary URL. On transport/HTTP failure, if a fallback is registered it runs
+// another 3 attempts against the fallback before giving up. JSON-RPC application
+// errors short-circuit immediately and do not trigger the fallback.
+func jsonRPCWithRetry(primary string, payload interface{}) (map[string]interface{}, error) {
+	body, err := retryJSONRPC(primary, payload)
+	if err == nil {
+		return body, nil
+	}
+	if isAppError(err) {
+		return nil, fmt.Errorf("RPC failed: %w", err)
+	}
+	fbRaw, ok := rpcFallbacks.Load(primary)
+	if !ok {
+		return nil, fmt.Errorf("RPC failed after 3 attempts: %w", err)
+	}
+	fb := fbRaw.(string)
+	slog.Warn("primary RPC failed, falling back",
+		"primary", hostOnly(primary), "fallback", hostOnly(fb), "error", err)
+	body, err2 := retryJSONRPC(fb, payload)
+	if err2 == nil {
+		return body, nil
+	}
+	return nil, fmt.Errorf("RPC failed on primary (%s: %v) and fallback (%s): %w",
+		hostOnly(primary), err, hostOnly(fb), err2)
+}
+
+// retryJSONRPC does up to 3 attempts with exponential backoff against a single URL.
+// Application errors short-circuit (retrying won't help).
+func retryJSONRPC(url string, payload interface{}) (map[string]interface{}, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		body, err := jsonRPC(url, payload)
@@ -175,11 +235,29 @@ func jsonRPCWithRetry(url string, payload interface{}) (map[string]interface{}, 
 			return body, nil
 		}
 		lastErr = err
+		if isAppError(err) {
+			return nil, err
+		}
 		if attempt < 2 {
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 		}
 	}
-	return nil, fmt.Errorf("RPC failed after 3 attempts: %w", lastErr)
+	return nil, lastErr
+}
+
+func isAppError(err error) bool {
+	var e *rpcAppError
+	return errors.As(err, &e)
+}
+
+// hostOnly extracts the hostname for log safety — RPC URLs include the
+// QuickNode token in the path, so full URLs must not be logged.
+func hostOnly(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return "<invalid-url>"
+	}
+	return u.Host
 }
 
 func jsonRPC(url string, payload interface{}) (map[string]interface{}, error) {
@@ -203,7 +281,7 @@ func jsonRPC(url string, payload interface{}) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("rpc decode failed: %w", err)
 	}
 	if errField, ok := result["error"]; ok && errField != nil {
-		return nil, fmt.Errorf("rpc error: %v", errField)
+		return nil, &rpcAppError{msg: fmt.Sprintf("rpc error: %v", errField)}
 	}
 	return result, nil
 }

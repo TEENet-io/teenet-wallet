@@ -386,7 +386,6 @@ Common errors:
 | BSC | `https://bscscan.com` |
 | Avalanche | `https://snowtrace.io` |
 | Sepolia | `https://sepolia.etherscan.io` |
-| Holesky | `https://holesky.etherscan.io` |
 | Base Sepolia | `https://sepolia.basescan.org` |
 | BSC Testnet | `https://testnet.bscscan.com` |
 | Solana | `https://solscan.io` |
@@ -400,7 +399,6 @@ Transaction: `{explorer}/tx/{hash}` · Address: `{explorer}/address/{addr}` (EVM
 |-------|--------|
 | Sepolia / Base Sepolia ETH | Built-in: `teenet_wallet_faucet` |
 | Solana Devnet SOL | Built-in: `teenet_wallet_faucet` |
-| Holesky ETH | [`https://holesky-faucet.pk910.de`](https://holesky-faucet.pk910.de) |
 | BSC Testnet tBNB | [`https://www.bnbchain.org/en/testnet-faucet`](https://www.bnbchain.org/en/testnet-faucet) |
 | Sepolia USDC | [`https://faucet.circle.com`](https://faucet.circle.com) |
 

@@ -44,7 +44,7 @@ func (h *BalanceHandler) GetBalance(c *gin.Context) {
 	result, balErr := chain.GetBalance(cfg.Family, wallet.Address, cfg.RPCURL, wallet.Chain, cfg.Currency)
 	if balErr != nil {
 		slog.Error("balance query failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", balErr)
-		jsonErrorDetails(c, http.StatusBadGateway, balErr.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, balErr.Error(), gin.H{
 			"stage": "balance_query", "wallet_id": wallet.ID, "chain": wallet.Chain,
 		})
 		return

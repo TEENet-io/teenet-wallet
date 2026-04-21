@@ -22,8 +22,23 @@
 | `SMTP_HOST` | （空） | 邮箱验证码的 SMTP 服务器地址。为空时启用 mock 模式，验证码会打印到 stdout 而不发送邮件。`SMTP_PORT`、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_FROM` 配置发件账户。 |
 | `SMTP_PASSWORD_KEY` | （空） | **生产环境推荐。** 存在 TEE 中的 API key 名称，其 value 作为 SMTP 密码使用。配置后，启动时通过 `sdk.GetAPIKey(name)` 拉取，密码不再出现在 `docker inspect` 或进程 env 中。优先级高于 `SMTP_PASSWORD`。key 拉不到或 TEE 不可达时启动失败。key 必须在部署前以对应 `APP_INSTANCE_ID` 的身份创建——可通过 TEENet 管理平台（实例页面的 API Keys 标签）录入，或程序化调用 `sdk.CreateAPIKey`（示例见 [`teenet-sdk/go/examples/apikey`](https://github.com/TEENet-io/teenet-sdk) / `examples/admin`）。 |
 | `DEV_FIXED_CODE` | `999999`（仅 mock 模式） | **仅用于开发。** 在 mock 模式下（即 `SMTP_HOST` 未配置），所有邮箱验证码固定为该值，而非随机 6 位数字——方便本地注册测试，无需 SMTP 也无需翻日志。若 `999999` 与测试数据冲突可覆盖为其它 6 位值。配置了 SMTP 时自动忽略。**生产环境禁止设置。** |
+| `QUICKNODE_ENDPOINT` | （空） | QuickNode endpoint 子域名（例如 `wispy-wiser-road`）。配置后，`chains.json` 中每条填了 `quicknode_network` 字段的链,启动时 `rpc_url` 会被改写为 `https://{endpoint}.{network}.quiknode.pro/{token}/`。未配置则保留各链的公共 fallback RPC。 |
+| `QUICKNODE_TOKEN` | （空） | QuickNode 访问 token（URL 路径部分）。会出现在 `docker inspect` 中，生产环境请用 `QUICKNODE_TOKEN_KEY`。 |
+| `QUICKNODE_TOKEN_KEY` | （空） | **生产环境推荐。** 存在 TEE 中的 API key 名称，其 value 作为 QuickNode token 使用。启动时通过 `sdk.GetAPIKey(name)` 拉取，token 不再出现在 docker env 或进程 env 中。优先级高于 `QUICKNODE_TOKEN`。key 拉不到或 TEE 不可达时启动失败。可通过 TEENet 管理平台（实例页面 API Keys 标签）录入，或程序化调用 `sdk.CreateAPIKey`。 |
 
 区块链 RPC URL 在 `chains.json` 文件中定义，不作为独立环境变量。可通过 `CHAINS_FILE` 环境变量指定自定义路径。也可在运行时通过 `POST /api/chains` 动态添加自定义 EVM 链。
+
+### QuickNode RPC 覆写
+
+`publicnode.com` 等公共 RPC 限流激进、偶尔抽风。要走 [QuickNode](https://www.quicknode.com/):
+
+1. 在 QuickNode 建一个 endpoint,勾选需要的网络(一个 endpoint + 一个 token 可通过 "Multi-Chain" 选项服务多条链)。
+2. 在 `chains.json` 对应链的条目里加 `quicknode_network` 字段,值从 QuickNode dashboard 的 URL 中提取——例如 `https://wispy-wiser-road.ethereum-sepolia.quiknode.pro/...` → `"quicknode_network": "ethereum-sepolia"`。Ethereum Mainnet 是特例:QuickNode 没有子域,用 `"quicknode_network": "-"`。需要 token 后路径后缀的链(Avalanche C-Chain 的 `/ext/bc/C/rpc`),再加 `"quicknode_path": "/ext/bc/C/rpc"`。
+3. 在钱包容器上设置 `QUICKNODE_ENDPOINT`(子域名) 和 `QUICKNODE_TOKEN`(开发) 或 `QUICKNODE_TOKEN_KEY`(生产)。
+
+启动时钱包会把匹配链的 `rpc_url` 改写掉。没填 `quicknode_network` 的链不受影响。内置 `chains.json` 对所有默认链都已填好 slug。
+
+**运行时 fallback:** `rpc_url` 被覆写时,`chains.json` 里原来的 URL(publicnode 等)会被注册为 fallback。QuickNode 请求遇到 transport 或 HTTP 错误(DNS 失败、超时、5xx、429)时,RPC 层会对当前这一次调用透明切到 fallback 重试,后续调用仍然优先走 QuickNode。应用层 JSON-RPC 错误(`execution reverted`、`nonce too low` 等)会直接短路返回,不触发 fallback——换个 provider 返的也是同一个错。每次 fallback 会在日志里打出 host(不是完整 URL,后者含 token)。
 
 ---
 [上一页: 快速开始](/zh/quick-start.md) | [下一页: 认证体系](/zh/authentication.md)

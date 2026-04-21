@@ -139,6 +139,55 @@ func main() {
 	sdkClient := sdk.NewClient()
 	defer sdkClient.Close()
 
+	// QuickNode RPC overrides.
+	//
+	// For each chain with a non-empty `quicknode_network` field, rewrite its
+	// RPCURL to `https://{endpoint}.{network}.quiknode.pro/{token}/` so we use
+	// QuickNode instead of the public fallback. Token source precedence:
+	//   1. QUICKNODE_TOKEN_KEY — TEE-backed API key (preferred; mirrors SMTP_PASSWORD_KEY).
+	//   2. QUICKNODE_TOKEN    — plain env.
+	// When QUICKNODE_ENDPOINT is unset, no overrides run and publicnode defaults stand.
+	if qnEndpoint := strings.TrimSpace(os.Getenv("QUICKNODE_ENDPOINT")); qnEndpoint != "" {
+		qnToken := os.Getenv("QUICKNODE_TOKEN")
+		if keyName := strings.TrimSpace(os.Getenv("QUICKNODE_TOKEN_KEY")); keyName != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			res, err := sdkClient.GetAPIKey(ctx, keyName)
+			cancel()
+			if err != nil {
+				log.Fatalf("QUICKNODE_TOKEN_KEY=%q: fetch from TEE failed: %v", keyName, err)
+			}
+			if !res.Success {
+				log.Fatalf("QUICKNODE_TOKEN_KEY=%q: TEE returned error: %s", keyName, res.Error)
+			}
+			qnToken = res.APIKey
+			slog.Info("QuickNode token loaded from TEE-backed API key store", "key_name", keyName)
+		}
+		if qnToken == "" {
+			slog.Warn("QUICKNODE_ENDPOINT set without QUICKNODE_TOKEN / QUICKNODE_TOKEN_KEY — skipping RPC override")
+		} else {
+			overridden := 0
+			for name, cfg := range model.GetAllChains() {
+				if cfg.QuickNodeNetwork == "" {
+					continue
+				}
+				// "-" sentinel = no network subdomain (ethereum mainnet).
+				host := qnEndpoint + "." + cfg.QuickNodeNetwork + ".quiknode.pro"
+				if cfg.QuickNodeNetwork == "-" {
+					host = qnEndpoint + ".quiknode.pro"
+				}
+				path := strings.TrimPrefix(cfg.QuickNodePath, "/")
+				originalURL := cfg.RPCURL
+				cfg.RPCURL = fmt.Sprintf("https://%s/%s/%s", host, qnToken, path)
+				// Register the original (public) URL as fallback — chain/rpc.go
+				// auto-switches to it on transport/HTTP failure.
+				chain.SetRPCFallback(cfg.RPCURL, originalURL)
+				model.SetChain(name, cfg)
+				overridden++
+			}
+			slog.Info("QuickNode RPC overrides applied", "endpoint", qnEndpoint, "chains", overridden)
+		}
+	}
+
 	sessions := handler.NewSessionStore()
 	defer sessions.Stop()
 	sseHub := handler.NewSSEHub()

@@ -12,6 +12,8 @@
 | `family` | Yes | string | `evm`, `solana` | Chain family, determines tx building logic |
 | `rpc_url` | Yes | string | -- | JSON-RPC endpoint URL |
 | `chain_id` | No | uint64 | -- | EVM chain ID (e.g., 1 for mainnet, 11155111 for Sepolia). Ignored for Solana. |
+| `quicknode_network` | No | string | QuickNode network slug (e.g., `ethereum-sepolia`), or `-` for no subdomain (Ethereum Mainnet) | When set AND `QUICKNODE_ENDPOINT` + a token source (`QUICKNODE_TOKEN` or `QUICKNODE_TOKEN_KEY`) are configured, `rpc_url` is overridden at startup with `https://{endpoint}.{quicknode_network}.quiknode.pro/{token}/`. The `-` sentinel drops the network subdomain entirely — used by Ethereum Mainnet whose URL is `https://{endpoint}.quiknode.pro/{token}/`. Leave empty to keep the hardcoded `rpc_url`. See [configuration.md](./configuration.md#quicknode-rpc-overrides). |
+| `quicknode_path` | No | string | Path suffix (e.g., `/ext/bc/C/rpc`) | Appended after `{token}` in the QuickNode URL. Only used when `quicknode_network` is set. Required for chains whose RPC sits at a non-standard path — Avalanche C-Chain is the only one in the defaults. |
 
 ## Default Chains
 
@@ -22,7 +24,6 @@ The following chains are included in `chains.json` out of the box:
 | Ethereum Mainnet | `ethereum` | ETH | ECDSA | secp256k1 | EVM |
 | Optimism Mainnet | `optimism` | ETH | ECDSA | secp256k1 | EVM |
 | Sepolia Testnet | `sepolia` | ETH | ECDSA | secp256k1 | EVM |
-| Holesky Testnet | `holesky` | ETH | ECDSA | secp256k1 | EVM |
 | Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
 | BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
 | Arbitrum One | `arbitrum` | ETH | ECDSA | secp256k1 | EVM |

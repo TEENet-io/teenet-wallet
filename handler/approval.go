@@ -690,7 +690,7 @@ func verifyFreshPasskey(sdkClient *sdk.Client, c *gin.Context, db *gorm.DB) bool
 			return true // allow nil SDK in tests
 		}
 		slog.Error("SECURITY: SDK client is nil, cannot verify passkey, rejecting")
-		jsonError(c, http.StatusServiceUnavailable, "passkey verification unavailable")
+		jsonError(c, http.StatusUnprocessableEntity, "passkey verification unavailable")
 		return false
 	}
 	var body struct {
@@ -715,7 +715,7 @@ func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessio
 			return true // allow nil SDK/db in tests
 		}
 		slog.Error("SECURITY: SDK or db is nil, cannot verify passkey, rejecting")
-		jsonError(c, http.StatusServiceUnavailable, "passkey verification unavailable")
+		jsonError(c, http.StatusUnprocessableEntity, "passkey verification unavailable")
 		return false
 	}
 	if loginSessionID == 0 || credential == nil {

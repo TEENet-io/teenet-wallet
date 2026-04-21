@@ -198,7 +198,6 @@ Chains are configured by the backend administrator. Default built-in chains:
 | Sepolia | Testnet | ETH | ECDSA / secp256k1 |
 | Base Sepolia | Testnet | ETH | ECDSA / secp256k1 |
 | Optimism | Mainnet | ETH | ECDSA / secp256k1 |
-| Holesky | Testnet | ETH | ECDSA / secp256k1 |
 | BSC Testnet | Testnet | tBNB | ECDSA / secp256k1 |
 | Solana | Mainnet | SOL | Schnorr / ed25519 |
 | Solana Devnet | Testnet | SOL | Schnorr / ed25519 |

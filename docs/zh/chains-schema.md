@@ -12,6 +12,8 @@
 | `family` | 是 | string | `evm`, `solana` | 链系列，决定交易构建逻辑 |
 | `rpc_url` | 是 | string | -- | JSON-RPC 端点 URL |
 | `chain_id` | 否 | uint64 | -- | EVM 链 ID（例如主网为 1，Sepolia 为 11155111）。Solana 忽略此字段。 |
+| `quicknode_network` | 否 | string | QuickNode network slug（例如 `ethereum-sepolia`），或 `-` 表示无子域（Ethereum Mainnet） | 配置后，且 `QUICKNODE_ENDPOINT` + token 源（`QUICKNODE_TOKEN` 或 `QUICKNODE_TOKEN_KEY`）齐全时，启动时 `rpc_url` 会被覆写为 `https://{endpoint}.{quicknode_network}.quiknode.pro/{token}/`。`-` 哨兵值表示不带 network 子域——Ethereum Mainnet 的 URL 形如 `https://{endpoint}.quiknode.pro/{token}/`。留空则保持写死的 `rpc_url`。详见 [configuration.md](./configuration.md#quicknode-rpc-覆写)。 |
+| `quicknode_path` | 否 | string | 路径后缀（例如 `/ext/bc/C/rpc`） | 拼接在 QuickNode URL 中的 `{token}` 之后。仅当 `quicknode_network` 设置时生效。非标准路径的链需要——默认配置里只有 Avalanche C-Chain 用到。 |
 
 ## 默认链
 
@@ -22,7 +24,6 @@
 | Ethereum Mainnet | `ethereum` | ETH | ECDSA | secp256k1 | EVM |
 | Optimism Mainnet | `optimism` | ETH | ECDSA | secp256k1 | EVM |
 | Sepolia Testnet | `sepolia` | ETH | ECDSA | secp256k1 | EVM |
-| Holesky Testnet | `holesky` | ETH | ECDSA | secp256k1 | EVM |
 | Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
 | BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
 | Arbitrum One | `arbitrum` | ETH | ECDSA | secp256k1 | EVM |

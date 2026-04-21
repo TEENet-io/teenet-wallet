@@ -88,7 +88,7 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 	resp, err := h.client.Post(h.faucetURL+"/api/claim", "application/json", bytes.NewReader(body))
 	if err != nil {
 		slog.Error("faucet request failed", "error", err)
-		jsonErrorDetails(c, http.StatusBadGateway, "faucet service unavailable", gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "faucet service unavailable", gin.H{
 			"stage": "faucet_request", "chain": wallet.Chain, "address": wallet.Address,
 		})
 		return

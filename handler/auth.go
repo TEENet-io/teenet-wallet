@@ -73,7 +73,7 @@ func (h *AuthHandler) InviteUser(c *gin.Context) {
 			msg = res.Error
 		}
 		slog.Error("passkey invite failed", "error", msg)
-		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_invite"})
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, msg, gin.H{"stage": "passkey_invite"})
 		return
 	}
 	registerURL := h.baseURL + "/#/register?token=" + res.InviteToken
@@ -104,7 +104,7 @@ func (h *AuthHandler) PasskeyOptions(c *gin.Context) {
 	res, err := h.sdk.PasskeyLoginOptions(c.Request.Context())
 	if err != nil {
 		slog.Error("passkey login options failed", "error", err)
-		jsonErrorDetails(c, http.StatusBadGateway, err.Error(), gin.H{"stage": "passkey_login_options"})
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, err.Error(), gin.H{"stage": "passkey_login_options"})
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -156,7 +156,7 @@ func (h *AuthHandler) PasskeyRegistrationBegin(c *gin.Context) {
 			msg = inviteRes.Error
 		}
 		slog.Error("passkey registration invite failed", "display_name", displayName, "error", msg)
-		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_invite"})
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, msg, gin.H{"stage": "passkey_registration_invite"})
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *AuthHandler) PasskeyRegistrationBegin(c *gin.Context) {
 			msg = optRes.Error
 		}
 		slog.Error("passkey registration options failed", "error", msg)
-		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_options"})
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, msg, gin.H{"stage": "passkey_registration_options"})
 		return
 	}
 	c.JSON(http.StatusOK, optRes)
@@ -186,7 +186,7 @@ func (h *AuthHandler) PasskeyRegistrationOptions(c *gin.Context) {
 	res, err := h.sdk.PasskeyRegistrationOptions(c.Request.Context(), token)
 	if err != nil {
 		slog.Error("passkey registration options failed", "error", err)
-		jsonErrorDetails(c, http.StatusBadGateway, err.Error(), gin.H{"stage": "passkey_registration_options"})
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, err.Error(), gin.H{"stage": "passkey_registration_options"})
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -229,7 +229,7 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 			msg = res.Error
 		}
 		slog.Error("passkey registration verify failed", "error", msg)
-		jsonErrorDetails(c, http.StatusBadGateway, msg, gin.H{"stage": "passkey_registration_verify"})
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, msg, gin.H{"stage": "passkey_registration_verify"})
 		return
 	}
 

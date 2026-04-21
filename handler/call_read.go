@@ -57,7 +57,7 @@ func (h *ContractCallHandler) CallRead(c *gin.Context) {
 	result, callErr := chain.ETHCall(chainCfg.RPCURL, wallet.Address, contractAddr, calldata)
 	if callErr != nil {
 		slog.Error("eth_call failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "contract", contractAddr, "func_sig", req.FuncSig, "error", callErr)
-		jsonErrorDetails(c, http.StatusBadGateway, "eth_call: "+callErr.Error(), gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "eth_call: "+callErr.Error(), gin.H{
 			"stage": "eth_call", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"contract": contractAddr, "func_sig": req.FuncSig,
 		})
