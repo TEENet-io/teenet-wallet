@@ -680,7 +680,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txData, err := chain.BuildETHContractCallTx(rpcURL, wallet.Address, tokenContractAddr, callData, nil)
 			if err != nil {
-				slog.Error("build ERC-20 tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_url", rpcURL, "error", err)
+				slog.Error("build ERC-20 tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_host", chain.HostOnly(rpcURL), "error", err)
 				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "contract": tokenContractAddr,
@@ -702,7 +702,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		} else {
 			txData, err := chain.BuildETHTx(rpcURL, wallet.Address, req.To, amount)
 			if err != nil {
-				slog.Error("build ETH tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_url", rpcURL, "error", err)
+				slog.Error("build ETH tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_host", chain.HostOnly(rpcURL), "error", err)
 				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "amount": req.Amount,
@@ -782,7 +782,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txData, err := chain.BuildSOLTxFromLamports(rpcURL, wallet.Address, req.To, lamports)
 			if err != nil {
-				slog.Error("build SOL tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_url", rpcURL, "error", err)
+				slog.Error("build SOL tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_host", chain.HostOnly(rpcURL), "error", err)
 				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
 					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
 					"to": req.To, "amount": req.Amount,

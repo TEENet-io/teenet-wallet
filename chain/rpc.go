@@ -216,13 +216,13 @@ func jsonRPCWithRetry(primary string, payload interface{}) (map[string]interface
 	}
 	fb := fbRaw.(string)
 	slog.Warn("primary RPC failed, falling back",
-		"primary", hostOnly(primary), "fallback", hostOnly(fb), "error", err)
+		"primary", HostOnly(primary), "fallback", HostOnly(fb), "error", err)
 	body, err2 := retryJSONRPC(fb, payload)
 	if err2 == nil {
 		return body, nil
 	}
 	return nil, fmt.Errorf("RPC failed on primary (%s: %v) and fallback (%s): %w",
-		hostOnly(primary), err, hostOnly(fb), err2)
+		HostOnly(primary), err, HostOnly(fb), err2)
 }
 
 // retryJSONRPC does up to 3 attempts with exponential backoff against a single URL.
@@ -250,9 +250,10 @@ func isAppError(err error) bool {
 	return errors.As(err, &e)
 }
 
-// hostOnly extracts the hostname for log safety — RPC URLs include the
-// QuickNode token in the path, so full URLs must not be logged.
-func hostOnly(rawURL string) string {
+// HostOnly extracts the hostname for log safety — RPC URLs include the
+// QuickNode token in the path, so full URLs must not be logged. Exported
+// for use by other packages that log RPC-related errors.
+func HostOnly(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Host == "" {
 		return "<invalid-url>"

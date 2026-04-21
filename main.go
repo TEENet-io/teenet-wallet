@@ -269,10 +269,17 @@ func main() {
 
 	// Chain list (public) — used by frontend to populate chain selector.
 	// The "custom" field in each ChainConfig is true for user-added chains.
+	// Strip rpc_url and the quicknode_* fields: when QuickNode overrides are
+	// applied, rpc_url embeds the QN token in its path, and this endpoint is
+	// unauthenticated. All RPC calls happen server-side; the browser never
+	// needs the URL.
 	r.GET("/api/chains", func(c *gin.Context) {
 		all := model.GetAllChains()
 		list := make([]model.ChainConfig, 0, len(all))
 		for _, cfg := range all {
+			cfg.RPCURL = ""
+			cfg.QuickNodeNetwork = ""
+			cfg.QuickNodePath = ""
 			list = append(list, cfg)
 		}
 		c.JSON(200, gin.H{"success": true, "chains": list})
