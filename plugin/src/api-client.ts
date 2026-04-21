@@ -36,6 +36,9 @@ export interface TransferResult {
   tx_hash?: string;
   approval_id?: number;
   approval_url?: string;
+  // Index signature mirrors MutationResult so this shape is directly
+  // assignable to approvalOrResult's permissive param type.
+  [key: string]: unknown;
 }
 
 export interface PolicyResult {
@@ -47,6 +50,7 @@ export interface PolicyResult {
     enabled: boolean;
     daily_limit_usd: string;
   };
+  [key: string]: unknown;
 }
 
 export interface ContractEntry {

@@ -106,6 +106,12 @@ func (h *ApprovalHandler) broadcastApproval(approval model.ApprovalRequest, stat
 	}
 	if approval.WalletID != nil {
 		evtData["wallet_id"] = *approval.WalletID
+		// Include chain so SSE consumers (e.g. the OpenClaw plugin) can build
+		// an explorer URL without a follow-up API call or stale context.
+		var w model.Wallet
+		if err := h.db.Select("chain").Where("id = ?", *approval.WalletID).First(&w).Error; err == nil {
+			evtData["chain"] = w.Chain
+		}
 	}
 	h.sseHub.Broadcast(approval.UserID, SSEEvent{
 		Type: "approval_resolved",

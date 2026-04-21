@@ -15,6 +15,32 @@ export interface ApprovalEvent {
   approval_type: string;
   tx_hash?: string;
   wallet_id?: string;
+  chain?: string;
+}
+
+// Explorer base URLs per chain. Mirrored from SKILL.md — the authoritative
+// list. Keep in sync if chains.json gains or loses an entry.
+const EXPLORER_BASE: Record<string, string> = {
+  ethereum: "https://etherscan.io",
+  optimism: "https://optimistic.etherscan.io",
+  arbitrum: "https://arbiscan.io",
+  base: "https://basescan.org",
+  polygon: "https://polygonscan.com",
+  bsc: "https://bscscan.com",
+  avalanche: "https://snowtrace.io",
+  sepolia: "https://sepolia.etherscan.io",
+  "base-sepolia": "https://sepolia.basescan.org",
+  "bsc-testnet": "https://testnet.bscscan.com",
+  solana: "https://solscan.io",
+  "solana-devnet": "https://solscan.io",
+};
+
+function explorerTxUrl(chain: string | undefined, txHash: string): string | null {
+  if (!chain) return null;
+  const base = EXPLORER_BASE[chain];
+  if (!base) return null;
+  const suffix = chain === "solana-devnet" ? "?cluster=devnet" : "";
+  return `${base}/tx/${txHash}${suffix}`;
 }
 
 export type SubagentRun = (opts: {
@@ -318,6 +344,12 @@ function formatApprovalMessage(event: ApprovalEvent): string {
   switch (event.status) {
     case "approved":
       if (event.tx_hash) {
+        const url = explorerTxUrl(event.chain, event.tx_hash);
+        if (url) {
+          return `Approval #${id} approved. Transaction: ${event.tx_hash} — ${url}`;
+        }
+        // Chain missing or unrecognised — fall back to asking the agent to
+        // construct the link from context.
         return `Approval #${id} approved. Transaction broadcast: ${event.tx_hash}. Please share the explorer link with the user.`;
       }
       return `Approval #${id} approved (${event.approval_type}).`;

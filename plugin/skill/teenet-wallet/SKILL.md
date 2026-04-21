@@ -203,7 +203,7 @@ When a tool returns `pending_approval`, the operation needs Passkey hardware app
 You MUST immediately respond to the user with the result. This is NOT optional. The user is waiting to know what happened. Always:
 1. Tell the user the approval result (approved / rejected / expired)
 2. Explain what it means (e.g. "Your transfer of 0.001 ETH was sent", "Policy is now active")
-3. Include explorer link if there's a tx_hash
+3. If the system message contains an explorer URL, surface it verbatim — do not rebuild it. If only a bare tx hash is provided (older payloads / unknown chain), fall back to the chain→explorer table below.
 4. Continue with the next step if in a multi-step flow
 
 This applies to ALL write operations: `transfer`, `set_policy`, `add_contract`, `contract_call`, `approve_token`, `add_contact`, etc.
@@ -215,12 +215,13 @@ This applies to ALL write operations: `transfer`, `set_policy`, `add_contract`, 
 **Example — after receiving system notification "System: Approval #123 approved (policy_change).":**
 > ✅ Approved! Approval threshold is now set to $1 USD.
 
-**Example — after receiving "System: Approval #456 approved. Transaction broadcast: 0xabc...":**
-> ✅ Transfer approved! TX: [explorer link]
+**Example — after receiving "System: Approval #456 approved. Transaction: 0xabc — https://sepolia.etherscan.io/tx/0xabc":**
+> ✅ Transfer approved! TX: [0xabc](https://sepolia.etherscan.io/tx/0xabc)
 
 System notification formats you will receive:
 - "System: Approval #123 approved (policy_change)." → policy is now active
-- "System: Approval #456 approved. Transaction broadcast: 0xabc..." → transfer succeeded
+- "System: Approval #456 approved. Transaction: 0xabc — {explorer_url}" → transfer succeeded; explorer URL is pre-built, just pass it through
+- "System: Approval #456 approved. Transaction broadcast: 0xabc. Please share the explorer link with the user." → fallback when chain is missing; construct URL from chain context
 - "System: Approval #789 was rejected." → no action taken
 
 ## Address Book Details

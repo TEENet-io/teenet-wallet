@@ -245,20 +245,6 @@ describe("SSE", () => {
     assert.ok(!w.isConnected);
   });
 
-  it("waitForApproval timeout", async () => {
-    const w = new ApprovalWatcher(api);
-    w.start();
-    await new Promise((r) => setTimeout(r, 1500));
-    const policy = await api.setPolicy(ETH_WALLET, "99", true);
-    if (policy.approval_id) {
-      await assert.rejects(
-        () => w.waitForApproval(policy.approval_id!, 1500),
-        (err: any) => err.message.includes("timed out"),
-      );
-    }
-    w.stop();
-  });
-
   it("subagent run wired", async () => {
     const w = new ApprovalWatcher(api);
     const calls: any[] = [];

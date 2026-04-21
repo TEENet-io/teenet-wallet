@@ -83,6 +83,66 @@ describe("ApprovalWatcher", () => {
     assert.equal(events[0].tx_hash, "0xabc");
   });
 
+  it("embeds explorer URL in agent message when chain is present", async () => {
+    const watcher = new ApprovalWatcher(mockApi());
+    const subagent = mockSubagentRun();
+    watcher.setSubagentRun(subagent);
+
+    watcher.trackApproval(8, "agent:main:telegram:direct:42");
+
+    (watcher as any).onApprovalResolved({
+      approval_id: 8,
+      status: "approved",
+      approval_type: "transfer",
+      tx_hash: "0xe24998fe",
+      chain: "sepolia",
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(subagent.calls.length, 1);
+    const msg = subagent.calls[0].message;
+    assert.ok(
+      msg.includes("https://sepolia.etherscan.io/tx/0xe24998fe"),
+      `expected explorer URL in message, got: ${msg}`,
+    );
+  });
+
+  it("falls back to legacy phrasing when chain is missing or unknown", async () => {
+    const watcher = new ApprovalWatcher(mockApi());
+    const subagent = mockSubagentRun();
+    watcher.setSubagentRun(subagent);
+
+    watcher.trackApproval(9, "agent:main:telegram:direct:42");
+    watcher.trackApproval(10, "agent:main:telegram:direct:42");
+
+    // No chain at all — legacy behaviour.
+    (watcher as any).onApprovalResolved({
+      approval_id: 9,
+      status: "approved",
+      approval_type: "transfer",
+      tx_hash: "0xabc",
+    });
+    // Unknown chain — same fallback.
+    (watcher as any).onApprovalResolved({
+      approval_id: 10,
+      status: "approved",
+      approval_type: "transfer",
+      tx_hash: "0xdef",
+      chain: "unknown-chain",
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(subagent.calls.length, 2);
+    for (const call of subagent.calls) {
+      assert.ok(
+        call.message.includes("Please share the explorer link"),
+        `expected fallback phrasing, got: ${call.message}`,
+      );
+    }
+  });
+
   it("ignores non-approval SSE events", () => {
     const watcher = new ApprovalWatcher(mockApi());
     const subagent = mockSubagentRun();
