@@ -12,9 +12,10 @@
 | `FRONTEND_URL` | （空） | 允许的 CORS 来源地址；为空则不发送 CORS 头 |
 | `CHAINS_FILE` | `./chains.json` | 链配置文件路径 |
 | `APP_INSTANCE_ID` | （来自 TEENet） | TEENet 应用实例标识符 |
-| `API_KEY_RATE_LIMIT` | `200` | 每个 API Key 每分钟最大请求数 |
+| `API_KEY_RATE_LIMIT` | `100` | 每个 API Key 每分钟最大请求数 |
 | `WALLET_CREATE_RATE_LIMIT` | `5` | 每个 Key 每分钟最大钱包创建数（DKG 资源密集） |
 | `REGISTRATION_RATE_LIMIT` | `10` | 每个 IP 每分钟最大注册尝试次数 |
+| `RPC_RATE_LIMIT` | `50` | 每个用户每分钟走上游 RPC 的总上限 —— 读（`/call-read`、`/balance`）和资金移动类（`/transfer`、`/contract-call`、`/approve-token`、`/revoke-approval`、`/wrap-sol`、`/unwrap-sol`）共用同一个桶。 |
 | `APPROVAL_EXPIRY_MINUTES` | `1440` | 待审批请求的过期时间（分钟） |
 | `MAX_WALLETS_PER_USER` | `10` | 每个用户可创建的最大钱包数 |
 | `MAX_API_KEYS_PER_USER` | `10` | 每个用户最大 API Key 数量 |

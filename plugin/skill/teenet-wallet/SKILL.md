@@ -282,6 +282,8 @@ When checking balance, **show both native and token balances together**.
 
 `call_read` returns a hex-encoded uint256 `result` — convert using the token's `decimals`. Only show tokens with balance > 0.
 
+All RPC-hitting tools (`call_read`, `balance`, `transfer`, `contract_call`, `approve_token`, `revoke_approval`, `wrap_sol`, `unwrap_sol`) share a per-user cap (`RPC_RATE_LIMIT`, default 50/min) — total across reads and writes cannot exceed this. When iterating over a large whitelist, batch or pace the reads.
+
 If `call_read` fails (e.g. service unreachable), fall back to hitting a public RPC directly with `web_fetch` using `eth_call` and the `0x70a08231` selector.
 
 **Present all balances together:**

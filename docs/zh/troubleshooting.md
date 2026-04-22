@@ -71,12 +71,12 @@ SELECT action, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 10;
 
 **问题：** API 请求返回 `429 Too Many Requests`。
 
-**原因：** 默认速率限制较为保守：每个 API key 每分钟 200 次请求，钱包创建每分钟 5 次。
+**原因：** 默认速率限制较为保守：每个 API key 每分钟 100 次请求，每用户 RPC 总调用 50 次/分钟（读写共享），钱包创建每分钟 5 次。
 
 **解决方法：** 使用环境变量覆盖限制：
 
 ```bash
-API_KEY_RATE_LIMIT=1000 WALLET_CREATE_RATE_LIMIT=50 ./teenet-wallet
+API_KEY_RATE_LIMIT=1000 WALLET_CREATE_RATE_LIMIT=50 RPC_RATE_LIMIT=200 ./teenet-wallet
 ```
 
 ---

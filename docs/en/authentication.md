@@ -51,7 +51,7 @@ curl -s -X DELETE ${TEE_WALLET_URL}/api/auth/apikey?prefix=ocw_a1b2c3d4 \
 
 API keys can perform most operations directly. However, certain sensitive operations (wallet deletion, policy deletion, contract removal, approval/reject actions) require a Passkey session. When an API key attempts to set a policy or add a contract to the whitelist, the request creates a pending approval that the Passkey owner must confirm.
 
-**Rate limiting:** Each API key is limited to a configurable number of requests per minute (default: 200). Wallet creation has a separate, lower limit (default: 5 per minute) because TEE distributed key generation is computationally expensive.
+**Rate limiting:** Each API key is limited to a configurable number of requests per minute (default: 100). Wallet creation has a separate, lower limit (default: 5 per minute) because TEE distributed key generation is computationally expensive. Endpoints that hit upstream RPC share a per-user cap of 50/min (`RPC_RATE_LIMIT`) covering both reads (`/call-read`, `/balance`) and fund-moving ops (`/transfer`, `/contract-call`, `/approve-token`, `/revoke-approval`, `/wrap-sol`, `/unwrap-sol`).
 
 ### Passkey Sessions
 

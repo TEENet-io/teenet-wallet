@@ -33,7 +33,8 @@ info:
 
     ## Rate Limiting
 
-    - General API: per-API-key, configurable (default 200 req/min).
+    - General API: per-API-key, configurable (default 100 req/min).
+    - RPC: per-user, configurable via `RPC_RATE_LIMIT` (default 50/min). Shared by reads (`/call-read`, `/balance`) and fund-moving ops (`/transfer`, `/contract-call`, `/approve-token`, `/revoke-approval`, `/wrap-sol`, `/unwrap-sol`) — total RPC usage per user cannot exceed this.
     - Wallet creation: per-user, configurable (default 5/min).
     - Registration: per-IP, configurable (default 10/min).
   version: 0.2.0

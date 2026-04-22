@@ -748,7 +748,7 @@ sleep 15 && curl -s "${TEENET_WALLET_API_URL}/api/wallets/<id>/balance" \
 
 ### 9.1. Check ERC-20 Token Balances On-Chain
 
-**Default: use the backend `/call-read` endpoint.** It's the single trusted path for on-chain reads — the backend uses a managed paid RPC, so there are no client-side rate-limit concerns. Reads do **not** require contract whitelisting and do **not** need approvals.
+**Default: use the backend `/call-read` endpoint.** It's the single trusted path for on-chain reads — the backend uses a managed paid RPC. Reads do **not** require contract whitelisting and do **not** need approvals. Subject to a per-user cap (`RPC_RATE_LIMIT`, default 50/min) shared across all RPC-hitting endpoints, including `/balance` and fund-moving ops.
 
 **Do this whenever the user asks for a token balance. Do not rely on `/balance`** (which returns only the native gas token).
 

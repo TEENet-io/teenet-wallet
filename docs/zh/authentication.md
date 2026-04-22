@@ -19,7 +19,7 @@ Authorization: Bearer ocw_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - 需要审批：设置审批策略（创建待审批请求）、添加白名单合约（创建待审批请求）
 - 不可执行：删除钱包、删除审批策略、审批/拒绝请求、撤销/重命名 API Key、删除地址簿条目（仅 Passkey）
 
-**速率限制：** 默认每分钟 200 次请求，钱包创建每分钟 5 次（可通过环境变量调整）。
+**速率限制：** 默认每分钟 100 次请求，钱包创建每分钟 5 次（可通过环境变量调整）。走上游 RPC 的接口共享一个每用户 50 次/分钟的上限（`RPC_RATE_LIMIT`），读（`/call-read`、`/balance`）和资金移动类（`/transfer`、`/contract-call`、`/approve-token`、`/revoke-approval`、`/wrap-sol`、`/unwrap-sol`）都计入同一个桶。
 
 **管理操作：**
 

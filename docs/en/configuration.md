@@ -12,9 +12,10 @@ All configuration is via environment variables. No configuration files are requi
 | `FRONTEND_URL` | _(empty)_ | Allowed CORS origin; empty disables CORS headers entirely |
 | `CHAINS_FILE` | `./chains.json` | Path to the chain configuration file |
 | `APP_INSTANCE_ID` | _(from TEENet)_ | TEENet application instance identifier; usually set automatically |
-| `API_KEY_RATE_LIMIT` | `200` | Maximum requests per minute per API key |
+| `API_KEY_RATE_LIMIT` | `100` | Maximum requests per minute per API key |
 | `WALLET_CREATE_RATE_LIMIT` | `5` | Maximum wallet creations per minute per key (TEE DKG is expensive) |
 | `REGISTRATION_RATE_LIMIT` | `10` | Maximum registration attempts per minute per IP |
+| `RPC_RATE_LIMIT` | `50` | Per-user cap on every endpoint that hits upstream RPC — reads (`/call-read`, `/balance`) and fund-moving ops (`/transfer`, `/contract-call`, `/approve-token`, `/revoke-approval`, `/wrap-sol`, `/unwrap-sol`) share this bucket. |
 | `APPROVAL_EXPIRY_MINUTES` | `1440` | Minutes before a pending approval request expires |
 | `MAX_WALLETS_PER_USER` | `10` | Maximum wallets a single user can create |
 | `MAX_API_KEYS_PER_USER` | `10` | Maximum API keys per user |

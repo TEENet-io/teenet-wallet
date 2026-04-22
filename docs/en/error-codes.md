@@ -13,7 +13,7 @@
 | `approval has expired` | The pending approval was not acted on within the expiry window (default: 24 hours) | Initiate the operation again to create a new approval request. |
 | `cannot overwrite a built-in chain` | Attempted to create a custom chain with the same name as a built-in chain | Choose a different name for the custom chain. |
 | `chain has existing wallets; delete them first` | Attempted to delete a custom chain that still has wallets | Delete all wallets on the chain before removing it. |
-| `rate limit exceeded` | Too many requests in the current time window | Wait and retry. Default limits: 200 requests/min per API key, 5 wallet creations/min, 10 registrations/min per IP. |
+| `rate limit exceeded` | Too many requests in the current time window | Wait and retry. Default limits: 100 requests/min per API key, 50 total RPC calls/min per user (reads + writes share this bucket), 5 wallet creations/min, 10 registrations/min per IP. |
 | `invalid CSRF token` | The request used a missing, stale, or incorrect `X-CSRF-Token` for the current Passkey session | Reuse the exact `csrf_token` returned by login in the `X-CSRF-Token` header on state-changing Passkey requests. |
 | `passkey session required` | The operation requires Passkey auth but was called with an API key | Use a Passkey session for this operation (wallet deletion, policy deletion, contract removal, approve/reject). |
 | `max wallets reached` | User has reached the `MAX_WALLETS_PER_USER` limit | Delete unused wallets or increase the limit in the server configuration. |

@@ -69,9 +69,10 @@ func main() {
 		}
 	}
 	chainsFile := envOrDefault("CHAINS_FILE", "./chains.json")
-	apiKeyRateLimit        := envOrDefaultInt("API_KEY_RATE_LIMIT", 200)       // general: requests per minute per API key
+	apiKeyRateLimit        := envOrDefaultInt("API_KEY_RATE_LIMIT", 100)       // general: requests per minute per API key
 	walletCreateRateLimit  := envOrDefaultInt("WALLET_CREATE_RATE_LIMIT", 5)  // wallet creation is TEE-DKG-bound
 	registrationRateLimit  := envOrDefaultInt("REGISTRATION_RATE_LIMIT", 10)  // public auth: prevent TEE DKG abuse
+	rpcRateLimit           := envOrDefaultInt("RPC_RATE_LIMIT", 50)           // per-user cap on any endpoint that hits upstream RPC (reads + writes share this bucket)
 	approvalExpiryMinutes  := envOrDefaultInt("APPROVAL_EXPIRY_MINUTES", 1440)
 	maxWalletsPerUser      := envOrDefaultInt("MAX_WALLETS_PER_USER", 10)
 	maxAPIKeysPerUser      := envOrDefaultInt("MAX_API_KEYS_PER_USER", 10)
@@ -368,8 +369,8 @@ func main() {
 	defer rateLimiter.Stop()
 	walletRateLimiter    := handler.NewRateLimiter(walletCreateRateLimit, time.Minute)
 	defer walletRateLimiter.Stop()
-	transferRateLimiter  := handler.NewRateLimiter(20, time.Minute) // 20 fund-moving ops/min per user
-	defer transferRateLimiter.Stop()
+	rpcLimiter           := handler.NewRateLimiter(rpcRateLimit, time.Minute)      // shared by all RPC-hitting endpoints (reads + writes)
+	defer rpcLimiter.Stop()
 	auth := r.Group("/api")
 	auth.Use(handler.AuthMiddleware(db, sessions))
 	auth.Use(handler.CSRFMiddleware())
@@ -421,14 +422,14 @@ func main() {
 	// General contract call (API Key or Passkey, with security layers).
 	contractCallH := handler.NewContractCallHandler(db, sdkClient, baseURL, approvalExpiry)
 	contractCallH.SetPriceService(priceService)
-	transferRL := handler.UserRateLimitMiddleware(transferRateLimiter)
-	auth.POST("/wallets/:id/contract-call", transferRL, contractCallH.ContractCall)
-	auth.POST("/wallets/:id/call-read", contractCallH.CallRead) // read-only eth_call; no signing, no whitelist
-	auth.POST("/wallets/:id/approve-token", transferRL, contractCallH.ApproveToken)
-	auth.POST("/wallets/:id/revoke-approval", transferRL, contractCallH.RevokeApproval)
-	auth.POST("/wallets/:id/transfer", transferRL, walletH.Transfer) // backend builds+broadcasts tx
-	auth.POST("/wallets/:id/wrap-sol", transferRL, walletH.WrapSOL)
-	auth.POST("/wallets/:id/unwrap-sol", transferRL, walletH.UnwrapSOL)
+	rpcRL := handler.UserRateLimitMiddleware(rpcLimiter)
+	auth.POST("/wallets/:id/contract-call", rpcRL, contractCallH.ContractCall)
+	auth.POST("/wallets/:id/call-read", rpcRL, contractCallH.CallRead) // read-only eth_call; no signing, no whitelist
+	auth.POST("/wallets/:id/approve-token", rpcRL, contractCallH.ApproveToken)
+	auth.POST("/wallets/:id/revoke-approval", rpcRL, contractCallH.RevokeApproval)
+	auth.POST("/wallets/:id/transfer", rpcRL, walletH.Transfer) // backend builds+broadcasts tx
+	auth.POST("/wallets/:id/wrap-sol", rpcRL, walletH.WrapSOL)
+	auth.POST("/wallets/:id/unwrap-sol", rpcRL, walletH.UnwrapSOL)
 	auth.GET("/wallets/:id/pubkey", walletH.GetPubkey)
 	auth.GET("/wallets/:id/policy", walletH.GetPolicy)        // read: API Key or Passkey
 	auth.PUT("/wallets/:id/policy", walletH.SetPolicy)        // passkey: apply directly; API key: creates approval
@@ -437,7 +438,7 @@ func main() {
 
 	// Balance (API Key or Passkey).
 	balanceH := handler.NewBalanceHandler(db)
-	auth.GET("/wallets/:id/balance", balanceH.GetBalance)
+	auth.GET("/wallets/:id/balance", rpcRL, balanceH.GetBalance)
 
 	// Faucet proxy (dual-auth, testnet only).
 	faucetURL := envOrDefault("FAUCET_URL", "")

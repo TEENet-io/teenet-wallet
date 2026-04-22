@@ -71,12 +71,12 @@ If you changed `DATA_DIR`, replace `/data` with your configured directory.
 
 **Problem:** API requests return `429 Too Many Requests`.
 
-**Cause:** Default rate limits are conservative: 200 requests/min per API key, 5 wallet creates/min.
+**Cause:** Default rate limits are conservative: 100 requests/min per API key, 50 total RPC calls/min per user (shared by reads and writes), 5 wallet creates/min.
 
 **Fix:** Override the limits with environment variables:
 
 ```bash
-API_KEY_RATE_LIMIT=1000 WALLET_CREATE_RATE_LIMIT=50 ./teenet-wallet
+API_KEY_RATE_LIMIT=1000 WALLET_CREATE_RATE_LIMIT=50 RPC_RATE_LIMIT=200 ./teenet-wallet
 ```
 
 ---
