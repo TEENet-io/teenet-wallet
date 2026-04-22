@@ -65,6 +65,14 @@ Private keys are sharded across independent TEE nodes, never exported, and the h
 - SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu; `dnf install sqlite-devel` on RHEL/Fedora/Alibaba Cloud Linux)
 - A TEENet service endpoint (`teenet-sdk/mock-server` for local development)
 
+### One-command dev setup
+
+```bash
+./scripts/dev.sh up
+```
+
+This clones `teenet-sdk` into a sibling directory if missing, builds both services, picks matching ports (override with `MOCK_PORT=` / `WALLET_PORT=`, or set `AUTO_PORT=1` to skip over busy ports), aligns `PASSKEY_RP_ORIGIN` automatically, and health-checks both. Use `down` to stop, `status` to inspect, `logs` to tail. Runtime state (PIDs, logs, SQLite) lives in `.dev/`. If you'd rather run the pieces by hand, follow the two sections below.
+
 ### Start the Mock Service
 
 ```bash
@@ -73,7 +81,7 @@ cd teenet-sdk/mock-server
 make run
 ```
 
-The mock service listens on `http://127.0.0.1:8089` by default and `make run` sets the Passkey defaults (`PASSKEY_RP_ORIGIN=http://localhost:18080`) that match the wallet's default origin. If you run the wallet on a non-default `PORT`, start the mock with a matching `PASSKEY_RP_ORIGIN=http://localhost:<port>` — WebAuthn requires an exact origin match. Leave this terminal running.
+The mock service listens on `http://0.0.0.0:8089` by default (bound on all interfaces so bridge-networked Docker containers can reach it; override with `MOCK_SERVER_BIND=127.0.0.1` to restrict to loopback-only). `make run` sets the Passkey defaults (`PASSKEY_RP_ORIGIN=http://localhost:18080`) that match the wallet's default origin. If you run the wallet on a non-default `PORT`, start the mock with a matching `PASSKEY_RP_ORIGIN=http://localhost:<port>` — WebAuthn requires an exact origin match. Leave this terminal running.
 When the mock server starts, it prints the available test app instance IDs.
 Use one of those printed values as `APP_INSTANCE_ID` in the wallet start command below.
 
@@ -110,14 +118,14 @@ For the complete local setup, including starting `teenet-sdk/mock-server` and cr
 ```bash
 make docker
 docker run -p 18080:18080 \
+  --add-host=host.docker.internal:host-gateway \
   -e APP_INSTANCE_ID=<mock-app-instance-id> \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
 
-The Docker image still requires a reachable TEENet service endpoint via `SERVICE_URL`.
-On Linux, `host.docker.internal` may require `--add-host=host.docker.internal:host-gateway` or an equivalent host-networking setup.
+The Docker image still requires a reachable TEENet service endpoint via `SERVICE_URL`. On Linux, `--add-host=host.docker.internal:host-gateway` is required (Docker Desktop on macOS/Windows adds this host automatically; the flag is harmless there). `make run` on the mock already binds to `0.0.0.0` by default so the container can reach it via the host gateway.
 
 ## Documentation
 

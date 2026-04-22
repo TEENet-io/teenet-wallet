@@ -27,6 +27,20 @@ apk add sqlite-dev gcc musl-dev
 
 ---
 
+## TL;DR —— 一键启动
+
+装好依赖以后,下面那一整套(clone SDK、构建两个服务、按匹配的端口和 origin 起来、健康检查)可以缩成一条:
+
+```bash
+./scripts/dev.sh up
+```
+
+可覆盖的环境变量:`MOCK_PORT=` / `WALLET_PORT=` / `APP_INSTANCE_ID=`,或 `AUTO_PORT=1` 自动跳过被占端口。配套还有 `down` / `status` / `logs`。运行时状态(PID / 日志 / SQLite)都在 `.dev/`。
+
+用脚本的话直接跳到 **Step 3** 验证,再 **Step 4** 注册 + 建钱包。下面的手工步骤保留是为了让你看到每一步具体在做什么,或者一段一段单独跑。
+
+---
+
 ## 1. 启动 mock 服务
 
 Mock 服务在开发期间替代 TEENet 服务。打开一个终端：

@@ -89,7 +89,7 @@ The `teenet-sdk/mock-server` stands in for the TEENet service during local devel
 
 ```bash
 cd teenet-sdk/mock-server
-make run    # listens on 127.0.0.1:8089 with localhost Passkey defaults
+make run    # listens on 0.0.0.0:8089 with localhost Passkey defaults
 ```
 
 - Implements the same HTTP API as the production TEENet service.

@@ -36,3 +36,6 @@ __debug_bin*
 # Local-only frontend workspace
 /frontend/
 
+# scripts/dev.sh runtime state (PIDs, logs, SQLite)
+/.dev/
+

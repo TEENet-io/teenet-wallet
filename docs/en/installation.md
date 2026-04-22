@@ -68,12 +68,16 @@ make frontend
 ```bash
 make docker
 docker run -p 18080:18080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e APP_INSTANCE_ID=<mock-app-instance-id> \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
 
-The image uses a multi-stage build. `host.docker.internal` routes to the host machine so the container can reach a mock service running outside Docker.
+The image uses a multi-stage build. On Linux, `--add-host=host.docker.internal:host-gateway` is required — without it the container cannot resolve `host.docker.internal`. Docker Desktop (macOS/Windows) adds this host automatically and the flag is harmless there.
+
+`make run` (mock-server) binds to `0.0.0.0` by default so the container can reach it via the host gateway; set `MOCK_SERVER_BIND=127.0.0.1` if you want to restrict the mock to loopback-only.
 
 ---
 
@@ -81,13 +85,15 @@ The image uses a multi-stage build. `host.docker.internal` routes to the host ma
 
 The mock service stands in for the TEENet service during development. It implements the full TEENet service HTTP API with real cryptographic signing, so the wallet behaves as if talking to production.
 
+> **Shortcut:** `./scripts/dev.sh up` in the wallet repo clones the SDK (if missing), builds both services, starts them with matching ports and WebAuthn origin, and health-checks. See the [Quick Start](quick-start.md) for the full menu of subcommands and env overrides. The rest of this section covers running the mock by hand.
+
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
 make run
 ```
 
-The mock service listens on `127.0.0.1:8089` by default.
+The mock service listens on `0.0.0.0:8089` by default.
 
 **WebAuthn origin.** The mock server validates Passkey registrations against `PASSKEY_RP_ORIGIN`. `make run`'s default is `http://localhost:18080`, which matches the wallet's default port. If you run the wallet on a different `PORT`, start the mock with a matching origin:
 

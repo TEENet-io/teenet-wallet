@@ -68,12 +68,16 @@ make frontend
 ```bash
 make docker
 docker run -p 18080:18080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e APP_INSTANCE_ID=<mock-app-instance-id> \
   -e SERVICE_URL=http://host.docker.internal:8089 \
   -v wallet-data:/data \
   teenet-wallet:latest
 ```
 
-镜像使用多阶段构建。`host.docker.internal` 路由到宿主机，使容器可以访问在 Docker 外部运行的 mock 服务。
+镜像使用多阶段构建。**Linux 上 `--add-host=host.docker.internal:host-gateway` 是必须的**——不加这个 flag,container 里 `host.docker.internal` 根本不解析。Docker Desktop (macOS/Windows) 会自动建这个 host,flag 加了也不会副作用。
+
+Mock 服务(`make run`)默认已经绑到 `0.0.0.0`,container 通过 host gateway 能直接打到;想把 mock 限制在 loopback-only,传 `MOCK_SERVER_BIND=127.0.0.1` 覆盖。
 
 ---
 
@@ -81,13 +85,15 @@ docker run -p 18080:18080 \
 
 Mock 服务在开发期间替代 TEENet 服务。它实现了完整的 TEENet 服务 HTTP API 并使用真实的密码学签名，因此钱包的行为与连接生产环境一致。
 
+> **快捷方式:** 在 wallet 仓库根目录跑 `./scripts/dev.sh up`——没有 SDK 就自动 clone、构建两个服务、按匹配端口和 WebAuthn origin 起来、做健康检查。完整子命令和环境变量见[快速开始](quick-start.md)。下面的内容是想手动起 mock 时的参考。
+
 ```bash
 git clone https://github.com/TEENet-io/teenet-sdk.git
 cd teenet-sdk/mock-server
 make run
 ```
 
-Mock 服务默认监听 `127.0.0.1:8089`。
+Mock 服务默认监听 `0.0.0.0:8089`。
 
 **WebAuthn origin。** Mock 服务会用 `PASSKEY_RP_ORIGIN` 校验 Passkey 注册。`make run` 的默认值是 `http://localhost:18080`,与钱包默认端口一致。如果你把钱包跑在非默认 `PORT`,启动 mock 时要传入匹配的 origin:
 

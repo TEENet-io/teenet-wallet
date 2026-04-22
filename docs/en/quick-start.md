@@ -27,6 +27,20 @@ apk add sqlite-dev gcc musl-dev
 
 ---
 
+## TL;DR — one-command setup
+
+Once the prerequisites are in place, the whole flow below (clone the SDK, build both services, start mock + wallet with matching ports and origin, health-check) collapses into:
+
+```bash
+./scripts/dev.sh up
+```
+
+Useful overrides: `MOCK_PORT=` / `WALLET_PORT=` / `APP_INSTANCE_ID=`, or `AUTO_PORT=1` to skip over busy ports. `down` / `status` / `logs` round out the script. Runtime state (PIDs, logs, SQLite) lives in `.dev/`.
+
+Skip to **Step 3** to verify, then **Step 4** to register and create your first wallet. The rest of this page walks the same steps by hand in case you want to understand what's happening or run them piece by piece.
+
+---
+
 ## 1. Start the mock service
 
 The mock service stands in for the TEENet service during development. Open a terminal:
