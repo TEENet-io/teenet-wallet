@@ -62,27 +62,13 @@ Response:
 {
   "success": true,
   "chains": [
-    {"name": "ethereum", "label": "Ethereum Mainnet", "currency": "ETH", "family": "evm", "custom": false},
-    {"name": "solana", "label": "Solana Mainnet", "currency": "SOL", "family": "solana", "custom": false},
-    {"name": "sepolia", "label": "Sepolia Testnet", "currency": "ETH", "family": "evm", "custom": false}
+    {"name": "ethereum", "label": "Ethereum Mainnet", "protocol": "ecdsa", "curve": "secp256k1", "currency": "ETH", "family": "evm", "rpc_url": "", "chain_id": 0},
+    {"name": "solana", "label": "Solana Mainnet", "protocol": "eddsa", "curve": "ed25519", "currency": "SOL", "family": "solana", "rpc_url": "", "chain_id": 0},
+    {"name": "sepolia", "label": "Sepolia Testnet", "protocol": "ecdsa", "curve": "secp256k1", "currency": "ETH", "family": "evm", "rpc_url": "", "chain_id": 0}
   ]
 }
 ```
 
-Custom EVM chains can be added at runtime (Passkey required):
+`rpc_url` is intentionally blanked in the response — all RPC calls happen server-side and the browser never needs the URL.
 
-```bash
-curl -s -X POST ${TEE_WALLET_URL}/api/chains \
-  -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
-  -H "X-CSRF-Token: ${CSRF_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "polygon",
-    "label": "Polygon Mainnet",
-    "currency": "MATIC",
-    "rpc_url": "https://polygon-rpc.com",
-    "chain_id": 137
-  }'
-```
-
-Custom chains are persisted in the database and survive restarts. They can be removed with `DELETE /api/chains/:name` (fails if any wallet exists on that chain).
+Chain definitions are loaded from `chains.json` at startup. To add or remove chains, edit that file and restart the service. See [chains.json Schema](chains-schema.md) and [How to Add a Chain](howto-add-chain.md) for details.

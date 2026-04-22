@@ -28,7 +28,7 @@ All configuration is via environment variables. No configuration files are requi
 | `QUICKNODE_TOKEN_KEY` | _(empty)_ | **Preferred for production.** Name of a TEE-backed API key whose value is the QuickNode token. Loaded via `sdk.GetAPIKey(name)` at startup, so the token never touches docker env or process env. Takes precedence over `QUICKNODE_TOKEN`. Startup aborts if the key is missing or unreachable. Create the key through the TEENet management console (API keys tab on the instance) or programmatically via `sdk.CreateAPIKey`. |
 | `PRICE_CACHE_TTL` | `120` (Docker image) / `60` (code default) | CoinGecko USD-price cache TTL, in seconds. Also controls how often the background refresher polls CoinGecko. The image ships with `120` because CoinGecko's free tier rate-limits at roughly one call per two minutes per IP — polling faster just produces a stream of benign 429 warnings. Lower to `60` only if you have a paid CoinGecko plan. |
 
-RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. Additional EVM chains can be added at runtime via `POST /api/chains` (Passkey required); these are persisted in the database and survive restarts.
+RPC URLs for each blockchain are defined in `chains.json`, not as individual environment variables. To add or remove chains, edit `chains.json` and restart the service — the file is loaded once at startup.
 
 ### QuickNode RPC overrides
 

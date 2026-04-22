@@ -28,7 +28,7 @@
 | `QUICKNODE_TOKEN_KEY` | （空） | **生产环境推荐。** 存在 TEE 中的 API key 名称，其 value 作为 QuickNode token 使用。启动时通过 `sdk.GetAPIKey(name)` 拉取，token 不再出现在 docker env 或进程 env 中。优先级高于 `QUICKNODE_TOKEN`。key 拉不到或 TEE 不可达时启动失败。可通过 TEENet 管理平台（实例页面 API Keys 标签）录入，或程序化调用 `sdk.CreateAPIKey`。 |
 | `PRICE_CACHE_TTL` | `120`（Docker 镜像）/ `60`（代码默认） | CoinGecko USD 价格缓存 TTL，单位秒。同时决定后台刷新线程的轮询间隔。镜像默认 `120`，因为 CoinGecko 免费档对单个 IP 的实际频率限制大概是每 2 分钟 1 次，拉得更快只会刷出一堆无害的 429 警告。有 CoinGecko 付费计划时可下调到 `60`。 |
 
-区块链 RPC URL 在 `chains.json` 文件中定义，不作为独立环境变量。可通过 `CHAINS_FILE` 环境变量指定自定义路径。也可在运行时通过 `POST /api/chains` 动态添加自定义 EVM 链。
+区块链 RPC URL 在 `chains.json` 文件中定义，不作为独立环境变量。可通过 `CHAINS_FILE` 环境变量指定自定义路径。新增/删除链请编辑 `chains.json` 并重启服务——该文件仅在启动时加载一次。
 
 ### QuickNode RPC 覆写
 

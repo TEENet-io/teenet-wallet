@@ -2,7 +2,7 @@
 
 ## Checklist
 
-1. **Add an entry to `chains.json`** -- see [chains.json Schema](chains-schema.md) for the full field specification. You can also add chains at runtime via `POST /api/chains`.
+1. **Add an entry to `chains.json`** -- see [chains.json Schema](chains-schema.md) for the full field specification. Changes require a service restart; `chains.json` is loaded once at startup.
 
 2. **Add a CoinGecko price feed mapping** in `handler/price.go` -- look for the `coinGeckoIDs` map and add the native currency symbol.
 

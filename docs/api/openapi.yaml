@@ -516,7 +516,10 @@ paths:
     get:
       tags: [Public]
       summary: List supported chains
-      description: Returns all built-in and custom blockchain configurations.
+      description: |
+        Returns all supported blockchain configurations. Chain definitions are
+        loaded from `chains.json` at startup; the `rpc_url` field is blanked in
+        the response because all RPC calls happen server-side.
       operationId: listChains
       responses:
         "200":
@@ -533,131 +536,6 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/ChainConfig"
-
-    post:
-      tags: [Public]
-      summary: Add a custom EVM chain
-      description: |
-        Adds a custom EVM chain to the registry (persisted in DB across restarts).
-        Only EVM chains are supported. Cannot overwrite built-in chains.
-      operationId: addCustomChain
-      security:
-        - PasskeySession: []
-      parameters:
-        - $ref: "#/components/parameters/CSRFToken"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name, rpc_url]
-              properties:
-                name:
-                  type: string
-                  description: Unique chain identifier
-                  example: "my-l2"
-                label:
-                  type: string
-                  description: Display name
-                  example: "My Custom L2"
-                currency:
-                  type: string
-                  example: "ETH"
-                rpc_url:
-                  type: string
-                  example: "https://rpc.my-l2.example.com"
-                chain_id:
-                  type: integer
-                  format: uint64
-                  example: 12345
-      responses:
-        "201":
-          description: Chain created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  chain:
-                    $ref: "#/components/schemas/ChainConfig"
-        "400":
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "401":
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "403":
-          description: Not a Passkey session
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: Chain name conflict (built-in or already exists)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /api/chains/{name}:
-    delete:
-      tags: [Public]
-      summary: Remove a custom chain
-      description: |
-        Deletes a user-added custom chain. Fails if any wallets exist on it.
-        Cannot delete built-in chains.
-      operationId: deleteCustomChain
-      security:
-        - PasskeySession: []
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-          example: "my-l2"
-        - $ref: "#/components/parameters/CSRFToken"
-      responses:
-        "200":
-          description: Chain deleted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessFlag"
-        "401":
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "403":
-          description: Cannot delete built-in chain
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "404":
-          description: Chain not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: Chain has existing wallets
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
 
   /api/prices:
     get:
@@ -689,6 +567,147 @@ paths:
                       USDT: 1.0
 
   # ──────────────────────── Authentication ────────────────────────
+  /api/auth/email/send-code:
+    post:
+      tags: [Authentication]
+      summary: Send email verification code
+      description: |
+        Sends a 6-digit verification code to the supplied email address. In mock
+        mode (no SMTP configured) the code defaults to `999999` (override via
+        `DEV_FIXED_CODE`). IP-rate-limited.
+      operationId: emailSendCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "alice@example.com"
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "code sent"
+                  expires_in:
+                    type: integer
+                    description: Seconds until the code expires
+                    example: 600
+                  resend_cooldown:
+                    type: integer
+                    description: Seconds before another code can be requested
+                    example: 60
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Resend cooldown still active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: SMTP send failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/email/verify-code:
+    post:
+      tags: [Authentication]
+      summary: Verify email code
+      description: |
+        Validates the 6-digit code previously sent via `/api/auth/email/send-code`
+        and returns a `verification_id` used by the subsequent Passkey registration
+        flow. IP-rate-limited.
+      operationId: emailVerifyCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "alice@example.com"
+                code:
+                  type: string
+                  description: 6-digit verification code
+                  example: "999999"
+      responses:
+        "200":
+          description: Code verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  verification_id:
+                    type: string
+                    description: Opaque ID to pass into Passkey registration
+                  expires_in:
+                    type: integer
+                    example: 600
+        "400":
+          description: Missing fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No pending code for email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "410":
+          description: Code expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "423":
+          description: Too many failed attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/auth/check-name:
     get:
       tags: [Authentication]
@@ -1190,6 +1209,70 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /api/auth/apikey:
+    patch:
+      tags: [Authentication]
+      summary: Rename an API key
+      description: Changes the human-readable label of an existing API key. Requires a Passkey session.
+      operationId: renameApiKey
+      security:
+        - PasskeySession: []
+      parameters:
+        - $ref: "#/components/parameters/CSRFToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix, label]
+              properties:
+                prefix:
+                  type: string
+                  description: API key prefix (identifier)
+                  example: "ocw_a1b2c3d4"
+                label:
+                  type: string
+                  description: New label
+                  example: "Production key"
+      responses:
+        "200":
+          description: API key renamed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  label:
+                    type: string
+                    example: "Production key"
+        "400":
+          description: Missing prefix or label
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Not a Passkey session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
     delete:
       tags: [Authentication]
       summary: Revoke an API key

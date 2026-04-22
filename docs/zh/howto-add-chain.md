@@ -2,7 +2,7 @@
 
 ## 检查清单
 
-1. **在 `chains.json` 中添加条目** —— 完整字段说明请参阅 [chains.json Schema](chains-schema.md)。也可以在运行时通过 `POST /api/chains` 添加链。
+1. **在 `chains.json` 中添加条目** —— 完整字段说明请参阅 [chains.json Schema](chains-schema.md)。`chains.json` 只在启动时加载一次,修改后需要重启服务生效。
 
 2. **在 `handler/price.go` 中添加 CoinGecko 价格源映射** —— 找到 `coinGeckoIDs` map 并添加原生代币符号。
 

@@ -15,6 +15,9 @@ Install SQLite headers for your platform:
 # Debian / Ubuntu
 sudo apt-get install libsqlite3-dev
 
+# RHEL / Fedora / Rocky / AlmaLinux / Alibaba Cloud Linux
+sudo dnf install sqlite-devel
+
 # macOS (included with Xcode Command Line Tools)
 xcode-select --install
 
@@ -45,6 +48,10 @@ Use one of the printed app IDs as `APP_INSTANCE_ID` when starting the wallet.
 
 Leave this running.
 
+> **Non-default wallet port?** WebAuthn requires an exact `scheme://host:port` match, so if you override `PORT` in Step 2, start the mock with a matching origin: `PASSKEY_RP_ORIGIN=http://localhost:<port> make run`. The default (`:18080`) matches the wallet's default.
+>
+> **Port 8089 already in use?** Override with `MOCK_SERVER_PORT=<port>` and set `SERVICE_URL` in Step 2 accordingly.
+
 ---
 
 ## 2. Build and run the wallet
@@ -67,6 +74,8 @@ Expected output:
 ```
 ..."msg":"server starting","addr":"0.0.0.0:18080"...
 ```
+
+> **Port 18080 already in use?** Set `PORT=<port>` on the wallet command line, and start the mock service in Step 1 with a matching `PASSKEY_RP_ORIGIN=http://localhost:<port>`.
 
 ---
 
@@ -115,10 +124,16 @@ Expected response:
   "success": true,
   "wallet": {
     "id": "8a2fbc16-faf4-451a-be34-9fc5c49cde00",
+    "user_id": 1,
     "chain": "sepolia",
+    "key_name": "wallet-8a2fbc16...",
+    "public_key": "03abcd...",
     "address": "0x1234abcd5678ef90...",
     "label": "Test Wallet",
-    "status": "ready"
+    "curve": "secp256k1",
+    "protocol": "ecdsa",
+    "status": "ready",
+    "created_at": "2026-04-22T10:30:00Z"
   }
 }
 ```

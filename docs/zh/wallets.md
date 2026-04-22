@@ -60,7 +60,7 @@ curl -s -X DELETE "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}" \
 - EVM 链族（`family: "evm"`）：使用 ECDSA/secp256k1 协议，地址格式为 `0x...`
 - Solana 链族（`family: "solana"`）：使用 EdDSA/ed25519 协议，地址格式为 base58
 
-可通过 `GET /api/chains` 动态获取当前可用链列表，包括内置链和运行时添加的自定义链。
+可通过 `GET /api/chains` 获取当前可用链列表。链定义在启动时从 `chains.json` 加载,要新增/删除链请编辑该文件并重启服务,详见 [chains.json Schema](chains-schema.md) 与 [如何添加新链](howto-add-chain.md)。
 
 ---
 [上一页: 认证体系](/zh/authentication.md) | [下一页: 转账](/zh/transfers.md)

@@ -15,6 +15,9 @@
 # Debian / Ubuntu
 sudo apt-get install libsqlite3-dev
 
+# RHEL / Fedora / Rocky / AlmaLinux / 阿里云 Linux
+sudo dnf install sqlite-devel
+
 # macOS (已包含在 Xcode Command Line Tools 中)
 xcode-select --install
 
@@ -45,6 +48,10 @@ Available test App IDs: ...
 
 保持此终端运行。
 
+> **钱包端口不是默认的 18080?** WebAuthn 要求 `scheme://host:port` 精确匹配,若你在第 2 步自定义了 `PORT`,启动 mock 时要同步传入:`PASSKEY_RP_ORIGIN=http://localhost:<port> make run`。默认 `:18080` 跟钱包默认端口一致,不用改。
+>
+> **8089 端口被占?** 用 `MOCK_SERVER_PORT=<port>` 覆盖,并在第 2 步相应修改 `SERVICE_URL`。
+
 ---
 
 ## 2. 构建并运行钱包
@@ -67,6 +74,8 @@ APP_INSTANCE_ID=<mock-app-instance-id> DATA_DIR=./data SERVICE_URL=http://127.0.
 ```
 ..."msg":"server starting","addr":"0.0.0.0:18080"...
 ```
+
+> **18080 端口被占?** 在启动命令里加上 `PORT=<port>`,并在第 1 步启动 mock 时同步传入 `PASSKEY_RP_ORIGIN=http://localhost:<port>`。
 
 ---
 
@@ -115,10 +124,16 @@ curl -s -X POST http://localhost:18080/api/wallets \
   "success": true,
   "wallet": {
     "id": "8a2fbc16-faf4-451a-be34-9fc5c49cde00",
+    "user_id": 1,
     "chain": "sepolia",
+    "key_name": "wallet-8a2fbc16...",
+    "public_key": "03abcd...",
     "address": "0x1234abcd5678ef90...",
     "label": "Test Wallet",
-    "status": "ready"
+    "curve": "secp256k1",
+    "protocol": "ecdsa",
+    "status": "ready",
+    "created_at": "2026-04-22T10:30:00Z"
   }
 }
 ```

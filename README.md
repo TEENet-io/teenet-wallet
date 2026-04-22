@@ -62,7 +62,7 @@ Private keys are sharded across independent TEE nodes, never exported, and the h
 
 - Go 1.25+
 - Node.js + npm (required for `make frontend`)
-- SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu)
+- SQLite3 development headers (`apt-get install libsqlite3-dev` on Debian/Ubuntu; `dnf install sqlite-devel` on RHEL/Fedora/Alibaba Cloud Linux)
 - A TEENet service endpoint (`teenet-sdk/mock-server` for local development)
 
 ### Start the Mock Service
@@ -73,7 +73,7 @@ cd teenet-sdk/mock-server
 make run
 ```
 
-The mock service listens on `http://127.0.0.1:8089` by default and `make run` sets the localhost Passkey defaults it needs for local development. Leave it running in a separate terminal.
+The mock service listens on `http://127.0.0.1:8089` by default and `make run` sets the Passkey defaults (`PASSKEY_RP_ORIGIN=http://localhost:18080`) that match the wallet's default origin. If you run the wallet on a non-default `PORT`, start the mock with a matching `PASSKEY_RP_ORIGIN=http://localhost:<port>` — WebAuthn requires an exact origin match. Leave this terminal running.
 When the mock server starts, it prints the available test app instance IDs.
 Use one of those printed values as `APP_INSTANCE_ID` in the wallet start command below.
 

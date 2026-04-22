@@ -9,6 +9,7 @@ Complete installation reference for teenet-wallet. For the fastest path, see [Qu
 | Platform | Notes |
 |----------|-------|
 | Linux (Debian/Ubuntu) | Primary target |
+| Linux (RHEL/Fedora/Rocky/AlmaLinux/Alibaba Cloud Linux) | Install `sqlite-devel` via `dnf` |
 | Linux (Alpine) | Requires extra packages for CGo |
 | macOS | Requires Xcode Command Line Tools |
 | Docker | Multi-stage build included |
@@ -28,6 +29,9 @@ SQLite3 development headers are the only external dependency.
 ```bash
 # Debian / Ubuntu
 sudo apt-get install libsqlite3-dev
+
+# RHEL / Fedora / Rocky / AlmaLinux / Alibaba Cloud Linux
+sudo dnf install sqlite-devel
 
 # Alpine
 apk add sqlite-dev gcc musl-dev
@@ -85,13 +89,21 @@ make run
 
 The mock service listens on `127.0.0.1:8089` by default.
 
+**WebAuthn origin.** The mock server validates Passkey registrations against `PASSKEY_RP_ORIGIN`. `make run`'s default is `http://localhost:18080`, which matches the wallet's default port. If you run the wallet on a different `PORT`, start the mock with a matching origin:
+
+```bash
+PASSKEY_RP_ORIGIN=http://localhost:<wallet-port> make run
+```
+
+Browser Passkey registration requires an exact `scheme://host:port` match; any mismatch fails with an origin-mismatch error.
+
 **Custom port and bind address:**
 
 ```bash
 MOCK_SERVER_PORT=9090 MOCK_SERVER_BIND=0.0.0.0 ./mock-server
 ```
 
-If you change the port, update `SERVICE_URL` to match when starting the wallet.
+If you change the mock port, update `SERVICE_URL` to match when starting the wallet.
 
 > The mock service is in-memory only -- state resets on restart. Do not use in production.
 
