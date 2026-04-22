@@ -34,10 +34,6 @@ export function registerTransferTools(
 
       const result = await api.transfer(params.wallet_id, params.to, params.amount, token, params.memo);
 
-      if (result.status === "completed") {
-        return jsonResult({ status: "completed", tx_hash: result.tx_hash, message: "Transfer successful." });
-      }
-
       const context = `transfer ${params.amount} ${params.token_symbol || 'native'} to ${params.to} from wallet ${params.wallet_id}`;
       return approvalOrResult(result, getApprovalUrl, watcher, ctx?.sessionKey, context);
     },

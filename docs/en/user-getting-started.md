@@ -60,7 +60,7 @@ Provide your agent with the **API key** from Step 2 and the **wallet API URL** s
 
 ## Step 4: Test Your Wallet
 
-Ask your agent to run a quick test. On OpenClaw, type `/test`. The agent will create a testnet wallet for you if you don't have one, then walk you through:
+Ask your agent to run a quick test, for example: *"Run a guided test of my wallet."* The agent will create a testnet wallet for you if you don't have one, then walk you through:
 
 1. **Check balance** -- confirm the wallet is active
 2. **Get test tokens** -- from a faucet (free, testnet only)
@@ -70,4 +70,4 @@ Ask your agent to run a quick test. On OpenClaw, type `/test`. The agent will cr
 6. **Send a larger amount** -- held until you approve with Passkey
 7. **Whitelist a token** -- adds test USDC to your contract whitelist
 
-Testnet faucets: [Sepolia ETH](https://faucet.google.com/ethereum/sepolia) · [Solana Devnet](https://faucet.solana.com) · [Test USDC](https://faucet.circle.com)
+Testnet faucets: Sepolia ETH, Base Sepolia ETH, and Solana Devnet SOL are built into the agent (just ask for test tokens). For external sources: [Sepolia ETH](https://faucet.google.com/ethereum/sepolia) · [Test USDC](https://faucet.circle.com)

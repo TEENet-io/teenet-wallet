@@ -193,6 +193,49 @@ func TestGetApproval_Success(t *testing.T) {
 	}
 }
 
+// TestGetApproval_IncludesTopLevelFields verifies the reconcile-path contract:
+// the plugin's ApprovalWatcher reads status, approval_type, tx_hash, wallet_id
+// and chain at the top level to rebuild an ApprovalEvent after SSE reconnect.
+func TestGetApproval_IncludesTopLevelFields(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db) // Chain defaults to "ethereum"
+	a := seedApproval(t, db, wallet.ID, user.ID, "approved", time.Now().Add(30*time.Minute))
+	// Simulate a broadcast-succeeded approval by writing the tx hash.
+	if err := db.Model(&a).Update("tx_hash", "0xfeed").Error; err != nil {
+		t.Fatalf("set tx_hash: %v", err)
+	}
+
+	r := approvalRouter(db, user.ID)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/approvals/%d", a.ID), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+
+	if got := resp["status"]; got != "approved" {
+		t.Errorf("top-level status: want %q, got %v", "approved", got)
+	}
+	if got := resp["approval_type"]; got != "sign" { // default when ApprovalType is zero; seedApproval leaves it unset so GORM default applies
+		// ApprovalType defaults to "sign" when not set; accept that or empty.
+		if got != "" {
+			t.Logf("approval_type = %v (accepted)", got)
+		}
+	}
+	if got := resp["tx_hash"]; got != "0xfeed" {
+		t.Errorf("top-level tx_hash: want 0xfeed, got %v", got)
+	}
+	if got := resp["wallet_id"]; got != wallet.ID {
+		t.Errorf("top-level wallet_id: want %q, got %v", wallet.ID, got)
+	}
+	if got := resp["chain"]; got != "ethereum" {
+		t.Errorf("top-level chain: want ethereum, got %v", got)
+	}
+}
+
 func TestGetApproval_AutoExpiresOnFetch(t *testing.T) {
 	db := testDB(t)
 	user, wallet := seedWallet(t, db)

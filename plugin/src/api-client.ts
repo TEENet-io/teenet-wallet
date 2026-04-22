@@ -97,6 +97,8 @@ export interface ApprovalDetail {
   approval_type?: string;
   tx_hash?: string;
   wallet_id?: string;
+  /** Chain name of the wallet this approval belongs to, when WalletID is set. */
+  chain?: string;
   approval: {
     id: number;
     status: string;

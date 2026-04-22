@@ -275,15 +275,16 @@ export class ApprovalWatcher {
       ids.map(async (approvalId) => {
         if (!this.sessionMap.has(approvalId)) return; // already handled by SSE
         const approval = await this.api.getApproval(approvalId);
-        const status = approval?.status as string;
+        const status = (approval?.status ?? approval?.approval?.status) as string;
         if (status && status !== "pending") {
           this.log("reconcile.found", { approvalId, status });
           this.onApprovalResolved({
             approval_id: approvalId,
             status,
-            approval_type: approval.approval_type || "unknown",
-            tx_hash: approval.tx_hash,
-            wallet_id: approval.wallet_id,
+            approval_type: approval.approval_type ?? approval.approval?.approval_type ?? "unknown",
+            tx_hash: approval.tx_hash ?? approval.approval?.tx_hash,
+            wallet_id: approval.wallet_id ?? approval.approval?.wallet_id,
+            chain: approval.chain,
           });
         }
       }),

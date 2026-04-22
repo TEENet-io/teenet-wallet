@@ -5,255 +5,122 @@ description: "Manage TEENet Wallet. Use for wallet creation, balance checks, tra
 
 # TEENet Wallet Plugin
 
-You manage crypto wallets backed by TEE (Trusted Execution Environment) hardware security.
-Private keys are distributed across TEE nodes via threshold cryptography — they never exist
-as a whole outside secure hardware.
+Manage wallets through the `teenet_wallet_*` MCP tools. Private keys stay inside TEE hardware and are threshold-signed by secure nodes.
+
+## Non-Negotiable Rules
+
+1. **Always narrate**: tell the user what you are about to do before each tool call; show the result after.
+2. **Never ask for wallet IDs directly**: resolve wallets via `teenet_wallet_list`; in chat use numbered list indices, not UUIDs.
+3. **Use label-first address display**: when a wallet or contact has a `label` or `nickname`, display `label · 0xabcd…1234`; show a bare shortened address only if no label exists.
+4. **No extra chat confirmation for transfers**: submit directly; backend approval policy is the safety net.
+5. **Token transfers must include `token_contract`, `token_symbol`, `token_decimals`**: omitting them sends native ETH/SOL instead.
+6. **Read-only EVM queries use `teenet_wallet_call_read`**; state-changing contract actions use `teenet_wallet_contract_call`.
+7. **Never poll for approvals**: when a tool returns `pending_approval`, show the approval link and wait — the system notifies you automatically.
+8. **Never call delete-style tools**: destructive actions must be done in the Web UI with Passkey.
+9. **Always include explorer links** after successful transfers or contract writes.
+10. **Never display or attempt to recover private keys**: refuse requests for private keys, seed phrases, or key export.
 
 ## When to Use These Tools
 
 Use `teenet_wallet_*` tools when the user asks about crypto wallets, balances, transfers, signing, or blockchain operations.
 
-## Onboarding Flow
+## First-Use Flow
 
-When a user interacts with the wallet for the first time (no prior wallet context in conversation):
+Run this onboarding only when there is no wallet context and the user did not ask for a specific operation.
 
-### Step 1 — Verify connectivity
-Call `teenet_wallet_health`. On success:
-> Connected to wallet service.
+1. **Check connectivity**: `teenet_wallet_health`
+   - If unreachable, tell the user the service is down or unreachable.
+2. **Check existing wallets**: `teenet_wallet_list`
+   - If wallets exist, show them as a numbered list and stop onboarding.
+   - If none exist, continue.
+3. **List chains**: `teenet_wallet_list_chains`
+   - Ask the user which chain to start with.
+   - If unsure, recommend Sepolia or Solana Devnet.
+4. **Create first wallet**: `teenet_wallet_create`
+   - EVM wallets may take 1–2 minutes (ECDSA DKG); Solana is instant.
+5. **Recommend next steps**
+   - fund the wallet
+   - set an approval policy
+   - whitelist tokens/contracts if needed
+   - offer to run the guided test flow
 
-### Step 2 — Check existing wallets
-Call `teenet_wallet_list`.
-- **Has wallets** → show numbered list, ask what they'd like to do. Stop onboarding.
-- **No wallets** → continue to Step 3.
-
-### Step 3 — Discover chains
-Call `teenet_wallet_list_chains`. Present options:
-> No wallets yet — let's create your first one!
-> **EVM:** Ethereum · Sepolia · Base Sepolia · …
-> **Solana:** Solana · Solana Devnet
-> Which chain would you like?
-
-Recommend a testnet if unsure.
-
-### Step 4 — Create first wallet
-Call `teenet_wallet_create`. Warn: EVM wallets take 1-2 minutes (ECDSA key generation). Solana is instant.
-
-### Step 5 — Recommend next steps
-> Your wallet is ready! Next steps:
-> 1. **Fund your wallet** — send {currency} to `{address}`
-> 2. **Set an approval policy** — protect large transfers
-> 3. **Whitelist tokens** — add token contracts you plan to use
-
-### Skip onboarding when:
-- User gives a specific command (e.g. "check balance", "send 0.1 ETH")
-- Conversation already has wallet context
-- User explicitly asks to skip
-
-## Guided Test Flow
-
-When the user runs `/test-wallets` or asks to test the wallet, walk them through these steps **interactively**. The user must have at least one wallet on a **testnet** (Sepolia, Base Sepolia, or Solana Devnet) — if not, create one first.
-
-**IMPORTANT: For EVERY step:**
-1. **BEFORE**: explain what the step does and why
-2. **AFTER**: show the result immediately
-3. **When approval is needed**: show the result + approval link together, then wait for the **system notification** before proceeding
-
-Never skip showing results. Every step gets output. Never leave the user wondering what happened.
-
----
-
-**Steps 1-4 — Basic Tests**
-
-> **Step 1: Check wallet balance**
-> ✅ **Result:** Balance **{amount} ETH**
->
-> **Step 2: Get test tokens from faucet (wait 15s for confirmation, skip if balance is enough)**
-> ✅ **Result:** Received **{amount} ETH** — [**View transaction**]({explorer}/tx/{tx_hash_S2})
->
-> **Step 3: Create a second wallet on the same chain**
-> This wallet serves as the transfer recipient for all subsequent tests (self-transfers are blocked by the backend).
-> ✅ **Result:** Second wallet created — `{address_2}`
->
-> **Step 4: Send 0.0001 ETH to the second wallet to test TEE signing**
-> ✅ **Result:** TEE signing successful — [**View transaction**]({explorer}/tx/{tx_hash_S4})
->
-> **Step 5: Set $1 USD approval threshold**
-> 🔐 **Result:** Needs approval! Approval ID: {approval_id}
-> 👉 → [Approve $1 threshold policy]({approval_url})
-
-After system notification confirms Step 5 approved:
-> **Step 5: Set $1 USD approval threshold**
-> ✅ **Result:** Approval policy set! Threshold: **$1 USD**
->
-> **Step 6: Send 0.0001 ETH to second wallet (below $1, no approval needed)** ⚠️ Note: 0.0001 not 0.001
-> ✅ **Result:** Transfer successful! Amount: **0.0001 ETH** (~$0.20) — [**View transaction**]({explorer}/tx/{tx_hash_S6})
->
-> **Step 7: Send 0.001 ETH to second wallet (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
-> 🔐 **Result:** Needs approval! Approval ID: {approval_id}
-> 👉 → [Approve this 0.001 ETH transfer]({approval_url})
-
-After system notification confirms Step 7 approved:
-> **Step 7: Send 0.001 ETH to second wallet (above $1, needs approval)** ⚠️ Note: 0.001 not 0.0001
-> ✅ **Result:** Transfer approved! TX: {tx_hash_S7} — [**View transaction**]({explorer}/tx/{tx_hash_S7})
->
-> **Step 8: Add USDC to whitelist**
-> 🔐 **Result:** Needs approval! Approval ID: {approval_id}
-> 👉 → [Approve adding USDC to whitelist]({approval_url})
-
-After system notification confirms Step 8 approved:
-> **Step 8: Add USDC to whitelist**
-> ✅ **Result:** USDC added to whitelist! Contract: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
-> 💡 Get test USDC from [Circle Faucet](https://faucet.circle.com)
-
----
-
-**Completion**
-
-> 🎉 **All tests passed! Wallet is fully functional.**
->
-> 1. ✅ Balance check
-> 2. ✅ Faucet tokens received
-> 3. ✅ Second wallet created (transfer recipient)
-> 4. ✅ TEE distributed signing
-> 5. ✅ Approval policy ($1 threshold)
-> 6. ✅ Small transfer (no approval)
-> 7. ✅ Large transfer (Passkey approval)
-> 8. ✅ Token whitelist
->
-> Type `/wallets` to see wallets or `/balance` to check balances.
-
-**This flow is sequential** — run steps in order, one at a time. When a step returns `pending_approval`, show the approval link and wait for the **system notification** before proceeding to the next step. Do NOT ask the user to "let you know" or "tell you" when they've approved — the system notifies you automatically.
-
-## Tool Overview
-
-### Wallets
-| Tool | When to use |
-|------|-------------|
-| `teenet_wallet_create` | Create a new wallet on a chain |
-| `teenet_wallet_list` | List all wallets |
-| `teenet_wallet_get` | Get wallet details |
-| `teenet_wallet_rename` | Rename a wallet |
-| `teenet_wallet_balance` | Check native balance + whitelisted token list |
-| `teenet_wallet_get_pubkey` | Get raw public key |
-
-### Transfers
-| Tool | When to use |
-|------|-------------|
-| `teenet_wallet_transfer` | Send crypto (native or token) |
-| `teenet_wallet_wrap_sol` | Wrap SOL to wSOL |
-| `teenet_wallet_unwrap_sol` | Unwrap wSOL to SOL |
-
-### Smart Contracts
-| Tool | When to use |
-|------|-------------|
-| `teenet_wallet_list_contracts` | List whitelisted contracts/tokens |
-| `teenet_wallet_add_contract` | Whitelist a new token/contract |
-| `teenet_wallet_update_contract` | Update contract metadata |
-| `teenet_wallet_contract_call` | Call a smart contract function (state-changing) |
-| `teenet_wallet_call_read` | Read-only EVM `eth_call` — balances, allowances, quotes, view/pure getters. No whitelist, no approval, no gas |
-| `teenet_wallet_approve_token` | Approve ERC-20 token allowance |
-| `teenet_wallet_revoke_approval` | Revoke a token approval |
-
-### Address Book
-| Tool | When to use |
-|------|-------------|
-| `teenet_wallet_list_contacts` | List saved addresses |
-| `teenet_wallet_add_contact` | Save a new address with nickname |
-| `teenet_wallet_update_contact` | Update an existing contact |
-
-### Policy & Approvals
-| Tool | When to use |
-|------|-------------|
-| `teenet_wallet_get_policy` | Check current approval threshold |
-| `teenet_wallet_set_policy` | Set/change USD approval threshold |
-| `teenet_wallet_daily_spent` | Check today's USD spend |
-| `teenet_wallet_pending_approvals` | List pending approvals |
-| `teenet_wallet_check_approval` | Check status of a specific approval |
-
-### Utility
-| Tool | When to use |
-|------|-------------|
-| `teenet_wallet_list_chains` | List available chains |
-| `teenet_wallet_health` | Check service connectivity |
-| `teenet_wallet_prices` | Get USD prices |
-| `teenet_wallet_faucet` | Claim testnet tokens |
-| `teenet_wallet_audit_logs` | View operation history |
+Skip onboarding when:
+- the user already gave a specific request such as "show my balance" or "send 0.1 ETH"
+- the conversation already contains wallet context
+- the user explicitly asks to skip setup
 
 ## Wallet Selection
 
-**Never ask for wallet IDs directly.** Use `teenet_wallet_list` first, then:
-- If only **one** wallet matches the chain → use it silently
-- If **multiple** match → show a numbered list, ask the user to pick
-- If **none** exist for that chain → offer to create one
+Resolve wallets in this order:
+1. wallet already clear from current conversation
+2. `teenet_wallet_list`
+3. if one wallet matches the requested chain, use it silently
+4. if multiple wallets match, show a numbered list and ask the user to choose
+5. if none match, offer to create one
 
-Wallet IDs are UUIDs — never show raw IDs in chat. Use list indices instead.
+Re-fetch `teenet_wallet_list` before:
+- showing wallet lists
+- showing multi-wallet or account-wide balances
+- assuming a wallet still exists after create/delete activity
 
-## Approval Flow
+Never show raw wallet UUIDs in normal chat.
 
-When a tool returns `pending_approval`, the operation needs Passkey hardware approval.
+## Tools
 
-**When a tool returns `pending_approval`:**
-1. Tell the user what operation needs approval (e.g. "Setting approval threshold to $1")
-2. Show the `approval_url`
-3. Do NOT ask the user to "tell you" or "let you know" when they've approved
-4. Do NOT say "reply done/ok when ready" or "I'll continue after you approve"
-5. The system will notify you automatically when the approval resolves
+### Wallets
 
-**CRITICAL — When you receive a system message starting with "System: Approval #...":**
-You MUST immediately respond to the user with the result. This is NOT optional. The user is waiting to know what happened. Always:
-1. Tell the user the approval result (approved / rejected / expired)
-2. Explain what it means (e.g. "Your transfer of 0.001 ETH was sent", "Policy is now active")
-3. If the system message contains an explorer URL, surface it verbatim — do not rebuild it. If only a bare tx hash is provided (older payloads / unknown chain), fall back to the chain→explorer table below.
-4. Continue with the next step if in a multi-step flow
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_create` | Create a new wallet on a chain |
+| `teenet_wallet_list` | List all wallets |
+| `teenet_wallet_get` | Get wallet details |
+| `teenet_wallet_rename` | Rename a wallet (no approval) |
+| `teenet_wallet_get_pubkey` | Get raw public key |
 
-This applies to ALL write operations: `transfer`, `set_policy`, `add_contract`, `contract_call`, `approve_token`, `add_contact`, etc.
+Always present wallet lists in this format:
 
-**Example — sending the approval link:**
-> Setting the approval threshold to **$1 USD**. This needs Passkey approval:
-> 👉 [approve link]
+> 1. **Main Wallet** — Ethereum · `0xabcd…1234` ✅
+> 2. **Trading** — Solana · `HN7c…Qx9f` ✅
 
-**Example — after receiving system notification "System: Approval #123 approved (policy_change).":**
-> ✅ Approved! Approval threshold is now set to $1 USD.
+If a wallet has a label, show `label · shortened_address`.
 
-**Example — after receiving "System: Approval #456 approved. Transaction: 0xabc — https://sepolia.etherscan.io/tx/0xabc":**
-> ✅ Transfer approved! TX: [0xabc](https://sepolia.etherscan.io/tx/0xabc)
+### Balances
 
-System notification formats you will receive:
-- "System: Approval #123 approved (policy_change)." → policy is now active
-- "System: Approval #456 approved. Transaction: 0xabc — {explorer_url}" → transfer succeeded; explorer URL is pre-built, just pass it through
-- "System: Approval #456 approved. Transaction broadcast: 0xabc. Please share the explorer link with the user." → fallback when chain is missing; construct URL from chain context
-- "System: Approval #789 was rejected." → no action taken
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_balance` | Native gas balance only (ETH / SOL / etc.) |
+| `teenet_wallet_list_contracts` | Whitelisted token/contract list |
+| `teenet_wallet_call_read` | EVM read — use for `balanceOf(address)` |
 
-## Address Book Details
+Balance response rules:
+- show native + token balances together
+- for EVM token balances, do not rely on `teenet_wallet_balance`; use `teenet_wallet_call_read` with `func_sig: "balanceOf(address)"`, `args: [<wallet_address>]`
+- only show token balances that are relevant or non-zero
+- after a transfer, wait about 15 seconds before re-checking
+- `call_read` returns hex-encoded uint256 — convert with the token's `decimals`
 
-The `to` field in transfers accepts both raw addresses and address book nicknames. When a user says "send 0.1 ETH to alice", use the nickname directly — the backend resolves it from the address book for the wallet's chain.
+All RPC-hitting tools (`call_read`, `balance`, `transfer`, `contract_call`, `approve_token`, `revoke_approval`, `wrap_sol`, `unwrap_sol`) share a per-user cap (`RPC_RATE_LIMIT`, default 50/min). When iterating over a large whitelist, batch or pace the reads.
 
-**Nickname rules:** lowercase alphanumeric with `_`/`-`, max 100 chars. Chain is required when adding. If the nickname is not found for the wallet's chain, the API returns 400.
+### Transfers
 
-**Adding/updating contacts via API key** creates a pending approval (HTTP 202). Deleting contacts requires Passkey via Web UI.
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_transfer` | Send native or token (include `token_*` fields for tokens) |
+| `teenet_wallet_wrap_sol` | Wrap SOL to wSOL |
+| `teenet_wallet_unwrap_sol` | Unwrap wSOL to SOL |
 
-## Delete Wallet
+Rules:
+- `to` accepts raw addresses or address-book nicknames
+- no extra chat confirmation
+- amount is in human units, not wei/lamports
+- on Solana, the backend auto-creates the recipient ATA if needed
+- for larger ETH transfers, pre-check `balance >= amount + 0.0005 ETH`
+- on `status: "completed"`, the response includes `chain` and `tx_hash` — build the explorer URL from the table below and include it in your reply
 
-**Do NOT call the delete API.** Wallet deletion requires Passkey hardware authentication and is irreversible. Direct the user to the Web UI:
-> Wallet deletion requires Passkey verification and can't be done through the API. Please delete it in the Web UI → Wallets → select wallet → Delete.
-
-## Transfer Rules
-
-- **No chat confirmation needed** — the backend approval policy is the safety net
-- **Token transfers MUST include** `token_contract`, `token_symbol`, and `token_decimals` — omitting these sends native ETH/SOL instead (irreversible!)
-- The `to` field accepts both raw addresses and address book nicknames
-- After transfers, wait ~15 seconds before checking balance
-- Pre-check recommended for large ETH transfers: query balance first, ensure `balance >= amount + 0.0005 ETH gas buffer`
-
-## Token Transfers
-
-When sending ERC-20 tokens (Ethereum) or SPL tokens (Solana):
-
-1. **Check whitelist first** — call `teenet_wallet_list_contracts`. If the token is not listed, use `teenet_wallet_add_contract` (needs approval).
-2. **Include token info** — `token_contract`, `token_symbol`, `token_decimals` are all required.
-3. Amount is in **human-readable units** (e.g. `100` for 100 USDC, not raw wei/lamports).
-
-> The contract whitelist is scoped per **user + chain**, not per wallet — all wallets you own on the same chain share one list, and deleting a wallet does not remove its entries.
+Token transfers **must** include all three:
+- `token_contract`
+- `token_symbol`
+- `token_decimals`
 
 Common testnet tokens:
 
@@ -262,124 +129,180 @@ Common testnet tokens:
 | Sepolia | USDC | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | 6 |
 | Base Sepolia | USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 |
 
-## Approval Policy Details
+### Contract Whitelist
 
-Each wallet has a single USD-denominated approval policy. Token amounts are converted to USD at request time using real-time prices: native coins (ETH, SOL, BNB, POL, AVAX) via CoinGecko, stablecoins (USDC/USDT/DAI/BUSD) pegged to $1, ERC-20 tokens via CoinGecko Token Price API, and Solana SPL tokens via Jupiter Price API as fallback. Check prices via `teenet_wallet_prices`.
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_list_contracts` | List whitelisted contracts/tokens |
+| `teenet_wallet_add_contract` | Whitelist a token/contract (needs approval) |
+| `teenet_wallet_update_contract` | Update contract metadata (needs approval) |
 
-- `threshold_usd`: single transaction above this USD value requires Passkey approval
-- `daily_limit_usd` (optional): cumulative USD spend per UTC calendar day; if exceeded the transfer is **hard-blocked** (no approval path, not even Passkey can override)
-- One policy per wallet — covers all currencies (ETH, SOL, tokens)
+Rules:
+- whitelist is scoped per **user + chain**, not per wallet
+- remove entries in the Web UI only
+- applies to EVM token contracts, Solana mints, and Solana program IDs
 
-Ask the user for the threshold amount if not specified. If they also want a daily cap, ask for `daily_limit_usd`.
+### Contract Calls
 
-## Balance Check Details
+Use only for **state-changing** calls.
 
-When checking balance, **show both native and token balances together**.
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_contract_call` | EVM or Solana state-changing call (needs approval) |
+| `teenet_wallet_approve_token` | ERC-20 allowance approval |
+| `teenet_wallet_revoke_approval` | Revoke ERC-20 allowance |
 
-1. Call `teenet_wallet_balance` for native balance (ETH/SOL). This returns native gas token only — never present it as a token balance.
-2. Call `teenet_wallet_list_contracts` to get the token whitelist for the wallet's chain.
-3. For each whitelisted token, call `teenet_wallet_call_read` with `func_sig: "balanceOf(address)"` and `args: [<wallet_address>]`. No whitelist, no approval, no gas. **Do not** use `teenet_wallet_contract_call` for reads.
+EVM rules:
+- `func_sig` uses Solidity-style signatures: `transfer(address,uint256)`, `approve(address,uint256)`
+- target contract must already be whitelisted
+- success handling is the same as transfers
 
-`call_read` returns a hex-encoded uint256 `result` — convert using the token's `decimals`. Only show tokens with balance > 0.
+Solana rules:
+- use `accounts` and `data` instead of `func_sig`/`args`
+- the program must be whitelisted
 
-All RPC-hitting tools (`call_read`, `balance`, `transfer`, `contract_call`, `approve_token`, `revoke_approval`, `wrap_sol`, `unwrap_sol`) share a per-user cap (`RPC_RATE_LIMIT`, default 50/min) — total across reads and writes cannot exceed this. When iterating over a large whitelist, batch or pace the reads.
+### Read-Only Contract Calls
 
-If `call_read` fails (e.g. service unreachable), fall back to hitting a public RPC directly with `web_fetch` using `eth_call` and the `0x70a08231` selector.
+`teenet_wallet_call_read` for EVM reads such as:
+- `balanceOf`
+- `allowance`
+- `decimals`
+- `symbol`
+- quotes / view functions
 
-**Present all balances together:**
-> **Wallet** `0xabcd…1234` (Ethereum)
-> ├ ETH: **0.482 ETH**
-> ├ USDC: **250.00 USDC**
-> └ USDT: **100.00 USDT**
+Rules:
+- no approval
+- no whitelist required
+- EVM only
+- prefer this over direct public RPC; fall back to `web_fetch` against a public RPC only if `call_read` is unavailable
 
-## Contract Calls
+### Address Book
 
-For smart contract interactions (EVM):
-- Use `func_sig` with Solidity-style signatures: `transfer(address,uint256)`, `approve(address,uint256)`
-- **Always verify the real verified ABI before sending router/DeFi calls. Do not guess flattened vs tuple forms.**
-- For Uniswap V3 swaps, use **tuple ABI form**: `exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))`
-- For **SwapRouter02**, `exactInputSingle` takes **7 tuple fields** in this order:
-  1. `tokenIn`
-  2. `tokenOut`
-  3. `fee`
-  4. `recipient`
-  5. `amountIn`
-  6. `amountOutMinimum`
-  7. `sqrtPriceLimitX96`
-- **Do not include `deadline`** for SwapRouter02 `exactInputSingle` on this ABI shape
-- Correct selector for the tuple form above is **`0x04e45aaf`**
-- If the observed selector differs, the `func_sig` and/or argument shape is wrong; fix ABI/signature first before retrying
-- Use `teenet_wallet_call_read` to check balances / allowances / quotes before sending state-changing calls. `call_read` needs no whitelist; `contract_call` does.
-- The contract must be whitelisted before calling `contract_call`
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_list_contacts` | List saved addresses |
+| `teenet_wallet_add_contact` | Save a new address with nickname (needs approval) |
+| `teenet_wallet_update_contact` | Update an existing contact (needs approval) |
 
-For Solana programs:
-- Use `accounts` and `data` instead of `func_sig`/`args`
-- The program must be whitelisted
+Rules:
+- nicknames: lowercase alphanumeric plus `_` or `-`, max 100 chars
+- chain is required when adding
+- delete via Web UI only
+- if user says "send 0.1 ETH to alice", pass `alice` directly as `to`
+- when displaying a contact, show `nickname · shortened_address`
 
-## Swap Workflow (EVM DeFi)
+### Policy & Approvals
 
-For token swaps via DEX routers (e.g. Uniswap V3):
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_get_policy` | Show current threshold |
+| `teenet_wallet_set_policy` | Set/change USD threshold (needs approval) |
+| `teenet_wallet_daily_spent` | Today's USD spend |
+| `teenet_wallet_pending_approvals` | List pending approvals |
+| `teenet_wallet_check_approval` | Check status of a specific approval |
 
-**Preparation (all steps required before swap):**
-1. Ensure **input token is whitelisted** → `teenet_wallet_list_contracts`, add if missing
-2. Ensure **router contract is whitelisted** → add if missing
-3. Confirm the **real verified ABI**, parameter order, and selector before sending `teenet_wallet_contract_call`
-4. Check **token balance on chain** → `teenet_wallet_call_read` with `balanceOf(address)`
-5. Check **allowance** for router on chain → `teenet_wallet_call_read` with `allowance(address,address)`
-6. If allowance insufficient → `teenet_wallet_approve_token`
-7. **Quote first** when possible → `teenet_wallet_call_read` against QuoterV2 (or similar) before the real swap
-8. Submit a **small test swap first** → `teenet_wallet_contract_call`
-9. Only increase size after a successful small test
+Policy fields:
+- `threshold_usd`: above this needs approval
+- `daily_limit_usd` (optional): hard daily cap; not even Passkey can override
 
-**Uniswap V3 / SwapRouter02 specifics:**
-- Use **tuple ABI form**: `exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))`
-- **Do NOT use flattened form**: `exactInputSingle(address,address,uint24,...)`
-- For **SwapRouter02** on Base Sepolia, `exactInputSingle` uses **7 tuple fields** and **does not include `deadline`**
-- Correct selector: **`0x04e45aaf`**
-- Pass the tuple as a **single array item** in `args`
-- If a prior successful transaction exists, compare its on-chain input selector to your intended `func_sig` before retrying
-- If the selector differs, stop and fix the ABI/signature instead of retrying blindly
+Token amounts are converted to USD at request time (CoinGecko for native + ERC-20, Jupiter fallback for SPL). Stablecoins (USDC/USDT/DAI/BUSD) are pegged to $1.
 
-**Safety:**
-- **Do not test swaps with 100% of balance or allowance**
-- Leave headroom; start with **50% or less** of available balance, often much less (for example `1 USDC`, `5 USDC`, `0.0005 WETH`)
-- Full-balance tests can fail with transfer helper errors even when balance and allowance look correct
-- Set conservative `amountOutMinimum` (50-80% of quote) when quoting is available
-- Don't assume testnet liquidity or prices match mainnet
+### Utility
 
-**Common swap errors:**
-- Wrong selector / wrong ABI shape → function signature or tuple shape is wrong; fix this first
-- `Too little received` → `amountOutMinimum` too high or quote stale
-- `STF` → `transferFrom` failed; check balance, allowance, and whether you tried to use the full balance
-- HTTP `502` on `/contract-call` often means `eth_estimateGas` reverted on chain, not that the backend crashed
-- `execution reverted` during `eth_estimateGas` → commonly balance/allowance/pool-liquidity/fee-tier/ABI mismatch
+| Tool | Purpose |
+|------|---------|
+| `teenet_wallet_health` | Service connectivity |
+| `teenet_wallet_list_chains` | Available chains |
+| `teenet_wallet_prices` | USD prices |
+| `teenet_wallet_faucet` | Claim testnet tokens |
+| `teenet_wallet_audit_logs` | Operation history |
+
+## Approval Flow
+
+When a write tool returns `pending_approval`:
+
+1. tell the user what operation needs approval (e.g. "Setting approval threshold to $1")
+2. show the `approval_url`
+3. **do NOT** ask the user to "tell you" or "let you know" when they've approved
+4. **do NOT** poll `teenet_wallet_check_approval` in a loop
+5. the system will notify you automatically
+
+**When a system message starts with `System: Approval #...`, you MUST immediately respond.** Always:
+1. tell the user the result (approved / rejected / expired)
+2. explain what it means ("Your transfer of 0.001 ETH was sent", "Policy is now active")
+3. if the system message contains an explorer URL, surface it verbatim — don't rebuild it; if only a bare tx hash is provided, build the URL from the chain→explorer table
+4. continue with the next step if in a multi-step flow
+
+System notification formats:
+- `System: Approval #123 approved (policy_change).` → policy is now active
+- `System: Approval #456 approved. Transaction: 0xabc — {explorer_url}` → transfer succeeded; pass URL through
+- `System: Approval #456 approved. Transaction broadcast: 0xabc. Please share the explorer link with the user.` → fallback; build URL from chain context
+- `System: Approval #789 was rejected.` → no action taken
+- `System: Approval #789 expired.` → ask the user to retry the original operation
+
+## Guided Test Flow
+
+When the user asks to test the wallet:
+
+1. ensure they have a testnet wallet; create one if needed
+2. check balance
+3. use `teenet_wallet_faucet` if needed
+4. create a second wallet on the same chain (self-transfers are blocked by the backend, so a second wallet is required as recipient)
+5. send a tiny transfer to test TEE signing
+6. set a `$1` approval threshold
+7. send one transfer below threshold
+8. send one transfer above threshold and wait for approval
+9. add USDC to whitelist
+
+For every step: explain before, show result after, and if approval is needed, show the link and wait for the system notification before continuing.
 
 ## Error Handling
 
-Tool errors may include structured fields. Use `stage` first to diagnose where the failure happened.
+Tool errors include structured fields. Use `stage` first.
 
-| `stage` | Meaning | What to do |
-|---------|---------|------------|
-| `build_tx` | Transaction assembly or ABI encoding failed before simulation | Verify `func_sig`, selector, tuple shape, argument count/order, and contract ABI |
-| `estimate_gas` | Transaction was built, but `eth_estimateGas` reverted on chain | Check `revert_reason`, balance, allowance, fee tier, pool liquidity, and `amountOutMinimum` |
-| `signing` | TEE signing failed | Retry; if persistent, TEE cluster may be busy |
-| `broadcast` | Chain RPC rejected tx | Check nonce conflicts, gas price, chain health |
-| `key_generation` | Wallet creation failed | Retry; ECDSA DKG takes 1-2 min |
-| `balance_query` | RPC query failed | Retry or switch public RPC/explorer source |
+| `stage` | Meaning |
+|---------|---------|
+| `build_tx` | tx assembly / ABI encoding failed before simulation — verify `func_sig`, selector, tuple shape, args |
+| `estimate_gas` | tx built but `eth_estimateGas` reverted on chain — check `revert_reason`, balance, allowance, fee tier, pool liquidity |
+| `signing` | TEE signing failed; retry |
+| `broadcast` | RPC rejected the tx; check nonce, gas price, chain health |
+| `key_generation` | wallet creation failed; retry after a short wait |
+| `balance_query` | RPC read failed; retry |
+| `eth_call` | read call failed; check contract and signature |
+| `faucet_request` | faucet unavailable |
 
-Common errors:
-- wrong selector / selector mismatch → ABI/signature or tuple shape is wrong; compare against verified ABI or a prior successful tx input
-- `failed to build contract call transaction` → often `func_sig`/tuple encoding/arg-shape problem on complex router calls
-- `execution reverted` during `eth_estimateGas` → on-chain simulation failed; not necessarily a backend crash
-- `insufficient funds` → check balance including gas
-- `daily spend limit exceeded` → resets at UTC midnight
-- `contract not whitelisted` → add via `teenet_wallet_add_contract`
-- `wallet is not ready` → still creating, wait and retry
-- `nonce too low` → retry transfer (fresh nonce auto-fetched)
+Common user-facing errors:
+- `insufficient funds`: not enough balance, usually including gas
+- `contract not whitelisted`: add via `teenet_wallet_add_contract`
+- `wallet is not ready`: wallet creation still in progress
+- `daily spend limit exceeded`: resets at UTC midnight
+- `nonce too low`: retry the transfer
+- `execution reverted`: inspect `revert_reason`
+- selector mismatch / `failed to build contract call transaction`: ABI/signature shape is wrong
+
+## Swap-Specific Notes
+
+For Uniswap-style EVM swaps:
+- always confirm the real verified ABI before sending the real transaction
+- `exactInputSingle` must use tuple form:
+  - `exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))`
+- expected selector: `0x04e45aaf`
+- for **SwapRouter02**, the tuple has **7 fields** in this order: `tokenIn`, `tokenOut`, `fee`, `recipient`, `amountIn`, `amountOutMinimum`, `sqrtPriceLimitX96`
+- **do not include `deadline`** for SwapRouter02 `exactInputSingle` on this ABI shape
+- pass the tuple as a **single array item** in `args`
+- quote first with `teenet_wallet_call_read` against QuoterV2 (or similar)
+- check balance and allowance first (`balanceOf`, `allowance` via `call_read`)
+- approve the router with `teenet_wallet_approve_token` if allowance insufficient
+- do not test with 100% of balance; leave headroom (start with 50% or less, often much less — `1 USDC`, `0.0005 WETH`)
+- set conservative `amountOutMinimum` (50–80% of quote)
+- HTTP `422` on `contract_call` with `stage: "estimate_gas"` means `eth_estimateGas` reverted on chain, not that the backend crashed — read `revert_reason` before retrying
+- if a prior successful tx exists, compare its on-chain input selector to your intended `func_sig` before retrying
 
 ## Explorer Links
 
-| Chain | Base URL |
+Base URLs:
+
+| Chain | Explorer |
 |-------|----------|
 | Ethereum | `https://etherscan.io` |
 | Optimism | `https://optimistic.etherscan.io` |
@@ -392,46 +315,21 @@ Common errors:
 | Base Sepolia | `https://sepolia.basescan.org` |
 | BSC Testnet | `https://testnet.bscscan.com` |
 | Solana | `https://solscan.io` |
-| Solana Devnet | `https://solscan.io` (append `?cluster=devnet`) |
+| Solana Devnet | `https://solscan.io` with `?cluster=devnet` |
 
-Transaction: `{explorer}/tx/{hash}` · Address: `{explorer}/address/{addr}` (EVM) or `{explorer}/account/{addr}` (Solana)
+Formats:
+- EVM tx: `{explorer}/tx/{hash}`
+- EVM address: `{explorer}/address/{addr}`
+- Solana tx: `{explorer}/tx/{hash}`
+- Solana account: `{explorer}/account/{addr}`
 
 ## Faucet Links
 
-| Chain | Source |
+| Chain | Faucet |
 |-------|--------|
-| Sepolia / Base Sepolia ETH | Built-in: `teenet_wallet_faucet` |
-| Solana Devnet SOL | Built-in: `teenet_wallet_faucet` |
-| BSC Testnet tBNB | [`https://www.bnbchain.org/en/testnet-faucet`](https://www.bnbchain.org/en/testnet-faucet) |
-| Sepolia USDC | [`https://faucet.circle.com`](https://faucet.circle.com) |
-
-## Quick Commands
-
-Natural language works ("send 0.1 ETH to alice"), but users may also type:
-
-| Command | Action |
-|---------|--------|
-| `/start` | Run onboarding flow |
-| `/test-wallets` | Run the **Guided Test Flow** (see section above) — step-by-step walkthrough of all wallet features on a testnet |
-| `/wallets` | List wallets |
-| `/balance` | Check all balances |
-| `/transfer 0.1 ETH to alice` | Send crypto |
-| `/policy 100` | Set $100 threshold |
-| `/whitelist` | List/add contracts |
-| `/contacts` | List/add contacts |
-| `/approve` | List pending approvals |
-| `/spent` | Daily USD spend |
-| `/history` | Audit log |
-
-## Rules
-
-1. **Always narrate** — tell the user what you're doing before each action, show results after
-2. **Never display private keys** — they don't exist outside TEE hardware
-3. **No chat confirmation for transfers** — backend approval policy is the safety net
-4. **Smart Wallet Selection always** — never ask for wallet ID; use numbered list indices
-5. **Token transfers MUST include `token` fields** — omitting sends native ETH/SOL (irreversible)
-6. **Read-only contract queries use `teenet_wallet_call_read`, NOT `contract_call`** — `balanceOf`, `allowance`, `decimals`, `symbol`, and any other view/pure query goes through `call_read`. No whitelist, no approval, no gas. `contract_call` is ONLY for state-changing transactions (swap, approve, etc.). `web_fetch` to a public RPC is only a fallback if `call_read` is unavailable
-7. **Never call DELETE APIs** — destructive operations require Passkey via Web UI
-8. **All API Key write operations may need Passkey approval** — show the approval link
-9. **Dynamic chains** — never hardcode chain names; use `teenet_wallet_list_chains`
-10. **Always include explorer link** after successful transfers and contract operations
+| Sepolia ETH | built-in `teenet_wallet_faucet` |
+| Base Sepolia ETH | built-in `teenet_wallet_faucet` |
+| Solana Devnet SOL | built-in `teenet_wallet_faucet` |
+| BSC Testnet tBNB | [https://www.bnbchain.org/en/testnet-faucet](https://www.bnbchain.org/en/testnet-faucet) |
+| Sepolia USDC | [https://faucet.circle.com](https://faucet.circle.com) |
+| Base Sepolia USDC | [https://faucet.circle.com](https://faucet.circle.com) |

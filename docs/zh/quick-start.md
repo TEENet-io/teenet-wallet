@@ -177,11 +177,9 @@ Install this skill: https://github.com/TEENet-io/teenet-wallet/blob/main/skill/t
 - **TEENET_WALLET_API_URL** —— `http://localhost:18080`（若 OpenClaw 跑在其它机器上，改成本机 LAN IP）
 - **TEENET_WALLET_API_KEY** —— 第 4 步生成的 `ocw_...` key
 
-然后让 Agent 跑一次端到端快速检查：
+然后让 Agent 跑一次端到端快速检查，比如：
 
-```
-/test
-```
+> "帮我做一次钱包引导测试。"
 
 这会依次走一遍余额查询、测试网 faucet、转账、审批阈值、合约白名单流程,整条链路都打通。
 

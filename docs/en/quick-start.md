@@ -177,11 +177,9 @@ When prompted, set:
 - **TEENET_WALLET_API_URL** -- `http://localhost:18080` (or your machine's LAN IP if OpenClaw runs on a different host)
 - **TEENET_WALLET_API_KEY** -- the `ocw_...` key from Step 4
 
-Then ask the agent to run a quick end-to-end check:
+Then ask the agent to run a quick end-to-end check, for example:
 
-```
-/test
-```
+> "Run a guided test of my wallet."
 
 This exercises balance checks, the testnet faucet, transfers, approval thresholds, and the contract whitelist against your local wallet.
 

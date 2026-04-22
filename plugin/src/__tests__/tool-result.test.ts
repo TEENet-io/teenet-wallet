@@ -37,6 +37,25 @@ describe("approvalOrResult", () => {
     assert.deepEqual(parsed, input);
   });
 
+  it("forwards chain and tx_hash on completed transfer (bug A regression)", () => {
+    // Backend returns chain alongside tx_hash; agent needs both to build
+    // the explorer URL from the SKILL.md table. The plugin must not strip them.
+    const input = {
+      status: "completed",
+      tx_hash: "0xdeadbeef",
+      chain: "sepolia",
+      from: "0xabc",
+      to: "0xdef",
+      amount: "0.001",
+      currency: "ETH",
+    };
+    const result = approvalOrResult(input, getUrl);
+    const parsed = JSON.parse(result.content[0].text);
+    assert.equal(parsed.chain, "sepolia");
+    assert.equal(parsed.tx_hash, "0xdeadbeef");
+    assert.equal(parsed.status, "completed");
+  });
+
   it("returns raw result when approval_id is missing", () => {
     const input = { status: "pending_approval" }; // no approval_id
     const result = approvalOrResult(input, getUrl);

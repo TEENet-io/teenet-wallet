@@ -143,6 +143,84 @@ describe("ApprovalWatcher", () => {
     }
   });
 
+  it("reconcile path forwards chain into agent message (bug B regression)", async () => {
+    // When SSE was disconnected and a tracked approval resolved in the meantime,
+    // reconcileTrackedApprovals polls GET /api/approvals/:id to recover. It must
+    // forward the chain field so the explorer URL gets built.
+    const mockGetApproval = async (_id: number) => ({
+      success: true,
+      status: "approved",
+      approval_type: "transfer",
+      tx_hash: "0xrecon",
+      wallet_id: "w-1",
+      chain: "sepolia",
+      approval: {
+        id: 11,
+        status: "approved",
+        approval_type: "transfer",
+        tx_hash: "0xrecon",
+        wallet_id: "w-1",
+        created_at: "",
+        expires_at: "",
+      },
+    });
+    const api = {
+      ...mockApi(),
+      getApproval: mockGetApproval,
+    } as unknown as WalletAPI;
+
+    const watcher = new ApprovalWatcher(api);
+    const subagent = mockSubagentRun();
+    watcher.setSubagentRun(subagent);
+
+    watcher.trackApproval(11, "agent:main:x:42");
+    await (watcher as any).reconcileTrackedApprovals();
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(subagent.calls.length, 1);
+    assert.ok(
+      subagent.calls[0].message.includes("https://sepolia.etherscan.io/tx/0xrecon"),
+      `expected explorer URL in reconciled message, got: ${subagent.calls[0].message}`,
+    );
+  });
+
+  it("reconcile falls back to nested approval.status when top-level is missing", async () => {
+    // Backwards-compat: older backend responses nest everything under
+    // "approval". Reconcile should still fire.
+    const mockGetApproval = async (_id: number) => ({
+      success: true,
+      // no top-level status / approval_type / tx_hash / chain
+      approval: {
+        id: 12,
+        status: "approved",
+        approval_type: "transfer",
+        tx_hash: "0xlegacy",
+        wallet_id: "w-2",
+        created_at: "",
+        expires_at: "",
+      },
+    });
+    const api = {
+      ...mockApi(),
+      getApproval: mockGetApproval,
+    } as unknown as WalletAPI;
+
+    const watcher = new ApprovalWatcher(api);
+    const subagent = mockSubagentRun();
+    watcher.setSubagentRun(subagent);
+
+    watcher.trackApproval(12, "agent:main:x:42");
+    await (watcher as any).reconcileTrackedApprovals();
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(subagent.calls.length, 1);
+    // No chain available — should use fallback phrasing, not error out.
+    assert.ok(
+      subagent.calls[0].message.includes("0xlegacy"),
+      `expected tx hash in fallback message, got: ${subagent.calls[0].message}`,
+    );
+  });
+
   it("ignores non-approval SSE events", () => {
     const watcher = new ApprovalWatcher(mockApi());
     const subagent = mockSubagentRun();

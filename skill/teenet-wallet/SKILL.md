@@ -68,10 +68,10 @@ Run this onboarding only when there is no wallet context and the user did not as
    - fund the wallet
    - set an approval policy
    - whitelist tokens/contracts if needed
-   - run `/test`
+   - offer to run the guided test flow
 
 Skip onboarding when:
-- the user already gave a specific command such as `/balance` or "send 0.1 ETH"
+- the user already gave a specific request such as "show my balance" or "send 0.1 ETH"
 - the conversation already contains wallet context
 - the user explicitly asks to skip setup
 
@@ -309,7 +309,7 @@ Handle approval result like this:
 
 ## Guided Test Flow
 
-When the user runs `/test` or asks to test the wallet:
+When the user asks to test the wallet:
 
 1. ensure they have a testnet wallet; create one if needed
 2. check balance
@@ -359,7 +359,7 @@ For Uniswap-style EVM swaps:
 - quote first with `/call-read`
 - check balance and allowance first
 - do not test with 100% of balance; leave headroom
-- HTTP `502` on `/contract-call` often means `eth_estimateGas` reverted on chain, not that the backend crashed
+- HTTP `422` on `/contract-call` with `stage: "estimate_gas"` means `eth_estimateGas` reverted on chain, not that the backend crashed — read `revert_reason` before retrying
 
 ## Explorer Links
 
@@ -392,6 +392,6 @@ Formats:
 |-------|--------|
 | Sepolia ETH | built-in `/api/faucet` |
 | Base Sepolia ETH | built-in `/api/faucet` |
-| Solana Devnet SOL | [https://faucet.solana.com](https://faucet.solana.com) |
+| Solana Devnet SOL | built-in `/api/faucet` |
 | Sepolia USDC | [https://faucet.circle.com](https://faucet.circle.com) |
 | Base Sepolia USDC | [https://faucet.circle.com](https://faucet.circle.com) |

@@ -40,22 +40,3 @@ Passkey is required for:
 - Whitelist, policy, and API key changes
 
 Transfers that would exceed your daily limit are rejected until the limit resets. For the review flow and account controls, see [Web UI & Approvals](/en/user-approvals.md).
-
----
-
-## Quick Commands
-
-Some agent platforms support shortcut commands. For example, on [OpenClaw](https://openclaw.ai):
-
-| Command | What it does |
-|---------|-------------|
-| `/balance` | Show all wallet balances |
-| `/transfer 0.1 ETH to 0xabc...` | Send crypto |
-| `/approve` | List pending approvals |
-| `/whitelist` | List whitelisted contracts |
-| `/policy` | Show current approval policy |
-| `/contacts` | Show address book |
-| `/spent` | Today's USD spend |
-| `/chains` | Available blockchains |
-
-You can always say the same thing in plain language instead.

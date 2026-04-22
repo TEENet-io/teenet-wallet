@@ -164,11 +164,24 @@ func (h *ApprovalHandler) GetApproval(c *gin.Context) {
 	var txCtx interface{}
 	_ = json.Unmarshal([]byte(approval.TxContext), &txCtx)
 
-	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"approval":   approval,
-		"tx_context": txCtx,
-	})
+	resp := gin.H{
+		"success":       true,
+		"approval":      approval,
+		"tx_context":    txCtx,
+		"status":        approval.Status,
+		"approval_type": approval.ApprovalType,
+		"tx_hash":       approval.TxHash,
+	}
+	if approval.WalletID != nil {
+		resp["wallet_id"] = *approval.WalletID
+		// Include chain so SSE-reconnect callers (e.g. the OpenClaw plugin's
+		// reconcile path) can rebuild an explorer URL without a second API call.
+		var w model.Wallet
+		if err := h.db.Select("chain").Where("id = ?", *approval.WalletID).First(&w).Error; err == nil {
+			resp["chain"] = w.Chain
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // Approve approves an approval request (Passkey session only).

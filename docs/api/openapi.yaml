@@ -752,8 +752,8 @@ paths:
               schema:
                 type: object
                 description: WebAuthn PublicKeyCredentialRequestOptions
-        "502":
-          description: Upstream service error
+        "422":
+          description: Unprocessable entity (upstream/RPC error, on-chain revert, or invalid input — check `stage` and `revert_reason`)
           content:
             application/json:
               schema:
@@ -855,8 +855,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
-          description: Upstream service error
+        "422":
+          description: Unprocessable entity (upstream/RPC error, on-chain revert, or invalid input — check `stage` and `revert_reason`)
           content:
             application/json:
               schema:
@@ -890,8 +890,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
-          description: Upstream service error
+        "422":
+          description: Unprocessable entity (upstream/RPC error, on-chain revert, or invalid input — check `stage` and `revert_reason`)
           content:
             application/json:
               schema:
@@ -948,8 +948,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
-          description: Upstream service error
+        "422":
+          description: Unprocessable entity (upstream/RPC error, on-chain revert, or invalid input — check `stage` and `revert_reason`)
           content:
             application/json:
               schema:
@@ -1012,8 +1012,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
-          description: Upstream service error
+        "422":
+          description: Unprocessable entity (upstream/RPC error, on-chain revert, or invalid input — check `stage` and `revert_reason`)
           content:
             application/json:
               schema:
@@ -1393,7 +1393,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: TEE DKG failure
           content:
             application/json:
@@ -1673,7 +1673,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC, signing, or broadcast failure
           content:
             application/json:
@@ -1741,7 +1741,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC, signing, or broadcast failure
           content:
             application/json:
@@ -1800,7 +1800,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC, signing, or broadcast failure
           content:
             application/json:
@@ -1842,7 +1842,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC error
           content:
             application/json:
@@ -2275,7 +2275,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC, signing, or broadcast failure
           content:
             application/json:
@@ -2355,7 +2355,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: Upstream RPC failure
           content:
             application/json:
@@ -2443,7 +2443,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC, signing, or broadcast failure
           content:
             application/json:
@@ -2527,7 +2527,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: RPC, signing, or broadcast failure
           content:
             application/json:
@@ -2910,7 +2910,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: TEE signing or broadcast failure
           content:
             application/json:
@@ -3375,7 +3375,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "502":
+        "422":
           description: Upstream faucet unreachable
           content:
             application/json:
