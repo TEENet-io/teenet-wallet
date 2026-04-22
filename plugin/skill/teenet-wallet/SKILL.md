@@ -1,6 +1,6 @@
 ---
 name: teenet-wallet
-description: "Manage crypto wallets secured by TEE. Use when user asks to create wallet, check balance, send crypto, or manage crypto assets. Supports Ethereum and Solana."
+description: "Manage TEENet Wallet. Use for wallet creation, balance checks, transfers, and crypto asset management."
 ---
 
 # TEENet Wallet Plugin
