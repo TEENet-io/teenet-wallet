@@ -1235,29 +1235,74 @@ func (e *broadcastFailedError) Unwrap() error { return e.cause }
 // distinguish the two cases with errors.As. Rollback of daily-spent tracking is left
 // to the caller.
 func (h *WalletHandler) signAndBroadcast(c *gin.Context, wallet model.Wallet, msgBytes []byte, txParamsJSON string) (*signBroadcastResult, error) {
-	result, signErr := h.sdk.Sign(c.Request.Context(), msgBytes, wallet.KeyName)
-	if signErr != nil || !result.Success {
-		errMsg := "signing failed"
-		if signErr != nil {
-			errMsg = signErr.Error()
-		} else if result != nil {
-			errMsg = result.Error
+	// RBF retry loop: for EVM transfers, if broadcast comes back with
+	// "replacement transaction underpriced" (a stale reservation is blocking
+	// the nonce slot), bump gas by 25% and re-sign+re-broadcast. Up to
+	// rbfMaxAttempts total attempts; Solana and the signing-only path take
+	// the single-shot branch.
+	const rbfMaxAttempts = 4
+
+	cfg, cfgOk := model.GetChain(wallet.Chain)
+	rbfEligible := cfgOk && cfg.Family == "evm" && txParamsJSON != ""
+
+	currentMsg := msgBytes
+	currentParams := txParamsJSON
+
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		result, signErr := h.sdk.Sign(c.Request.Context(), currentMsg, wallet.KeyName)
+		if signErr != nil || !result.Success {
+			errMsg := "signing failed"
+			if signErr != nil {
+				errMsg = signErr.Error()
+			} else if result != nil {
+				errMsg = result.Error
+			}
+			return nil, fmt.Errorf("%s", errMsg)
 		}
-		return nil, fmt.Errorf("%s", errMsg)
+
+		sig := "0x" + hex.EncodeToString(result.Signature)
+		if currentParams == "" {
+			return &signBroadcastResult{signature: sig}, nil
+		}
+
+		txHash, broadcastErr := broadcastSigned(wallet, currentParams, result.Signature)
+		if broadcastErr == nil {
+			return &signBroadcastResult{signature: sig, txHash: txHash}, nil
+		}
+		lastErr = &broadcastFailedError{cause: broadcastErr}
+
+		if !rbfEligible || !chain.IsReplacementUnderpriced(broadcastErr) || attempt+1 >= rbfMaxAttempts {
+			return nil, lastErr
+		}
+
+		// Bump gas, re-derive signing hash for the next attempt (same nonce).
+		var params chain.ETHTxParams
+		if err := json.Unmarshal([]byte(currentParams), &params); err != nil {
+			return nil, lastErr
+		}
+		if !chain.BumpETHGas(&params) {
+			slog.Warn("RBF gas cap reached",
+				"wallet_id", wallet.ID, "chain", wallet.Chain,
+				"priority_fee", params.MaxPriorityFeePerGas)
+			return nil, lastErr
+		}
+		newSigHash, err := chain.ETHSigningHash(params)
+		if err != nil {
+			return nil, lastErr
+		}
+		newJSON, err := json.Marshal(params)
+		if err != nil {
+			return nil, lastErr
+		}
+		slog.Info("RBF: bumping gas and re-signing",
+			"wallet_id", wallet.ID, "chain", wallet.Chain,
+			"attempt", attempt+1,
+			"new_max_fee_per_gas", params.MaxFeePerGas,
+			"new_max_priority_fee_per_gas", params.MaxPriorityFeePerGas)
+		currentMsg = newSigHash
+		currentParams = string(newJSON)
 	}
-
-	sig := "0x" + hex.EncodeToString(result.Signature)
-
-	if txParamsJSON == "" {
-		return &signBroadcastResult{signature: sig}, nil
-	}
-
-	txHash, broadcastErr := broadcastSigned(wallet, txParamsJSON, result.Signature)
-	if broadcastErr != nil {
-		return nil, &broadcastFailedError{cause: broadcastErr}
-	}
-
-	return &signBroadcastResult{signature: sig, txHash: txHash}, nil
 }
 
 // broadcastSigned assembles a signed transaction and broadcasts it to the chain.

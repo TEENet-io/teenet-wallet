@@ -203,8 +203,12 @@ func fetchGasFeesAndChainID(rpcURL string) (maxFee, priorityFee, chainID *big.In
 	maxFee = new(big.Int).Mul(baseFee, big.NewInt(2))
 	maxFee.Add(maxFee, priorityFee)
 
-	// Ensure minimum priority fee of 1 gwei for networks with very low fees.
-	minPriority := big.NewInt(1_000_000_000) // 1 gwei
+	// Floor priority fee at 0.001 gwei to guard against RPC providers that
+	// return zero (the value is still plenty for every chain we target — Base
+	// Sepolia's natural suggest is exactly this). When a replacement-underpriced
+	// error does come back, RBF in signAndBroadcast bumps the fee and retries,
+	// so we intentionally avoid over-paying on the first attempt.
+	minPriority := big.NewInt(1_000_000) // 0.001 gwei
 	if priorityFee.Cmp(minPriority) < 0 {
 		priorityFee = minPriority
 		// Recalculate maxFee with the minimum priority.
@@ -341,6 +345,118 @@ func RebuildETHTx(rpcURL string, params ETHTxParams) (*ETHTxData, error) {
 		},
 		SigningHash: sigHash[:],
 	}, nil
+}
+
+// RBF (replace-by-fee) tuning constants. When a broadcast is rejected with
+// "replacement transaction underpriced", signAndBroadcast bumps both gas
+// fields by rbfBumpNumerator/rbfBumpDenominator-1 (+25%), which is safely
+// above the EIP-1559 +12.5% threshold and also overcomes small RPC fee
+// fluctuations between attempts. The escalation stops once the tip would
+// exceed rbfPriorityFeeCapWei.
+const (
+	rbfBumpNumerator     = 125
+	rbfBumpDenominator   = 100
+	rbfPriorityFeeCapWei = int64(10_000_000_000) // 10 gwei
+)
+
+// BumpETHGas multiplies maxFeePerGas and maxPriorityFeePerGas by 1.25 in place
+// (rounded up, plus a 1-wei margin so integer truncation never yields an
+// exactly-equal tip). Returns false if the resulting priority fee would exceed
+// the safety cap — callers should treat that as "give up on RBF".
+//
+// Kept as a method on the package so both the handler's RBF loop and
+// downstream tooling can escalate a stored ETHTxParams consistently.
+func BumpETHGas(params *ETHTxParams) bool {
+	tip, okTip := new(big.Int).SetString(params.MaxPriorityFeePerGas, 10)
+	maxFee, okMax := new(big.Int).SetString(params.MaxFeePerGas, 10)
+	if !okTip || !okMax {
+		return false
+	}
+	bump := func(v *big.Int) *big.Int {
+		out := new(big.Int).Mul(v, big.NewInt(rbfBumpNumerator))
+		out.Div(out, big.NewInt(rbfBumpDenominator))
+		return out.Add(out, big.NewInt(1))
+	}
+	newTip := bump(tip)
+	if newTip.Cmp(big.NewInt(rbfPriorityFeeCapWei)) > 0 {
+		return false
+	}
+	params.MaxPriorityFeePerGas = newTip.String()
+	params.MaxFeePerGas = bump(maxFee).String()
+	return true
+}
+
+// IsReplacementUnderpriced reports whether err carries the RPC error that
+// indicates a same-nonce tx is already in the mempool and our fees don't
+// clear the +12.5% replacement threshold. Also matches the shorter
+// "transaction underpriced" variant that some nodes return when a tx is
+// below the mempool's minimum gas price — both are resolved by the same
+// RBF bump.
+func IsReplacementUnderpriced(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "replacement transaction underpriced") ||
+		strings.Contains(msg, "replacement underpriced") ||
+		strings.Contains(msg, "transaction underpriced")
+}
+
+// ETHSigningHash returns the EIP-1559 signing hash for the given tx params
+// without performing any network I/O. Used by the handler's RBF loop to
+// recompute the hash after BumpETHGas so the TEE can re-sign the updated
+// (but same-nonce) transaction.
+func ETHSigningHash(params ETHTxParams) ([]byte, error) {
+	chainID, ok := new(big.Int).SetString(params.ChainID, 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid chain id: %s", params.ChainID)
+	}
+	value, ok := new(big.Int).SetString(params.Value, 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid value: %s", params.Value)
+	}
+	var maxFee, priorityFee *big.Int
+	if params.MaxFeePerGas != "" {
+		maxFee, ok = new(big.Int).SetString(params.MaxFeePerGas, 10)
+		if !ok {
+			return nil, fmt.Errorf("invalid max fee per gas: %s", params.MaxFeePerGas)
+		}
+		priorityFee, ok = new(big.Int).SetString(params.MaxPriorityFeePerGas, 10)
+		if !ok {
+			return nil, fmt.Errorf("invalid max priority fee: %s", params.MaxPriorityFeePerGas)
+		}
+	} else if params.GasPrice != "" {
+		gasPrice, ok2 := new(big.Int).SetString(params.GasPrice, 10)
+		if !ok2 {
+			return nil, fmt.Errorf("invalid gas price: %s", params.GasPrice)
+		}
+		maxFee = gasPrice
+		priorityFee = gasPrice
+	} else {
+		return nil, fmt.Errorf("no gas fee parameters provided")
+	}
+	toAddr := common.HexToAddress(params.To)
+	var txData []byte
+	if params.Data != "" {
+		var decodeErr error
+		txData, decodeErr = hex.DecodeString(strings.TrimPrefix(params.Data, "0x"))
+		if decodeErr != nil {
+			return nil, fmt.Errorf("invalid calldata hex: %w", decodeErr)
+		}
+	}
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     params.Nonce,
+		GasTipCap: priorityFee,
+		GasFeeCap: maxFee,
+		Gas:       params.GasLimit,
+		To:        &toAddr,
+		Value:     value,
+		Data:      txData,
+	})
+	signer := types.LatestSignerForChainID(chainID)
+	h := signer.Hash(tx)
+	return h[:], nil
 }
 
 // AssembleAndBroadcastETH applies a TEE ECDSA signature to an EIP-1559 transaction and broadcasts it.
