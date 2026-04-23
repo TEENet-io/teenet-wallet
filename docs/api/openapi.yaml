@@ -2037,11 +2037,17 @@ paths:
   /api/wallets/{id}/contracts/{cid}:
     put:
       tags: [Contracts]
-      summary: Update a whitelisted contract
+      summary: Rename a whitelisted contract
       description: |
-        Updates settings of an existing whitelisted contract.
-        - **Passkey session**: applied immediately (requires fresh credential).
-        - **API key**: creates a pending approval.
+        Updates the display label of an existing whitelisted contract.
+        Only `label` is editable: `symbol` and `decimals` are on-chain
+        metadata captured at whitelist time and are immutable here
+        (re-add the contract if they need to change).
+
+        Applied immediately for both passkey sessions and API-key
+        requests — no approval is required because the label is
+        display-only and has no effect on transfer semantics or which
+        contracts are whitelisted.
       operationId: updateContract
       security:
         - ApiKeyAuth: []
@@ -2055,23 +2061,14 @@ paths:
           application/json:
             schema:
               type: object
+              required: [label]
               properties:
-                login_session_id:
-                  type: integer
-                  format: uint64
-                credential:
-                  type: object
                 label:
                   type: string
-                symbol:
-                  type: string
-                decimals:
-                  type: integer
-                  minimum: 0
-                  maximum: 77
+                  description: New display label for the contract.
       responses:
         "200":
-          description: Contract updated (Passkey path)
+          description: Label updated
           content:
             application/json:
               schema:
@@ -2082,25 +2079,8 @@ paths:
                     example: true
                   contract:
                     $ref: "#/components/schemas/AllowedContract"
-        "202":
-          description: Pending approval (API key path)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  pending:
-                    type: boolean
-                    example: true
-                  approval_id:
-                    type: integer
-                  message:
-                    type: string
         "400":
-          description: Validation error
+          description: Validation error (label missing or bad JSON)
           content:
             application/json:
               schema:

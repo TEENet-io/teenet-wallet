@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -84,20 +85,26 @@ func seedWallet(t *testing.T, db *gorm.DB) (model.User, model.Wallet) {
 }
 
 // contractRouter returns a test gin.Engine with contract routes mounted under
-// a middleware that injects the given userID.
-func contractRouter(db *gorm.DB, userID uint) *gin.Engine {
+// a middleware that injects the given userID. authMode defaults to "passkey";
+// pass "apikey" to simulate an API-key request.
+func contractRouter(db *gorm.DB, userID uint, authMode ...string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
+	mode := "passkey"
+	if len(authMode) > 0 && authMode[0] != "" {
+		mode = authMode[0]
+	}
 	r := gin.New()
 	ch := handler.NewContractHandler(db, nil, "")
 
 	injectUser := func(c *gin.Context) {
 		c.Set("userID", userID)
-		c.Set("authMode", "passkey")
+		c.Set("authMode", mode)
 		c.Next()
 	}
 	r.Use(injectUser)
 	r.GET("/wallets/:id/contracts", ch.ListContracts)
 	r.POST("/wallets/:id/contracts", ch.AddContract)
+	r.PUT("/wallets/:id/contracts/:cid", ch.UpdateContract)
 	r.DELETE("/wallets/:id/contracts/:cid", ch.DeleteContract)
 	return r
 }
@@ -548,6 +555,166 @@ func TestAddContract_DuplicateAcrossWalletsSameChain(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusConflict {
 		t.Fatalf("wallet2 add: expected 409 Conflict, got %d: %s", w2.Code, w2.Body.String())
+	}
+}
+
+// ─── UpdateContract ──────────────────────────────────────────────────────────
+
+// seedWhitelistedContract inserts an AllowedContract row for wallet.Chain.
+func seedWhitelistedContract(t *testing.T, db *gorm.DB, wallet model.Wallet) model.AllowedContract {
+	t.Helper()
+	c := model.AllowedContract{
+		UserID:          wallet.UserID,
+		Chain:           wallet.Chain,
+		ContractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		Symbol:          "USDC",
+		Decimals:        6,
+		Label:           "old label",
+	}
+	if err := db.Create(&c).Error; err != nil {
+		t.Fatalf("seed contract: %v", err)
+	}
+	return c
+}
+
+// TestUpdateContract_Label_AppliesImmediatelyPasskey verifies that a passkey
+// caller updating only `label` gets a 200 + immediate apply, with NO fresh
+// passkey assertion required and NO pending approval created.
+func TestUpdateContract_Label_AppliesImmediatelyPasskey(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db)
+	contract := seedWhitelistedContract(t, db, wallet)
+
+	r := contractRouter(db, user.ID, "passkey")
+	body := jsonBody(map[string]interface{}{"label": "new label"})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/contracts/%d", wallet.ID, contract.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	// No approval link should be present in the response.
+	if strings.Contains(w.Body.String(), "approval_url") {
+		t.Fatalf("passkey label update should not create an approval, got: %s", w.Body.String())
+	}
+
+	// Verify DB actually changed.
+	var reloaded model.AllowedContract
+	if err := db.First(&reloaded, contract.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Label != "new label" {
+		t.Errorf("label = %q, want %q", reloaded.Label, "new label")
+	}
+}
+
+// TestUpdateContract_Label_AppliesImmediatelyAPIKey verifies the same for the
+// API-key path: label updates bypass approval entirely.
+func TestUpdateContract_Label_AppliesImmediatelyAPIKey(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db)
+	contract := seedWhitelistedContract(t, db, wallet)
+
+	r := contractRouter(db, user.ID, "apikey")
+	body := jsonBody(map[string]interface{}{"label": "renamed via apikey"})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/contracts/%d", wallet.ID, contract.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 (immediate apply), got %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "approval_url") {
+		t.Fatalf("apikey label update should not create an approval, got: %s", w.Body.String())
+	}
+	var pending []model.ApprovalRequest
+	if err := db.Where("user_id = ? AND approval_type = ?", user.ID, "contract_update").Find(&pending).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("expected no pending contract_update approvals, got %d", len(pending))
+	}
+
+	var reloaded model.AllowedContract
+	if err := db.First(&reloaded, contract.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Label != "renamed via apikey" {
+		t.Errorf("label = %q, want %q", reloaded.Label, "renamed via apikey")
+	}
+}
+
+// TestUpdateContract_IgnoresSymbolAndDecimals guards the main invariant:
+// even if a caller sends symbol/decimals they must be ignored — on-chain
+// metadata is immutable via this endpoint.
+func TestUpdateContract_IgnoresSymbolAndDecimals(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db)
+	contract := seedWhitelistedContract(t, db, wallet)
+
+	r := contractRouter(db, user.ID, "passkey")
+	body := jsonBody(map[string]interface{}{
+		"label":    "only this should apply",
+		"symbol":   "FAKE",
+		"decimals": 99,
+	})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/contracts/%d", wallet.ID, contract.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var reloaded model.AllowedContract
+	if err := db.First(&reloaded, contract.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Label != "only this should apply" {
+		t.Errorf("label = %q", reloaded.Label)
+	}
+	if reloaded.Symbol != "USDC" {
+		t.Errorf("symbol must not change; got %q (want USDC)", reloaded.Symbol)
+	}
+	if reloaded.Decimals != 6 {
+		t.Errorf("decimals must not change; got %d (want 6)", reloaded.Decimals)
+	}
+}
+
+// TestUpdateContract_MissingLabel returns 400.
+func TestUpdateContract_MissingLabel(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db)
+	contract := seedWhitelistedContract(t, db, wallet)
+
+	r := contractRouter(db, user.ID, "passkey")
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/contracts/%d", wallet.ID, contract.ID), jsonBody(map[string]interface{}{}))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing label, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestUpdateContract_NotFound returns 404 when cid doesn't belong to the user.
+func TestUpdateContract_NotFound(t *testing.T) {
+	db := testDB(t)
+	user, wallet := seedWallet(t, db)
+
+	r := contractRouter(db, user.ID, "passkey")
+	body := jsonBody(map[string]interface{}{"label": "x"})
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/wallets/%s/contracts/9999", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

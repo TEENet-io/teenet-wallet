@@ -135,7 +135,7 @@ Common testnet tokens:
 |------|---------|
 | `teenet_wallet_list_contracts` | List whitelisted contracts/tokens |
 | `teenet_wallet_add_contract` | Whitelist a token/contract (needs approval) |
-| `teenet_wallet_update_contract` | Update contract metadata (needs approval) |
+| `teenet_wallet_update_contract` | Rename a whitelisted contract (label only; applied immediately, no approval) |
 
 Rules:
 - whitelist is scoped per **user + chain**, not per wallet

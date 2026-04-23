@@ -110,6 +110,36 @@ describe("WalletAPI", () => {
     }
   });
 
+  it("updateContract sends PUT with only label", async () => {
+    // Guards the backend contract: updateContract() must PUT only { label } —
+    // symbol and decimals are on-chain metadata that the server ignores, and
+    // sending them anyway would give a false impression they can be changed.
+    let receivedMethod = "";
+    let receivedPath = "";
+    let receivedBody = "";
+    const server = await startMockServer(async (req, res) => {
+      receivedMethod = req.method || "";
+      receivedPath = req.url || "";
+      receivedBody = await readBody(req);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, contract: { id: 42, label: "renamed" } }));
+    });
+
+    try {
+      const api = new WalletAPI({ apiUrl: server.url, apiKey: "ocw_test" });
+      await api.updateContract("wallet-xyz", 42, { label: "renamed" });
+      assert.equal(receivedMethod, "PUT");
+      assert.equal(receivedPath, "/api/wallets/wallet-xyz/contracts/42");
+      const body = JSON.parse(receivedBody);
+      assert.deepEqual(Object.keys(body).sort(), ["label"]);
+      assert.equal(body.label, "renamed");
+      assert.equal(body.symbol, undefined);
+      assert.equal(body.decimals, undefined);
+    } finally {
+      server.close();
+    }
+  });
+
   it("eventsUrl and authHeader getters", () => {
     const api = new WalletAPI({ apiUrl: "https://wallet.teenet.app", apiKey: "ocw_abc" });
     assert.equal(api.eventsUrl, "https://wallet.teenet.app/api/events/stream");

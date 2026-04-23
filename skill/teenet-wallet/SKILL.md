@@ -187,9 +187,9 @@ Common testnet tokens:
 
 - **List**: `GET /api/wallets/<id>/contracts`
 - **Add**: `POST /api/wallets/<id>/contracts`
-- **Update**: `PUT /api/wallets/<id>/contracts/<cid>`
+- **Rename**: `PUT /api/wallets/<id>/contracts/<cid>` (label only)
 
-Add/update body:
+Add body:
 
 ```json
 {
@@ -200,9 +200,18 @@ Add/update body:
 }
 ```
 
+Rename body (only `label` is editable; `symbol`/`decimals` are on-chain
+metadata and are immutable via this endpoint — re-add the contract if
+they need to change):
+
+```json
+{ "label": "new label" }
+```
+
 Rules:
 - whitelist is scoped per **user + chain**, not per wallet
-- API-key add/update creates a pending approval
+- API-key add creates a pending approval; passkey add applies immediately
+- rename (label update) applies immediately under **both** auth modes — no approval required, because the label is display-only and has no effect on transfer semantics
 - remove entries in the Web UI only
 - applies to EVM token contracts, Solana mints, and Solana program IDs
 

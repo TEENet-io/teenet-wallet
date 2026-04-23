@@ -36,25 +36,18 @@ export function registerContractTools(
     },
   }));
 
-  registerTool((ctx: ToolContext) => ({
+  registerTool({
     name: "teenet_wallet_update_contract",
-    description: "Update a whitelisted contract's metadata (label, symbol, decimals). May return pending_approval.",
+    description: "Rename a whitelisted contract. Only the display label is editable; symbol and decimals are on-chain metadata and cannot be changed here. Applied immediately — no approval required.",
     parameters: Type.Object({
       wallet_id: Type.String({ description: "Wallet UUID" }),
       contract_id: Type.Number({ description: "Contract whitelist entry ID" }),
-      label: Type.Optional(Type.String({ description: "New label" })),
-      symbol: Type.Optional(Type.String({ description: "New symbol" })),
-      decimals: Type.Optional(Type.Number({ description: "New decimals" })),
+      label: Type.String({ description: "New display label" }),
     }),
     async execute(_id: string, params: any) {
-      const updates: Record<string, unknown> = {};
-      if (params.label !== undefined) updates.label = params.label;
-      if (params.symbol !== undefined) updates.symbol = params.symbol;
-      if (params.decimals !== undefined) updates.decimals = params.decimals;
-      const result = await api.updateContract(params.wallet_id, params.contract_id, updates);
-      return approvalOrResult(result, getApprovalUrl, watcher, ctx?.sessionKey);
+      return jsonResult(await api.updateContract(params.wallet_id, params.contract_id, { label: params.label }));
     },
-  }));
+  });
 
   registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_contract_call",

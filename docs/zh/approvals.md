@@ -29,7 +29,7 @@ curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/policy" \
 | `/approve-token` | 始终需要审批 | 直接执行 |
 | `/revoke-approval` | 始终需要审批 | 直接执行 |
 
-通过 API Key 发起的合约白名单新增和更新也会创建待审批请求。通过 Passkey 会话发起则立即生效。
+通过 API Key 发起的合约白名单新增也会创建待审批请求。通过 Passkey 会话发起则立即生效。重命名（label 修改）不触发审批，任何鉴权方式都直接生效。
 
 **转账价格换算规则：**
 - 原生代币（ETH、SOL、BNB 等）：通过 CoinGecko API 获取实时价格（10 秒缓存）

@@ -366,7 +366,7 @@ export class WalletAPI {
   async updateContract(
     walletId: string,
     contractId: number,
-    updates: Partial<Pick<ContractEntry, "symbol" | "decimals" | "label">>
+    updates: { label: string }
   ): Promise<MutationResult> {
     return this.request<MutationResult>(
       "PUT",

@@ -146,9 +146,15 @@ func (h *ContractHandler) ListContracts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "contracts": contracts})
 }
 
-// UpdateContract modifies a whitelisted contract's settings.
-// Passkey: applied immediately.
-// API key: creates a pending approval for the passkey owner to review.
+// UpdateContract modifies a whitelisted contract's label.
+//
+// Only `label` is editable: symbol and decimals are on-chain metadata and
+// changing them client-side could desync token amount calculations, so they
+// are immutable here (re-add the contract if they need to change).
+//
+// Label updates do NOT require passkey approval for either auth mode —
+// the label is display-only text and has no effect on transfer semantics
+// or which contracts are whitelisted.
 // PUT /api/wallets/:id/contracts/:cid  (dual auth)
 func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	wallet, ok := loadUserWallet(c, h.db)
@@ -169,85 +175,32 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 
 	var req struct {
-		LoginSessionID uint64      `json:"login_session_id"`
-		Credential     interface{} `json:"credential"`
-		Label          *string     `json:"label"`
-		Symbol         *string     `json:"symbol"`
-		Decimals       *int        `json:"decimals"`
+		Label *string `json:"label"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		jsonError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	if req.Decimals != nil && (*req.Decimals < 0 || *req.Decimals > 77) {
-		jsonError(c, http.StatusBadRequest, "decimals must be between 0 and 77")
+	if req.Label == nil {
+		jsonError(c, http.StatusBadRequest, "label is required")
 		return
 	}
 
-	// Build proposed state by merging changes into existing.
-	proposed := existing
-	if req.Label != nil {
-		proposed.Label = *req.Label
-	}
-	if req.Symbol != nil {
-		proposed.Symbol = strings.ToUpper(strings.TrimSpace(*req.Symbol))
-	}
-	if req.Decimals != nil {
-		proposed.Decimals = *req.Decimals
-	}
-
-	// Short-circuit if the proposed state is identical to existing — avoids a
-	// no-op pending approval (API-key path) or a no-op audit entry (passkey path).
-	if proposed.Label == existing.Label &&
-		proposed.Symbol == existing.Symbol &&
-		proposed.Decimals == existing.Decimals {
+	newLabel := *req.Label
+	if newLabel == existing.Label {
 		c.JSON(http.StatusOK, gin.H{"success": true, "contract": existing})
 		return
 	}
 
-	// API key path: create approval request.
-	if !isPasskeyAuth(c) {
-		approval, created := createPendingApproval(h.db, c, &wallet.ID, "contract_update", proposed, h.approvalExpiry)
-		if !created {
-			return
-		}
-		writeAuditCtx(h.db, c, "contract_update", "pending", &wallet.ID, map[string]interface{}{
-			"contract_id": cid, "contract": existing.ContractAddress, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label, "approval_id": approval.ID,
-		}, approval.ID)
-		respondPendingApproval(c, h.baseURL, approval.ID, "Contract whitelist update submitted for approval")
-		return
-	}
-
-	// Passkey path: require a fresh hardware assertion before applying.
-	if !verifyFreshPasskeyParsed(h.sdk, c, req.LoginSessionID, req.Credential, h.db) {
-		return
-	}
-
-	updates := map[string]interface{}{}
-	if req.Label != nil {
-		updates["label"] = proposed.Label
-	}
-	if req.Symbol != nil {
-		updates["symbol"] = proposed.Symbol
-	}
-	if req.Decimals != nil {
-		updates["decimals"] = proposed.Decimals
-	}
-
-	if len(updates) == 0 {
-		jsonError(c, http.StatusBadRequest, "no fields to update")
-		return
-	}
-
-	if err := h.db.Model(&existing).Updates(updates).Error; err != nil {
+	if err := h.db.Model(&existing).Update("label", newLabel).Error; err != nil {
 		respondInternalError(c, "update failed", err, gin.H{"stage": "contract_update", "contract_id": cid})
 		return
 	}
+	existing.Label = newLabel
 	writeAuditCtx(h.db, c, "contract_update", "success", &wallet.ID, map[string]interface{}{
-		"contract_id": cid, "contract": existing.ContractAddress, "symbol": proposed.Symbol, "decimals": proposed.Decimals, "label": proposed.Label,
+		"contract_id": cid, "contract": existing.ContractAddress, "label": newLabel,
 	})
-	c.JSON(http.StatusOK, gin.H{"success": true, "contract": proposed})
+	c.JSON(http.StatusOK, gin.H{"success": true, "contract": existing})
 }
 
 // DeleteContract removes a whitelisted contract.
