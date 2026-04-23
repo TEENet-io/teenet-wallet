@@ -115,6 +115,37 @@ func TestIsReplacementUnderpriced(t *testing.T) {
 	}
 }
 
+// TestIsNonceTooLow covers the "chain already took our nonce" error variants
+// the handler classifies as refresh-nonce-and-retry.
+func TestIsNonceTooLow(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		expect bool
+	}{
+		{"nil", nil, false},
+		{"geth style",
+			errors.New("broadcast: rpc error: map[code:-32000 message:nonce too low: next nonce 14, tx nonce 13]"), true},
+		{"bare short",
+			errors.New("nonce too low"), true},
+		{"already known",
+			errors.New("rpc error: already known"), true},
+		{"mixed case",
+			errors.New("Nonce Too Low: next nonce 5"), true},
+		{"replacement underpriced is not nonce too low",
+			errors.New("replacement transaction underpriced"), false},
+		{"revert is not nonce too low",
+			errors.New("execution reverted"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsNonceTooLow(tc.err); got != tc.expect {
+				t.Errorf("IsNonceTooLow(%q) = %v, want %v", tc.err, got, tc.expect)
+			}
+		})
+	}
+}
+
 // TestETHSigningHash_StableAndChangesWithGas proves two invariants:
 //   - signing hash is deterministic for the same params
 //   - bumping gas via BumpETHGas does change the hash (required, or the TEE

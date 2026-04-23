@@ -1272,21 +1272,55 @@ func (h *WalletHandler) signAndBroadcast(c *gin.Context, wallet model.Wallet, ms
 		}
 		lastErr = &broadcastFailedError{cause: broadcastErr}
 
-		if !rbfEligible || !chain.IsReplacementUnderpriced(broadcastErr) || attempt+1 >= rbfMaxAttempts {
+		if !rbfEligible || attempt+1 >= rbfMaxAttempts {
+			return nil, lastErr
+		}
+		// Classify the broadcast error. Only two classes are retryable:
+		//   * replacement underpriced — same nonce is blocked by a mempool
+		//     entry at the same (or higher) tip; bump gas and try again.
+		//   * nonce too low — a concurrent sibling broadcast already consumed
+		//     our nonce; fresh-fetch pending and try with that nonce.
+		retryKind := ""
+		switch {
+		case chain.IsReplacementUnderpriced(broadcastErr):
+			retryKind = "bump_gas"
+		case chain.IsNonceTooLow(broadcastErr):
+			retryKind = "refresh_nonce"
+		default:
 			return nil, lastErr
 		}
 
-		// Bump gas, re-derive signing hash for the next attempt (same nonce).
 		var params chain.ETHTxParams
 		if err := json.Unmarshal([]byte(currentParams), &params); err != nil {
 			return nil, lastErr
 		}
-		if !chain.BumpETHGas(&params) {
-			slog.Warn("RBF gas cap reached",
+
+		switch retryKind {
+		case "bump_gas":
+			if !chain.BumpETHGas(&params) {
+				slog.Warn("RBF gas cap reached",
+					"wallet_id", wallet.ID, "chain", wallet.Chain,
+					"priority_fee", params.MaxPriorityFeePerGas)
+				return nil, lastErr
+			}
+			slog.Info("RBF: bumping gas and re-signing",
 				"wallet_id", wallet.ID, "chain", wallet.Chain,
-				"priority_fee", params.MaxPriorityFeePerGas)
-			return nil, lastErr
+				"attempt", attempt+1,
+				"new_max_fee_per_gas", params.MaxFeePerGas,
+				"new_max_priority_fee_per_gas", params.MaxPriorityFeePerGas)
+		case "refresh_nonce":
+			fresh, fnErr := chain.FetchPendingNonce(cfg.RPCURL, wallet.Address)
+			if fnErr != nil {
+				return nil, lastErr
+			}
+			slog.Info("RBF: refreshing nonce after race and re-signing",
+				"wallet_id", wallet.ID, "chain", wallet.Chain,
+				"attempt", attempt+1,
+				"old_nonce", params.Nonce,
+				"new_nonce", fresh)
+			params.Nonce = fresh
 		}
+
 		newSigHash, err := chain.ETHSigningHash(params)
 		if err != nil {
 			return nil, lastErr
@@ -1295,11 +1329,6 @@ func (h *WalletHandler) signAndBroadcast(c *gin.Context, wallet model.Wallet, ms
 		if err != nil {
 			return nil, lastErr
 		}
-		slog.Info("RBF: bumping gas and re-signing",
-			"wallet_id", wallet.ID, "chain", wallet.Chain,
-			"attempt", attempt+1,
-			"new_max_fee_per_gas", params.MaxFeePerGas,
-			"new_max_priority_fee_per_gas", params.MaxPriorityFeePerGas)
 		currentMsg = newSigHash
 		currentParams = string(newJSON)
 	}

@@ -402,6 +402,26 @@ func IsReplacementUnderpriced(err error) bool {
 		strings.Contains(msg, "transaction underpriced")
 }
 
+// IsNonceTooLow reports whether err indicates the chain has already accepted
+// a tx at the nonce we just signed (typically because a sibling concurrent
+// broadcast landed first). Recovering requires a fresh pending-nonce fetch
+// and a re-sign — see the handler's RBF loop.
+func IsNonceTooLow(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "nonce too low") ||
+		strings.Contains(msg, "already known") // same-bytes re-submit after chain moved on
+}
+
+// FetchPendingNonce wraps eth_getTransactionCount("pending") and is exposed so
+// the handler's RBF path can re-seed the nonce after an "already landed"
+// race without also reaching into NonceManager.
+func FetchPendingNonce(rpcURL, address string) (uint64, error) {
+	return fetchNonceFromChain(rpcURL, address)
+}
+
 // ETHSigningHash returns the EIP-1559 signing hash for the given tx params
 // without performing any network I/O. Used by the handler's RBF loop to
 // recompute the hash after BumpETHGas so the TEE can re-sign the updated
