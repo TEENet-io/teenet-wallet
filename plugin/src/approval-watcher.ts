@@ -61,6 +61,23 @@ type ApprovalTrackingEntry = {
   createdAt: number;
 };
 
+type NotifiedEntry = {
+  notifiedAt: number;
+};
+
+// Persisted on disk as `{tracked, notified}`. `tracked` is the set of
+// approvals we're waiting to resolve; `notified` is a tombstone set so
+// that the same id is never re-notified — even across process restarts,
+// gateway restarts, or a stale disk entry being reconciled later.
+type PersistedState = {
+  tracked: Record<string, ApprovalTrackingEntry>;
+  notified: Record<string, NotifiedEntry>;
+};
+
+// Retention windows.
+const TRACKED_TTL_MS = 24 * 60 * 60 * 1000;        // 1 day: unresolved tracking
+const NOTIFIED_TTL_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days: dedup tombstones
+
 export class ApprovalWatcher {
   private api: WalletAPI;
   private subagentRun: SubagentRun | null = null;
@@ -74,6 +91,15 @@ export class ApprovalWatcher {
 
   // approval_id → { sessionKey, context, createdAt } for subagent routing.
   private sessionMap: Map<number, ApprovalTrackingEntry> = new Map();
+
+  // Tombstone set of approval ids we've already notified about. Both live
+  // SSE and reconcile-on-reconnect can deliver the same approval_id more
+  // than once (SSE buffered replay, reconnect race, stale disk entry that
+  // reconcile hits again after a restart); the watcher must not re-fire
+  // subagentRun for any of them. Persisted to disk alongside `sessionMap`
+  // so the guarantee survives gateway restarts; entries age out after
+  // NOTIFIED_TTL_MS to keep the file bounded.
+  private notified: Map<number, NotifiedEntry> = new Map();
 
   constructor(api: WalletAPI) {
     this.api = api;
@@ -106,14 +132,26 @@ export class ApprovalWatcher {
     this.reconnectDelay = 5000;
     void this.connect();
 
-    // Periodic cleanup of stale sessionMap entries (older than 24 hours).
+    // Periodic cleanup of both halves of the persisted state:
+    //   - stale tracked entries (approvals still marked pending after 24h
+    //     — either expired on the backend or orphaned by a bug)
+    //   - stale notified tombstones (older than NOTIFIED_TTL_MS). Letting
+    //     these accumulate indefinitely would grow the JSON without bound.
     this.cleanupTimer = setInterval(() => {
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      const trackedCutoff = now - TRACKED_TTL_MS;
+      const notifiedCutoff = now - NOTIFIED_TTL_MS;
       let changed = false;
       for (const [id, entry] of this.sessionMap) {
-        if (entry.createdAt < cutoff) {
-          this.log("cleanup.stale", { approvalId: id });
+        if (entry.createdAt < trackedCutoff) {
+          this.log("cleanup.stale-tracked", { approvalId: id });
           this.sessionMap.delete(id);
+          changed = true;
+        }
+      }
+      for (const [id, entry] of this.notified) {
+        if (entry.notifiedAt < notifiedCutoff) {
+          this.notified.delete(id);
           changed = true;
         }
       }
@@ -222,42 +260,125 @@ export class ApprovalWatcher {
   // ── Event handling ────────────────────────────────────────────────
 
   private onApprovalResolved(event: ApprovalEvent): void {
-    // Notify via subagent in the original session.
-    let tracked = this.sessionMap.get(event.approval_id);
-    // If not in memory, another watcher instance may have written it to disk.
-    // Reload from disk and try again.
-    if (!tracked) {
-      this.loadPersistedMap();
-      tracked = this.sessionMap.get(event.approval_id);
-      if (tracked) {
-        this.log("notify.recovered-from-disk", { approvalId: event.approval_id });
-      }
+    // Layer 1 (process-local dedup). If we've already notified for this
+    // approval in this process, do nothing. Prevents the "reconcile burst"
+    // bug where reconnect fires reconcile, which polls /api/approvals/:id
+    // and re-invokes onApprovalResolved for ids we already handled.
+    if (this.notified.has(event.approval_id)) {
+      this.log("notify.duplicate", { approvalId: event.approval_id });
+      return;
     }
-    if (tracked) {
-      this.sessionMap.delete(event.approval_id);
-      this.persistMap();
-      const { sessionKey, context } = tracked;
-      const message = formatApprovalMessage(event);
-      const fullMessage = `System: ${message}`;
 
-      if (this.subagentRun) {
-        this.log("notify.subagent", { approvalId: event.approval_id, sessionKey, message, context });
-        this.subagentRun({
-          sessionKey,
-          message: fullMessage,
-          deliver: true,
-          idempotencyKey: `approval-${event.approval_id}`,
-        }).then((res) => {
-          this.log("notify.subagent.ok", { approvalId: event.approval_id, runId: res?.runId });
-        }).catch((err) => {
-          const errStr = (err as Error)?.stack || String(err);
-          this.logger?.error?.(`[teenet-wallet] notify.subagent.error: ${errStr}`);
-        });
-      } else {
-        this.log("notify.no-subagent", { approvalId: event.approval_id, sessionKey });
+    // Claim + resolve the route in one step, using disk as the source of
+    // truth when instances race. This avoids the gap where one instance has
+    // already removed tracked[id] from disk but another instance has not yet
+    // materialized notified[id] in its own memory.
+    const claimed = this.claimApprovalForNotification(event.approval_id);
+    if (claimed.alreadyNotified) {
+      this.log("notify.duplicate", { approvalId: event.approval_id, source: claimed.source });
+      return;
+    }
+    const tracked = claimed.tracked;
+    if (!tracked) {
+      this.log("notify.missing-track", {
+        approvalId: event.approval_id,
+        status: event.status,
+        mapSize: this.sessionMap.size,
+        source: claimed.source,
+      });
+      return;
+    }
+    if (claimed.source === "disk") {
+      this.log("notify.recovered-from-disk", {
+        approvalId: event.approval_id,
+        sessionKey: tracked.sessionKey,
+      });
+    }
+
+    const { sessionKey, context } = tracked;
+    const message = formatApprovalMessage(event);
+    const fullMessage = `System: ${message}`;
+
+    if (!this.subagentRun) {
+      this.log("notify.no-subagent", { approvalId: event.approval_id, sessionKey });
+      return;
+    }
+
+    this.log("notify.subagent", { approvalId: event.approval_id, sessionKey, message, context });
+    this.subagentRun({
+      sessionKey,
+      message: fullMessage,
+      deliver: true,
+      idempotencyKey: `approval-${event.approval_id}`,
+    }).then((res) => {
+      this.log("notify.subagent.ok", { approvalId: event.approval_id, runId: res?.runId });
+    }).catch((err) => {
+      const errStr = (err as Error)?.stack || String(err);
+      this.logger?.error?.(`[teenet-wallet] notify.subagent.error: ${errStr}`);
+    });
+  }
+
+  private claimApprovalForNotification(approvalId: number): {
+    tracked: ApprovalTrackingEntry | null;
+    source: "memory" | "disk" | "none";
+    alreadyNotified: boolean;
+  } {
+    // Fast path: current process already owns the route.
+    const memoryTracked = this.sessionMap.get(approvalId);
+    if (memoryTracked) {
+      this.notified.set(approvalId, { notifiedAt: Date.now() });
+      this.sessionMap.delete(approvalId);
+      this.persistMap();
+      return { tracked: memoryTracked, source: "memory", alreadyNotified: false };
+    }
+
+    if (!this.storagePath) {
+      return { tracked: null, source: "none", alreadyNotified: false };
+    }
+
+    try {
+      if (!fs.existsSync(this.storagePath)) {
+        return { tracked: null, source: "none", alreadyNotified: false };
       }
-    } else {
-      this.log("notify.missing-track", { approvalId: event.approval_id, status: event.status, mapSize: this.sessionMap.size });
+      const raw = fs.readFileSync(this.storagePath, "utf8");
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { tracked: null, source: "none", alreadyNotified: false };
+      }
+
+      const obj = parsed as Record<string, unknown>;
+      const trackedSource = ((obj.tracked as Record<string, ApprovalTrackingEntry>) || {}) as Record<string, ApprovalTrackingEntry>;
+      const notifiedSource = ((obj.notified as Record<string, NotifiedEntry>) || {}) as Record<string, NotifiedEntry>;
+
+      const notified = notifiedSource[String(approvalId)];
+      if (typeof notified?.notifiedAt === "number" && notified.notifiedAt >= Date.now() - NOTIFIED_TTL_MS) {
+        this.notified.set(approvalId, { notifiedAt: notified.notifiedAt });
+        return { tracked: null, source: "disk", alreadyNotified: true };
+      }
+
+      const entry = trackedSource[String(approvalId)];
+      if (!entry?.sessionKey) {
+        return { tracked: null, source: "none", alreadyNotified: false };
+      }
+      if (typeof entry.createdAt !== "number" || entry.createdAt < Date.now() - TRACKED_TTL_MS) {
+        return { tracked: null, source: "none", alreadyNotified: false };
+      }
+
+      // Atomically rewrite persisted state for this id: tracked -> notified.
+      delete trackedSource[String(approvalId)];
+      const now = Date.now();
+      notifiedSource[String(approvalId)] = { notifiedAt: now };
+      const state: PersistedState = { tracked: trackedSource, notified: notifiedSource };
+      const tmp = `${this.storagePath}.tmp-${process.pid}-${now}`;
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+      fs.renameSync(tmp, this.storagePath);
+
+      this.notified.set(approvalId, { notifiedAt: now });
+      this.sessionMap.delete(approvalId);
+      return { tracked: entry, source: "disk", alreadyNotified: false };
+    } catch (err) {
+      this.logger?.error?.(`[teenet-wallet] claimApprovalForNotification.error`, { approvalId, error: String(err) });
+      return { tracked: null, source: "none", alreadyNotified: false };
     }
   }
 
@@ -297,23 +418,62 @@ export class ApprovalWatcher {
     }
   }
 
+  // loadPersistedMap is meant to be called exactly once, from setStoragePath()
+  // at construction. Calling it later (e.g. from onApprovalResolved as a
+  // "not-in-memory fallback") has historically caused ghost notifications:
+  // it silently merged stale disk entries back into the in-memory map,
+  // which then survived to the next reconnect's reconcile pass and fired
+  // as duplicate notifications. The replace-not-merge semantics here make
+  // that failure mode explicit if it ever happens again.
+  //
+  // Persisted shape: `{tracked: {...}, notified: {...}}`. The legacy flat
+  // shape (where the entire object was a tracked map) is still accepted
+  // on read for backward compat — older files will be transparently
+  // upgraded on the next write.
   private loadPersistedMap(): void {
     if (!this.storagePath) return;
     try {
       if (!fs.existsSync(this.storagePath)) return;
       const raw = fs.readFileSync(this.storagePath, "utf8");
-      const parsed = JSON.parse(raw) as Record<string, ApprovalTrackingEntry>;
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      let restored = 0;
-      for (const [approvalId, entry] of Object.entries(parsed || {})) {
+      const parsed = JSON.parse(raw) as unknown;
+
+      let trackedSource: Record<string, ApprovalTrackingEntry> = {};
+      let notifiedSource: Record<string, NotifiedEntry> = {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const obj = parsed as Record<string, unknown>;
+        if ("tracked" in obj || "notified" in obj) {
+          trackedSource = (obj.tracked as Record<string, ApprovalTrackingEntry>) || {};
+          notifiedSource = (obj.notified as Record<string, NotifiedEntry>) || {};
+        } else {
+          // Legacy flat shape: whole object is tracked.
+          trackedSource = obj as Record<string, ApprovalTrackingEntry>;
+        }
+      }
+
+      const now = Date.now();
+      const trackedCutoff = now - TRACKED_TTL_MS;
+      const nextTracked = new Map<number, ApprovalTrackingEntry>();
+      for (const [approvalId, entry] of Object.entries(trackedSource)) {
         const id = Number(approvalId);
         if (!Number.isFinite(id) || !entry?.sessionKey) continue;
-        if (entry.createdAt < cutoff) continue; // skip stale entries
-        this.sessionMap.set(id, entry);
-        restored++;
+        if (entry.createdAt < trackedCutoff) continue;
+        nextTracked.set(id, entry);
       }
-      if (restored > 0) {
-        this.log("persist.load", { restored, total: Object.keys(parsed || {}).length });
+      this.sessionMap = nextTracked;
+
+      const notifiedCutoff = now - NOTIFIED_TTL_MS;
+      const nextNotified = new Map<number, NotifiedEntry>();
+      for (const [approvalId, entry] of Object.entries(notifiedSource)) {
+        const id = Number(approvalId);
+        if (!Number.isFinite(id)) continue;
+        const ts = typeof entry?.notifiedAt === "number" ? entry.notifiedAt : 0;
+        if (ts < notifiedCutoff) continue;
+        nextNotified.set(id, { notifiedAt: ts });
+      }
+      this.notified = nextNotified;
+
+      if (nextTracked.size > 0 || nextNotified.size > 0) {
+        this.log("persist.load", { tracked: nextTracked.size, notified: nextNotified.size });
       }
     } catch (err) {
       this.logger?.error?.(`[teenet-wallet] loadPersistedMap.error`, { error: String(err) });
@@ -325,11 +485,23 @@ export class ApprovalWatcher {
     try {
       const dir = path.dirname(this.storagePath);
       fs.mkdirSync(dir, { recursive: true });
-      const obj: Record<string, ApprovalTrackingEntry> = {};
+      const tracked: Record<string, ApprovalTrackingEntry> = {};
       for (const [approvalId, entry] of this.sessionMap.entries()) {
-        obj[String(approvalId)] = entry;
+        tracked[String(approvalId)] = entry;
       }
-      fs.writeFileSync(this.storagePath, JSON.stringify(obj, null, 2));
+      const notified: Record<string, NotifiedEntry> = {};
+      for (const [approvalId, entry] of this.notified.entries()) {
+        notified[String(approvalId)] = entry;
+      }
+      const state: PersistedState = { tracked, notified };
+      // Atomic write: stage to a unique temp file, then rename into place.
+      // POSIX rename within one filesystem is atomic, so concurrent readers
+      // always see either the old content or the full new content — never
+      // a truncated/torn file that a `writeFileSync` could leave if the
+      // process is killed mid-write.
+      const tmp = `${this.storagePath}.tmp-${process.pid}-${Date.now()}`;
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+      fs.renameSync(tmp, this.storagePath);
     } catch (err) {
       this.logger?.error?.(`[teenet-wallet] persistMap.error`, { error: String(err) });
     }

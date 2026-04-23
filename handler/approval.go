@@ -498,6 +498,13 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			"category", category, "error", rawMsg)
 		h.db.Model(&approval).Update("status", "failed")
 		h.broadcastApproval(approval, "failed", "signing error: "+category)
+		// Resolve the pending audit log so history doesn't show the entry
+		// stuck at "pending" after the approval actually finished.
+		updateAuditByApprovalID(h.db, approval.ID, "failed", map[string]interface{}{
+			"type":  approval.ApprovalType,
+			"stage": "signing",
+			"category": category,
+		})
 		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed", gin.H{
 			"stage": "signing", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"category": category,
@@ -561,7 +568,14 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				releaseDailySpentUSD(h.db, preDeductWalletID, preDeductedUSD)
 			}
 			h.db.Model(&approval).Update("status", "failed")
-			h.broadcastApproval(approval, "failed", "broadcast error: "+broadcastErr.Error())
+			h.broadcastApproval(approval, "failed", "broadcast error: "+sanitizeErrString(broadcastErr))
+			// Resolve the pending audit log so history doesn't show the entry
+			// stuck at "pending" after the approval actually finished.
+			updateAuditByApprovalID(h.db, approval.ID, "failed", map[string]interface{}{
+				"type":  approval.ApprovalType,
+				"stage": "broadcast",
+				"error": sanitizeErrString(broadcastErr),
+			})
 			respondBroadcastErrorDetails(c, broadcastErr, gin.H{
 				"approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
 			})
