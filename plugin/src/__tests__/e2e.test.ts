@@ -222,37 +222,52 @@ describe("Approvals", () => {
 // ─── SSE ────────────────────────────────────────────────────────────────────
 
 describe("SSE", () => {
+  // IMPORTANT: every test here MUST clean up its AbortController / ApprovalWatcher
+  // in a `finally` block. On assertion failure (e.g. invalid API_KEY returning
+  // 401 instead of 200), skipping cleanup leaks the pending reconnect setTimeout
+  // inside ApprovalWatcher and keeps the node test runner process alive
+  // indefinitely — retrying the SSE connect every ~60s forever.
+
   it("connect and receive connected message", async () => {
     const ctrl = new AbortController();
-    const res = await fetch(`${API_URL}/api/events/stream`, {
-      headers: { Authorization: `Bearer ${API_KEY}` },
-      signal: ctrl.signal,
-    });
-    assert.equal(res.status, 200);
-    assert.ok(res.headers.get("content-type")?.includes("text/event-stream"));
-    const reader = res.body!.getReader();
-    const { value } = await reader.read();
-    assert.ok(new TextDecoder().decode(value).includes("connected"));
-    ctrl.abort();
+    try {
+      const res = await fetch(`${API_URL}/api/events/stream`, {
+        headers: { Authorization: `Bearer ${API_KEY}` },
+        signal: ctrl.signal,
+      });
+      assert.equal(res.status, 200);
+      assert.ok(res.headers.get("content-type")?.includes("text/event-stream"));
+      const reader = res.body!.getReader();
+      const { value } = await reader.read();
+      assert.ok(new TextDecoder().decode(value).includes("connected"));
+    } finally {
+      ctrl.abort();
+    }
   });
 
   it("ApprovalWatcher connects", async () => {
     const w = new ApprovalWatcher(api);
-    w.start();
-    await new Promise((r) => setTimeout(r, 1500));
-    assert.ok(w.isConnected);
-    w.stop();
+    try {
+      w.start();
+      await new Promise((r) => setTimeout(r, 1500));
+      assert.ok(w.isConnected);
+    } finally {
+      w.stop();
+    }
     assert.ok(!w.isConnected);
   });
 
   it("subagent run wired", async () => {
     const w = new ApprovalWatcher(api);
-    const calls: any[] = [];
-    w.setSubagentRun(async (opts) => { calls.push(opts); return { runId: "mock" }; });
-    w.start();
-    await new Promise((r) => setTimeout(r, 1500));
-    assert.ok(w.isConnected);
-    w.stop();
+    try {
+      const calls: any[] = [];
+      w.setSubagentRun(async (opts) => { calls.push(opts); return { runId: "mock" }; });
+      w.start();
+      await new Promise((r) => setTimeout(r, 1500));
+      assert.ok(w.isConnected);
+    } finally {
+      w.stop();
+    }
   });
 });
 
