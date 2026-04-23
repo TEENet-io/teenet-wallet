@@ -98,7 +98,6 @@ func main() {
 		log.Fatalf("get underlying sql.DB: %v", err)
 	}
 	defer sqlDB.Close()
-	defer chain.StopNonceCleanup()
 	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		slog.Warn("failed to set WAL mode", "error", err)
 	}

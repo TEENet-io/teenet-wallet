@@ -453,6 +453,11 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				jsonErrorDetails(c, http.StatusInternalServerError, "invalid stored tx params", gin.H{"stage": "unmarshal_tx_params", "approval_id": approval.ID, "chain": wallet.Chain})
 				return
 			}
+			// Serialize EVM fetch-nonce → sign → broadcast for this address so
+			// concurrent approvals (or a parallel direct transfer) cannot pick
+			// the same nonce.
+			unlock := chain.LockAddr(cfg.RPCURL, wallet.Address)
+			defer unlock()
 			freshTx, buildErr := chain.RebuildETHTx(cfg.RPCURL, ethParams)
 			if buildErr != nil {
 				reason := extractRevertReason(buildErr)

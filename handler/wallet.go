@@ -686,6 +686,11 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 
 	switch chainCfg.Family {
 	case "evm":
+		// Serialize EVM fetch-nonce → sign → broadcast for this address so
+		// concurrent transfers from the same wallet cannot pick the same nonce.
+		unlock := chain.LockAddr(rpcURL, wallet.Address)
+		defer unlock()
+
 		// Validate and normalize recipient address.
 		toAddr, addrErr := normalizeEVMAddress(req.To)
 		if addrErr != nil {
@@ -1270,7 +1275,6 @@ func broadcastSigned(wallet model.Wallet, txParamsJSON string, sig []byte) (stri
 		}
 		txHash, err := chain.AssembleAndBroadcastETH(cfg.RPCURL, params, sig, wallet.Address)
 		if err != nil {
-			chain.ResetNonceForChain(cfg.RPCURL, wallet.Address)
 			return "", err
 		}
 		return txHash, nil

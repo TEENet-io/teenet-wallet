@@ -102,30 +102,11 @@ type ethChainParams struct {
 	chainID              *big.Int
 }
 
-// fetchETHChainParams queries nonce (via NonceManager), gas fees, and chain ID.
+// fetchETHChainParams queries the pending nonce, gas fees, and chain ID
+// directly from the RPC on every call (no local caching). Callers must hold
+// LockAddr(rpcURL, fromAddr) across fetch → sign → broadcast so that
+// concurrent flows against the same address cannot pick the same nonce.
 func fetchETHChainParams(rpcURL, fromAddr string) (*ethChainParams, error) {
-	nonce, err := nonceMgr.AcquireNonce(rpcURL, fromAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	maxFee, priorityFee, chainID, err := fetchGasFeesAndChainID(rpcURL)
-	if err != nil {
-		nonceMgr.ResetNonce(rpcURL, fromAddr) // chain-specific reset
-		return nil, err
-	}
-
-	return &ethChainParams{
-		nonce:                nonce,
-		maxFeePerGas:         maxFee,
-		maxPriorityFeePerGas: priorityFee,
-		chainID:              chainID,
-	}, nil
-}
-
-// fetchETHChainParamsFresh queries nonce directly from the chain (bypassing the
-// NonceManager). Used by RebuildETHTx at approval time.
-func fetchETHChainParamsFresh(rpcURL, fromAddr string) (*ethChainParams, error) {
 	nonce, err := fetchNonceFromChain(rpcURL, fromAddr)
 	if err != nil {
 		return nil, err
@@ -321,7 +302,7 @@ func RebuildETHTx(rpcURL string, params ETHTxParams) (*ETHTxData, error) {
 	if rpcURL == "" {
 		return nil, fmt.Errorf("ETH_RPC_URL is not configured")
 	}
-	cp, err := fetchETHChainParamsFresh(rpcURL, params.From)
+	cp, err := fetchETHChainParams(rpcURL, params.From)
 	if err != nil {
 		return nil, fmt.Errorf("refresh chain params: %w", err)
 	}

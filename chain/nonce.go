@@ -4,116 +4,15 @@
 package chain
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"strings"
-	"sync"
-	"time"
 )
 
-type nonceEntry struct {
-	nonce    uint64
-	lastUsed time.Time
-}
-
-// NonceManager tracks per-address nonces to avoid concurrent nonce collisions.
-// When multiple transactions are built concurrently for the same address, fetching
-// the nonce from the chain for each one would return the same value, causing all
-// but the first broadcast to fail. The NonceManager increments a local counter
-// after each acquisition so concurrent callers get sequential nonces.
-type NonceManager struct {
-	mu     sync.Mutex
-	nonces map[string]*nonceEntry
-}
-
-var nonceMgr = &NonceManager{nonces: make(map[string]*nonceEntry)}
-
-var nonceCleanupCancel context.CancelFunc
-
-func init() {
-	ctx, cancel := context.WithCancel(context.Background())
-	nonceCleanupCancel = cancel
-	go nonceMgr.cleanup(ctx)
-}
-
-// StopNonceCleanup cancels the background nonce cleanup goroutine.
-func StopNonceCleanup() {
-	if nonceCleanupCancel != nil {
-		nonceCleanupCancel()
-	}
-}
-
-func (nm *NonceManager) cleanup(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			nm.mu.Lock()
-			cutoff := time.Now().Add(-30 * time.Minute)
-			for key, entry := range nm.nonces {
-				if entry.lastUsed.Before(cutoff) {
-					delete(nm.nonces, key)
-				}
-			}
-			nm.mu.Unlock()
-		}
-	}
-}
-
-// AcquireNonce returns the next nonce for the given address. On the first call
-// (or after a reset) it fetches the pending nonce from the chain. Subsequent
-// calls return locally-incremented values.
-func (nm *NonceManager) AcquireNonce(rpcURL, address string) (uint64, error) {
-	key := rpcURL + ":" + address
-	nm.mu.Lock()
-	defer nm.mu.Unlock()
-	if entry, ok := nm.nonces[key]; ok {
-		entry.lastUsed = time.Now()
-		n := entry.nonce
-		entry.nonce++
-		return n, nil
-	}
-	onChainNonce, err := fetchNonceFromChain(rpcURL, address)
-	if err != nil {
-		return 0, err
-	}
-	nm.nonces[key] = &nonceEntry{nonce: onChainNonce + 1, lastUsed: time.Now()}
-	return onChainNonce, nil
-}
-
-// ResetNonce removes the cached nonce for an address on a specific chain,
-// forcing the next AcquireNonce call to re-fetch from the chain.
-// Should be called after a broadcast failure.
-func (nm *NonceManager) ResetNonce(rpcURL, address string) {
-	key := rpcURL + ":" + address
-	nm.mu.Lock()
-	delete(nm.nonces, key)
-	nm.mu.Unlock()
-}
-
-// ResetNonceForChain is a package-level convenience to reset the cached nonce
-// for an address on a specific chain.
-func ResetNonceForChain(rpcURL, address string) {
-	nonceMgr.ResetNonce(rpcURL, address)
-}
-
-// ResetNonce removes all cached nonces for an address across all chains.
-// Prefer ResetNonceForChain when the rpcURL is known.
-func ResetNonce(address string) {
-	nonceMgr.mu.Lock()
-	for key := range nonceMgr.nonces {
-		if strings.HasSuffix(key, ":"+address) {
-			delete(nonceMgr.nonces, key)
-		}
-	}
-	nonceMgr.mu.Unlock()
-}
-
-// fetchNonceFromChain queries eth_getTransactionCount for the pending nonce.
+// fetchNonceFromChain queries eth_getTransactionCount with the "pending" tag,
+// which counts confirmed txs plus any currently in the RPC node's mempool.
+// Callers should serialize same-address access via LockAddr so the returned
+// value stays consistent across the fetch → sign → broadcast sequence.
 func fetchNonceFromChain(rpcURL, address string) (uint64, error) {
 	nonceRaw, err := jsonRPCWithRetry(rpcURL, map[string]interface{}{
 		"jsonrpc": "2.0", "method": "eth_getTransactionCount",

@@ -190,12 +190,16 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 		}
 	}
 
+	// Serialize EVM fetch-nonce → sign → broadcast for this address so
+	// concurrent contract calls from the same wallet cannot pick the same nonce.
+	unlock := chain.LockAddr(chainCfg.RPCURL, wallet.Address)
+	defer unlock()
+
 	// Build tx (hits RPC) before the approval check — both paths need ETHTxParams for correctness.
 	// The approval path stores ETHTxParams so RebuildETHTx can refresh nonce/gas on approve,
 	// consistent with how /transfer works.
 	txData, buildErr := chain.BuildETHContractCallTx(chainCfg.RPCURL, wallet.Address, contractAddr, calldata, valueWei)
 	if buildErr != nil {
-		chain.ResetNonceForChain(chainCfg.RPCURL, wallet.Address)
 		selector := ""
 		if len(calldata) >= 4 {
 			selector = "0x" + hex.EncodeToString(calldata[:4])
@@ -642,12 +646,16 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 		return
 	}
 
-	// Build tx (hits RPC).
+	// Serialize EVM fetch-nonce → sign → broadcast for this address so
+	// concurrent approves from the same wallet cannot pick the same nonce.
 	rpcURL := chainCfg.RPCURL
 	walletAddr := wallet.Address
+	unlock := chain.LockAddr(rpcURL, walletAddr)
+	defer unlock()
+
+	// Build tx (hits RPC).
 	txData, buildErr := chain.BuildETHContractCallTx(rpcURL, walletAddr, contractAddr, calldata, nil)
 	if buildErr != nil {
-		chain.ResetNonceForChain(rpcURL, walletAddr)
 		respondBuildTxFailed(c, wallet, "approve-token build tx failed", buildErr,
 			gin.H{"contract": contractAddr, "spender": spenderAddr, "action": auditAction, "rpc_host": chain.HostOnly(rpcURL)},
 			gin.H{"contract": contractAddr, "spender": spenderAddr, "action": auditAction})
