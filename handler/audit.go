@@ -65,8 +65,7 @@ func (h *AuditHandler) ListLogs(c *gin.Context) {
 
 	var logs []model.AuditLog
 	if err := q.Order("created_at desc").Limit(limit).Offset(offset).Find(&logs).Error; err != nil {
-		slog.Error("list audit logs failed", "user_id", userID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "list_audit_logs", "user_id": userID})
+		respondInternalError(c, "db error", err, gin.H{"stage": "list_audit_logs", "user_id": userID})
 		return
 	}
 

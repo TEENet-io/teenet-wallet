@@ -700,6 +700,54 @@ func TestContractCall_InvalidFuncSig(t *testing.T) {
 	}
 }
 
+// TestContractCall_UnreachableRPC_DoesNotLeakProviderToken guards
+// respondContractCallStageError against leaking the RPC URL (and any
+// provider token in its path) when eth_estimateGas fails at transport
+// level. Pairs with TestTransfer_ERC20_UnreachableRPC_DoesNotLeakProviderToken
+// to cover the two main EVM error paths.
+func TestContractCall_UnreachableRPC_DoesNotLeakProviderToken(t *testing.T) {
+	db := testDB(t)
+	user, wallet, _ := seedWalletWithContract(t, db)
+
+	// Bind a server just to reserve a port, then close so requests get a
+	// transport-level "connection refused" error carrying the full URL.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	baseURL := srv.URL
+	srv.Close()
+	const secretToken = "SECRET_QN_TOKEN_CC" //nolint:gosec // synthetic test value
+	fakeRPC := baseURL + "/" + secretToken + "/v1/"
+
+	r := contractCallRouter(t, db, user.ID, "passkey", fakeRPC)
+	body := jsonBody(map[string]interface{}{
+		"contract": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+		"func_sig": "approve(address,uint256)",
+		"args":     []interface{}{"0x1234567890123456789012345678901234567890", "1000000"},
+	})
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/wallets/%s/contract-call", wallet.ID), body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 on unreachable RPC, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not JSON: %v\n%s", err, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), secretToken) {
+		t.Fatalf("response body leaked provider token %q: %s", secretToken, w.Body.String())
+	}
+	rpcError, _ := resp["rpc_error"].(string)
+	if rpcError == "" {
+		t.Fatalf("rpc_error field missing or empty: %s", w.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rpcError), "connection refused") &&
+		!strings.Contains(strings.ToLower(rpcError), "connect") {
+		t.Fatalf("rpc_error lost its diagnostic tail, got: %s", rpcError)
+	}
+}
+
 func TestContractCall_EstimateGasRevert_PropagatesReason(t *testing.T) {
 	db := testDB(t)
 	user, wallet, _ := seedWalletWithContract(t, db)

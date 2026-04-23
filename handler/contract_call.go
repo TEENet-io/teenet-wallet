@@ -127,7 +127,7 @@ func respondContractCallStageError(c *gin.Context, status int, stage string, msg
 		"debug":         contractCallDebug(wallet, contractAddr, methodName, funcSig, args, value, selector, calldataLen),
 	}
 	if err != nil {
-		details["rpc_error"] = err.Error()
+		details["rpc_error"] = sanitizeErrString(err)
 	}
 	jsonErrorDetails(c, status, msg, details)
 }
@@ -298,7 +298,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
-			jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval"})
+			respondInternalError(c, "create approval request failed", err, gin.H{"stage": "create_approval", "wallet_id": wallet.ID})
 			return
 		}
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
@@ -323,8 +323,7 @@ func (h *ContractCallHandler) contractCallEVM(c *gin.Context, wallet model.Walle
 				deductedUSDStr := new(big.Float).SetFloat64(effectiveUSD).Text('f', 6)
 				exceeded, msg, limitErr := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
 				if limitErr != nil {
-					slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", limitErr)
-					jsonError(c, http.StatusInternalServerError, "failed to check daily limit")
+					respondInternalError(c, "failed to check daily limit", limitErr, gin.H{"stage": "daily_limit_check", "wallet_id": wallet.ID})
 					return
 				}
 				if exceeded {
@@ -424,14 +423,9 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 	// Build tx
 	txData, buildErr := chain.BuildSOLProgramCallTx(chainCfg.RPCURL, wallet.Address, programID, req.Accounts, instrData)
 	if buildErr != nil {
-		slog.Error("solana program-call build tx failed",
-			"wallet_id", wallet.ID, "chain", wallet.Chain,
-			"program_id", programID, "error", buildErr.Error(),
-		)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build program call transaction", gin.H{
-			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-			"program_id": programID,
-		})
+		respondBuildTxFailed(c, wallet, "solana program-call build tx failed", buildErr,
+			gin.H{"program_id": programID},
+			gin.H{"program_id": programID})
 		return
 	}
 	txParamsJSON, _ := json.Marshal(txData.Params)
@@ -478,7 +472,7 @@ func (h *ContractCallHandler) contractCallSolana(c *gin.Context, wallet model.Wa
 			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
-			jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval"})
+			respondInternalError(c, "create approval request failed", err, gin.H{"stage": "create_approval", "wallet_id": wallet.ID})
 			return
 		}
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)
@@ -654,16 +648,9 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 	txData, buildErr := chain.BuildETHContractCallTx(rpcURL, walletAddr, contractAddr, calldata, nil)
 	if buildErr != nil {
 		chain.ResetNonceForChain(rpcURL, walletAddr)
-		slog.Error("approve-token build tx failed",
-			"wallet_id", wallet.ID, "chain", wallet.Chain,
-			"contract", contractAddr, "spender", spenderAddr,
-			"action", auditAction, "error", buildErr.Error(),
-		)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build approve transaction", gin.H{
-			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-			"contract": contractAddr, "spender": spenderAddr, "action": auditAction,
-			"revert_reason": extractRevertReason(buildErr),
-		})
+		respondBuildTxFailed(c, wallet, "approve-token build tx failed", buildErr,
+			gin.H{"contract": contractAddr, "spender": spenderAddr, "action": auditAction, "rpc_host": chain.HostOnly(rpcURL)},
+			gin.H{"contract": contractAddr, "spender": spenderAddr, "action": auditAction})
 		return
 	}
 
@@ -708,7 +695,7 @@ func (h *ContractCallHandler) executeApprove(c *gin.Context, contractRaw, spende
 			ExpiresAt:   time.Now().Add(h.approvalExpiry),
 		}
 		if err := h.db.Create(&approval).Error; err != nil {
-			jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval"})
+			respondInternalError(c, "create approval request failed", err, gin.H{"stage": "create_approval", "wallet_id": wallet.ID})
 			return
 		}
 		approvalURL := fmt.Sprintf("%s/#/approve/%d", requestBaseURL(c, h.baseURL), approval.ID)

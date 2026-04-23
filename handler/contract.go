@@ -5,7 +5,6 @@ package handler
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -122,8 +121,7 @@ func (h *ContractHandler) AddContract(c *gin.Context) {
 			jsonError(c, http.StatusConflict, "contract already whitelisted for this chain")
 			return
 		}
-		slog.Error("contract add failed", "wallet_id", wallet.ID, "contract", addr, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "contract_add", "wallet_id": wallet.ID, "contract": addr})
+		respondInternalError(c, "db error", err, gin.H{"stage": "contract_add", "wallet_id": wallet.ID, "contract": addr})
 		return
 	}
 	writeAuditCtx(h.db, c, "contract_add", "success", &wallet.ID, map[string]interface{}{
@@ -142,8 +140,7 @@ func (h *ContractHandler) ListContracts(c *gin.Context) {
 
 	var contracts []model.AllowedContract
 	if err := h.db.Where("user_id = ? AND chain = ?", wallet.UserID, wallet.Chain).Order("created_at asc").Find(&contracts).Error; err != nil {
-		slog.Error("contract list failed", "wallet_id", wallet.ID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "contract_list", "wallet_id": wallet.ID})
+		respondInternalError(c, "db error", err, gin.H{"stage": "contract_list", "wallet_id": wallet.ID})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "contracts": contracts})
@@ -200,6 +197,15 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 		proposed.Decimals = *req.Decimals
 	}
 
+	// Short-circuit if the proposed state is identical to existing — avoids a
+	// no-op pending approval (API-key path) or a no-op audit entry (passkey path).
+	if proposed.Label == existing.Label &&
+		proposed.Symbol == existing.Symbol &&
+		proposed.Decimals == existing.Decimals {
+		c.JSON(http.StatusOK, gin.H{"success": true, "contract": existing})
+		return
+	}
+
 	// API key path: create approval request.
 	if !isPasskeyAuth(c) {
 		approval, created := createPendingApproval(h.db, c, &wallet.ID, "contract_update", proposed, h.approvalExpiry)
@@ -235,8 +241,7 @@ func (h *ContractHandler) UpdateContract(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&existing).Updates(updates).Error; err != nil {
-		slog.Error("contract update failed", "contract_id", cid, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "contract_update", "contract_id": cid})
+		respondInternalError(c, "update failed", err, gin.H{"stage": "contract_update", "contract_id": cid})
 		return
 	}
 	writeAuditCtx(h.db, c, "contract_update", "success", &wallet.ID, map[string]interface{}{
@@ -269,8 +274,7 @@ func (h *ContractHandler) DeleteContract(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&contract).Error; err != nil {
-		slog.Error("contract delete failed", "contract_id", cid, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "delete failed", gin.H{"stage": "contract_delete", "contract_id": cid})
+		respondInternalError(c, "delete failed", err, gin.H{"stage": "contract_delete", "contract_id": cid})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})

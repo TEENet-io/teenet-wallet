@@ -262,14 +262,21 @@ Tool errors include structured fields. Use `stage` first.
 
 | `stage` | Meaning |
 |---------|---------|
-| `build_tx` | tx assembly / ABI encoding failed before simulation — verify `func_sig`, selector, tuple shape, args |
+| `build_tx` | tx assembly / ABI encoding failed before simulation — verify `func_sig`, selector, tuple shape, args; on `/transfer`, `/wrap-sol`, `/unwrap-sol`, `/approve-token` this also covers `eth_estimateGas` revert and insufficient balance |
 | `estimate_gas` | tx built but `eth_estimateGas` reverted on chain — check `revert_reason`, balance, allowance, fee tier, pool liquidity |
-| `signing` | TEE signing failed; retry |
+| `signing` | TEE signing failed; inspect `category` (`timeout`, `tee_unavailable`, `threshold_not_reached`, `cancelled`, `sdk_error`) and retry |
 | `broadcast` | RPC rejected the tx; check nonce, gas price, chain health |
-| `key_generation` | wallet creation failed; retry after a short wait |
+| `key_generation` | wallet creation failed; inspect `category` and retry after a short wait |
 | `balance_query` | RPC read failed; retry |
 | `eth_call` | read call failed; check contract and signature |
 | `faucet_request` | faucet unavailable |
+
+Key structured fields:
+
+- `revert_reason` — decoded Solidity `Error(string)` from an EVM revert; present on build_tx/estimate_gas when the on-chain call rejected the tx.
+- `rpc_error` — sanitized external error text; any URL in the message is redacted to `<url>` so provider tokens never leak.
+- `category` — stable bucket for signing / key-generation failures.
+- `request_id` — correlation ID on 5xx responses. Quote it to operators; the full error is in the server log keyed by the same ID. 5xx bodies deliberately omit raw error text.
 
 Common user-facing errors:
 - `insufficient funds`: not enough balance, usually including gas
@@ -295,7 +302,7 @@ For Uniswap-style EVM swaps:
 - approve the router with `teenet_wallet_approve_token` if allowance insufficient
 - do not test with 100% of balance; leave headroom (start with 50% or less, often much less — `1 USDC`, `0.0005 WETH`)
 - set conservative `amountOutMinimum` (50–80% of quote)
-- HTTP `422` on `contract_call` with `stage: "estimate_gas"` means `eth_estimateGas` reverted on chain, not that the backend crashed — read `revert_reason` before retrying
+- HTTP `422` on `contract_call` with `stage: "estimate_gas"` or on `transfer` / `wrap_sol` / `unwrap_sol` / `approve_token` with `stage: "build_tx"` means the RPC rejected the transaction before signing (revert, insufficient balance, or bad params) — read `revert_reason` and the URL-sanitized `rpc_error` before retrying
 - if a prior successful tx exists, compare its on-chain input selector to your intended `func_sig` before retrying
 
 ## Explorer Links

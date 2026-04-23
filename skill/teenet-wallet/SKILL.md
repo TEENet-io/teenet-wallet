@@ -325,7 +325,12 @@ For every step: explain before, show result after, and if approval is needed, sh
 
 ## Error Handling
 
-Check structured fields such as `stage`, `chain`, `contract`, `func_sig`, `selector`, and `revert_reason`.
+Check structured fields such as `stage`, `chain`, `contract`, `func_sig`, `selector`, `revert_reason`, `rpc_error`, `category`, and `request_id`.
+
+- `revert_reason` — decoded Solidity `Error(string)` from an EVM revert.
+- `rpc_error` — sanitized external error text; any URL is redacted to `<url>` so provider tokens (e.g. QuickNode) don't leak.
+- `category` — stable bucket for signing / key-generation failures: `timeout`, `tee_unavailable`, `threshold_not_reached`, `cancelled`, `sdk_error`.
+- `request_id` — correlation ID on 5xx responses. Quote this to operators; the full error lives in the server log keyed by the same ID. 5xx bodies deliberately omit raw error text.
 
 Use `stage` first:
 
@@ -359,7 +364,7 @@ For Uniswap-style EVM swaps:
 - quote first with `/call-read`
 - check balance and allowance first
 - do not test with 100% of balance; leave headroom
-- HTTP `422` on `/contract-call` with `stage: "estimate_gas"` means `eth_estimateGas` reverted on chain, not that the backend crashed — read `revert_reason` before retrying
+- HTTP `422` on `/contract-call` with `stage: "estimate_gas"` or on `/transfer` / `/wrap-sol` / `/unwrap-sol` with `stage: "build_tx"` means the RPC rejected the transaction before signing (commonly `eth_estimateGas` revert, insufficient balance, or bad params) — read `revert_reason` (decoded Solidity `Error(string)`) and the URL-sanitized `rpc_error` before retrying
 
 ## Explorer Links
 

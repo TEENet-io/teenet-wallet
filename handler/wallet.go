@@ -145,25 +145,33 @@ func (h *WalletHandler) CreateWallet(c *gin.Context) {
 		CreatedAt: time.Now(),
 	}
 	if err := h.db.Create(&wallet).Error; err != nil {
-		slog.Error("wallet create db insert failed", "user_id", userID, "chain", req.Chain, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "wallet_create", "chain": req.Chain})
+		respondInternalError(c, "db error", err, gin.H{"stage": "wallet_create", "chain": req.Chain})
 		return
 	}
 
 	// Generate key via TEE-DAO (may take 1-2 min for ECDSA).
 	keyResult, genErr := h.sdk.GenerateKey(c.Request.Context(), chainCfg.Protocol, chainCfg.Curve)
 	if genErr != nil || !keyResult.Success {
-		msg := "key generation failed"
+		var rawMsg string
 		if genErr != nil {
-			msg = genErr.Error()
+			rawMsg = genErr.Error()
 		} else if keyResult != nil {
-			msg = keyResult.Message
+			rawMsg = keyResult.Message
 		}
-		slog.Error("wallet key generation failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "protocol", chainCfg.Protocol, "error", msg)
+		category := "sdk_error"
+		if genErr != nil {
+			category = categorizeSigningError(genErr)
+		} else if rawMsg != "" {
+			category = categorizeSigningError(errors.New(rawMsg))
+		}
+		slog.Error("wallet key generation failed",
+			"wallet_id", wallet.ID, "chain", wallet.Chain, "protocol", chainCfg.Protocol,
+			"category", category, "error", rawMsg)
 		h.db.Model(&wallet).Updates(map[string]interface{}{"status": "error"})
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, msg, gin.H{
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "key generation failed", gin.H{
 			"stage": "key_generation", "wallet_id": wallet.ID, "chain": wallet.Chain,
 			"protocol": chainCfg.Protocol, "curve": chainCfg.Curve,
+			"category": category,
 		})
 		return
 	}
@@ -208,8 +216,7 @@ func (h *WalletHandler) ListWallets(c *gin.Context) {
 	}
 	var wallets []model.Wallet
 	if err := h.db.Where("user_id = ?", userID).Order("created_at desc").Find(&wallets).Error; err != nil {
-		slog.Error("list wallets db query failed", "user_id", userID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "list_wallets"})
+		respondInternalError(c, "db error", err, gin.H{"stage": "list_wallets"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "wallets": wallets})
@@ -256,8 +263,7 @@ func (h *WalletHandler) RenameWallet(c *gin.Context) {
 		return
 	}
 	if err := h.db.Model(&wallet).Update("label", label).Error; err != nil {
-		slog.Error("wallet rename failed", "wallet_id", wallet.ID, "label", label, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "wallet_rename", "wallet_id": wallet.ID})
+		respondInternalError(c, "update failed", err, gin.H{"stage": "wallet_rename", "wallet_id": wallet.ID})
 		return
 	}
 	wallet.Label = label
@@ -286,8 +292,7 @@ func (h *WalletHandler) DeleteWallet(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
-		slog.Error("wallet deletion failed", "wallet_id", wallet.ID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "failed to delete wallet", gin.H{"stage": "delete_wallet", "wallet_id": wallet.ID})
+		respondInternalError(c, "failed to delete wallet", err, gin.H{"stage": "delete_wallet", "wallet_id": wallet.ID})
 		return
 	}
 	// Best-effort: delete the TEE key. Log on failure but don't block the response.
@@ -362,6 +367,19 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 		}
 	}
 
+	// Short-circuit if the proposed policy matches the existing one — avoids
+	// creating a no-op pending approval (API-key path) or a no-op audit entry
+	// (passkey path) when clients re-submit identical values.
+	var policy model.ApprovalPolicy
+	policyFound := h.db.Where("wallet_id = ?", wallet.ID).First(&policy).Error == nil
+	if policyFound &&
+		policy.ThresholdUSD == req.ThresholdUSD &&
+		policy.Enabled == enabled &&
+		policy.DailyLimitUSD == req.DailyLimitUSD {
+		c.JSON(http.StatusOK, gin.H{"success": true, "policy": policy})
+		return
+	}
+
 	// API key requests create a pending approval instead of applying directly.
 	if !isPasskeyAuth(c) {
 		proposed := model.ApprovalPolicy{
@@ -388,8 +406,7 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 		return
 	}
 
-	var policy model.ApprovalPolicy
-	if h.db.Where("wallet_id = ?", wallet.ID).First(&policy).Error != nil {
+	if !policyFound {
 		policy = model.ApprovalPolicy{WalletID: wallet.ID}
 	}
 	policy.ThresholdUSD = req.ThresholdUSD
@@ -397,8 +414,7 @@ func (h *WalletHandler) SetPolicy(c *gin.Context) {
 	policy.DailyLimitUSD = req.DailyLimitUSD
 
 	if err := h.db.Save(&policy).Error; err != nil {
-		slog.Error("save approval policy failed", "wallet_id", wallet.ID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "save policy failed", gin.H{"stage": "save_policy", "wallet_id": wallet.ID})
+		respondInternalError(c, "save policy failed", err, gin.H{"stage": "save_policy", "wallet_id": wallet.ID})
 		return
 	}
 	writeAuditCtx(h.db, c, "policy_update", "success", &wallet.ID, map[string]interface{}{
@@ -434,8 +450,7 @@ func (h *WalletHandler) DeletePolicy(c *gin.Context) {
 	}
 	result := h.db.Where("wallet_id = ?", wallet.ID).Delete(&model.ApprovalPolicy{})
 	if result.Error != nil {
-		slog.Error("delete approval policy failed", "wallet_id", wallet.ID, "error", result.Error)
-		jsonErrorDetails(c, http.StatusInternalServerError, "delete failed", gin.H{"stage": "delete_policy", "wallet_id": wallet.ID})
+		respondInternalError(c, "delete failed", result.Error, gin.H{"stage": "delete_policy", "wallet_id": wallet.ID})
 		return
 	}
 	if result.RowsAffected == 0 {
@@ -528,8 +543,7 @@ func (h *WalletHandler) createApprovalRequest(c *gin.Context, wallet model.Walle
 		ExpiresAt:    time.Now().Add(h.approvalExpiry),
 	}
 	if err := h.db.Create(&approval).Error; err != nil {
-		slog.Error("create approval request failed", "wallet_id", wallet.ID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "create approval request failed", gin.H{"stage": "create_approval", "wallet_id": wallet.ID})
+		respondInternalError(c, "create approval request failed", err, gin.H{"stage": "create_approval", "wallet_id": wallet.ID})
 		return
 	}
 
@@ -568,6 +582,41 @@ type TransferRequest struct {
 	Amount string       `json:"amount" binding:"required"`
 	Memo   string       `json:"memo"`
 	Token  *TokenParams `json:"token"` // optional: ERC-20 token info
+}
+
+// respondBuildTxFailed logs a build-tx failure and returns 422 with
+// revert_reason (when extractable from an EVM revert) and a sanitized
+// rpc_error so callers see why construction failed without exposing the
+// full RPC URL (which may contain a provider token — see main.go's
+// QuickNode override).
+func respondBuildTxFailed(c *gin.Context, wallet model.Wallet, logMsg string, err error, logExtras, respExtras gin.H) {
+	reason := extractRevertReason(err)
+
+	logFields := []any{"wallet_id", wallet.ID, "chain", wallet.Chain}
+	for k, v := range logExtras {
+		logFields = append(logFields, k, v)
+	}
+	if reason != "" {
+		logFields = append(logFields, "revert_reason", reason)
+	}
+	logFields = append(logFields, "error", err.Error())
+	slog.Error(logMsg, logFields...)
+
+	details := gin.H{
+		"stage":     "build_tx",
+		"wallet_id": wallet.ID,
+		"chain":     wallet.Chain,
+		"rpc_error": sanitizeErrString(err),
+	}
+	if reason != "" {
+		details["revert_reason"] = reason
+	}
+	for k, v := range respExtras {
+		if _, exists := details[k]; !exists {
+			details[k] = v
+		}
+	}
+	jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", details)
 }
 
 // Transfer constructs a blockchain transaction in the backend, signs it via TEE, and broadcasts it.
@@ -680,11 +729,9 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txData, err := chain.BuildETHContractCallTx(rpcURL, wallet.Address, tokenContractAddr, callData, nil)
 			if err != nil {
-				slog.Error("build ERC-20 tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_host", chain.HostOnly(rpcURL), "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
-					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-					"to": req.To, "contract": tokenContractAddr,
-				})
+				respondBuildTxFailed(c, wallet, "build ERC-20 tx failed", err,
+					gin.H{"rpc_host": chain.HostOnly(rpcURL)},
+					gin.H{"to": req.To, "contract": tokenContractAddr})
 				return
 			}
 			signingMsg = txData.SigningHash
@@ -702,11 +749,9 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		} else {
 			txData, err := chain.BuildETHTx(rpcURL, wallet.Address, req.To, amount)
 			if err != nil {
-				slog.Error("build ETH tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_host", chain.HostOnly(rpcURL), "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
-					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-					"to": req.To, "amount": req.Amount,
-				})
+				respondBuildTxFailed(c, wallet, "build ETH tx failed", err,
+					gin.H{"rpc_host": chain.HostOnly(rpcURL)},
+					gin.H{"to": req.To, "amount": req.Amount})
 				return
 			}
 			signingMsg = txData.SigningHash
@@ -753,11 +798,9 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txData, err := chain.BuildSOLTokenTransferTx(rpcURL, wallet.Address, req.To, mintAddr, tokenUnits.Uint64(), decimals)
 			if err != nil {
-				slog.Error("build SPL token tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "mint", mintAddr, "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
-					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-					"to": req.To, "mint": mintAddr, "amount": req.Amount,
-				})
+				respondBuildTxFailed(c, wallet, "build SPL token tx failed", err,
+					gin.H{"mint": mintAddr},
+					gin.H{"to": req.To, "mint": mintAddr, "amount": req.Amount})
 				return
 			}
 			signingMsg = txData.MessageBytes
@@ -782,11 +825,9 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txData, err := chain.BuildSOLTxFromLamports(rpcURL, wallet.Address, req.To, lamports)
 			if err != nil {
-				slog.Error("build SOL tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "rpc_host", chain.HostOnly(rpcURL), "error", err)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
-					"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-					"to": req.To, "amount": req.Amount,
-				})
+				respondBuildTxFailed(c, wallet, "build SOL tx failed", err,
+					gin.H{"rpc_host": chain.HostOnly(rpcURL)},
+					gin.H{"to": req.To, "amount": req.Amount})
 				return
 			}
 			signingMsg = txData.MessageBytes
@@ -874,8 +915,7 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 6)
 		exceeded, msg, err := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
 		if err != nil {
-			slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", err)
-			jsonErrorDetails(c, http.StatusInternalServerError, "failed to check daily limit", gin.H{"stage": "daily_limit_check"})
+			respondInternalError(c, "failed to check daily limit", err, gin.H{"stage": "daily_limit_check", "wallet_id": wallet.ID})
 			return
 		}
 		if exceeded {
@@ -914,10 +954,13 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 				"to": req.To, "amount": req.Amount,
 			})
 		} else {
-			slog.Error("TEE signing failed", "wallet_id", wallet.ID, "key", wallet.KeyName, "error", sbErr)
+			category := categorizeSigningError(sbErr)
+			slog.Error("TEE signing failed", "wallet_id", wallet.ID, "key", wallet.KeyName,
+				"category", category, "error", sbErr.Error())
 			jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed", gin.H{
 				"stage": "signing", "wallet_id": wallet.ID, "chain": wallet.Chain,
 				"to": req.To, "amount": req.Amount,
+				"category": category,
 			})
 		}
 		return
@@ -989,10 +1032,9 @@ func (h *WalletHandler) WrapSOL(c *gin.Context) {
 	}
 	txData, err := chain.BuildSOLWrapTxFromLamports(chainCfg.RPCURL, wallet.Address, lamports)
 	if err != nil {
-		slog.Error("build wrap-sol tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", err)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
-			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain, "amount": req.Amount,
-		})
+		respondBuildTxFailed(c, wallet, "build wrap-sol tx failed", err,
+			nil,
+			gin.H{"amount": req.Amount})
 		return
 	}
 
@@ -1023,8 +1065,7 @@ func (h *WalletHandler) WrapSOL(c *gin.Context) {
 		deductedUSDStr = new(big.Float).SetFloat64(amountUSD).Text('f', 6)
 		exceeded, msg, limitErr := checkAndDeductDailyLimitUSD(h.db, wallet.ID, deductedUSDStr)
 		if limitErr != nil {
-			slog.Error("daily limit check error", "wallet_id", wallet.ID, "error", limitErr)
-			jsonErrorDetails(c, http.StatusInternalServerError, "failed to check daily limit", gin.H{"stage": "daily_limit_check"})
+			respondInternalError(c, "failed to check daily limit", limitErr, gin.H{"stage": "daily_limit_check", "wallet_id": wallet.ID})
 			return
 		}
 		if exceeded {
@@ -1114,10 +1155,7 @@ func (h *WalletHandler) UnwrapSOL(c *gin.Context) {
 
 	txData, err := chain.BuildSOLUnwrapTx(chainCfg.RPCURL, wallet.Address)
 	if err != nil {
-		slog.Error("build unwrap-sol tx failed", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", err)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to build transaction", gin.H{
-			"stage": "build_tx", "wallet_id": wallet.ID, "chain": wallet.Chain,
-		})
+		respondBuildTxFailed(c, wallet, "build unwrap-sol tx failed", err, nil, nil)
 		return
 	}
 
@@ -1324,18 +1362,22 @@ func exceedsUSDThreshold(amountUSD float64, thresholdUSD string) bool {
 }
 
 // respondBroadcastErrorDetails is like respondBroadcastError but attaches extra context fields.
+// The raw err is sanitized (URL-redacted) before going into the response, since
+// Go's net/http errors embed the full RPC URL — which may contain a provider
+// token in its path (see main.go's QuickNode override).
 func respondBroadcastErrorDetails(c *gin.Context, err error, details gin.H) {
-	msg := err.Error()
+	rawMsg := err.Error()
+	safeMsg := sanitizeErrString(err)
 	if details == nil {
 		details = gin.H{}
 	}
 	details["stage"] = "broadcast"
 	// "rpc error:" means the node responded but rejected the tx — that's a client error.
-	if strings.Contains(msg, "rpc error:") {
-		jsonErrorDetails(c, http.StatusBadRequest, "transaction rejected: "+msg, details)
+	if strings.Contains(rawMsg, "rpc error:") {
+		jsonErrorDetails(c, http.StatusBadRequest, "transaction rejected: "+safeMsg, details)
 		return
 	}
-	jsonErrorDetails(c, http.StatusUnprocessableEntity, "broadcast failed: "+msg, details)
+	jsonErrorDetails(c, http.StatusUnprocessableEntity, "broadcast failed: "+safeMsg, details)
 }
 
 // checkAndDeductDailyLimitUSD atomically checks whether adding amountUSD would exceed

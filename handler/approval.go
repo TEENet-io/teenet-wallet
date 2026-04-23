@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"math/big"
 	"net/http"
@@ -141,8 +142,7 @@ func (h *ApprovalHandler) ListPending(c *gin.Context) {
 	var pending []model.ApprovalRequest
 	if err := h.db.Where("user_id = ? AND status = ? AND expires_at > ?", userID, "pending", time.Now()).
 		Order("created_at desc").Limit(limit).Offset(offset).Find(&pending).Error; err != nil {
-		slog.Error("list pending approvals failed", "user_id", userID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "list_pending", "user_id": userID})
+		respondInternalError(c, "db error", err, gin.H{"stage": "list_pending", "user_id": userID})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "approvals": pending})
@@ -234,8 +234,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 					proposed = existing
 				}
 			} else {
-				slog.Error("failed to add contract", "approval_id", approval.ID, "contract", proposed.ContractAddress, "error", err)
-				jsonErrorDetails(c, http.StatusInternalServerError, "failed to add contract", gin.H{"stage": "create_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
+				respondInternalError(c, "failed to add contract", err, gin.H{"stage": "create_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
 				return
 			}
 		}
@@ -264,8 +263,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				"symbol":   proposed.Symbol,
 				"decimals": proposed.Decimals,
 			}).Error; err != nil {
-			slog.Error("failed to update contract", "approval_id", approval.ID, "contract", proposed.ContractAddress, "error", err)
-			jsonErrorDetails(c, http.StatusInternalServerError, "failed to update contract", gin.H{"stage": "update_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
+			respondInternalError(c, "failed to update contract", err, gin.H{"stage": "update_contract", "approval_id": approval.ID, "contract": proposed.ContractAddress})
 			return
 		}
 		approverPasskeyID := passkeyUserIDFromCtx(c)
@@ -291,8 +289,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			if strings.Contains(err.Error(), "UNIQUE") {
 				// Already exists — treat as success.
 			} else {
-				slog.Error("failed to add address book entry", "approval_id", approval.ID, "nickname", proposed.Nickname, "error", err)
-				jsonErrorDetails(c, http.StatusInternalServerError, "failed to add address book entry", gin.H{"stage": "create_addressbook", "approval_id": approval.ID, "nickname": proposed.Nickname})
+				respondInternalError(c, "failed to add address book entry", err, gin.H{"stage": "create_addressbook", "approval_id": approval.ID, "nickname": proposed.Nickname})
 				return
 			}
 		}
@@ -321,8 +318,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 				"memo":     proposed.Memo,
 			})
 		if result.Error != nil {
-			slog.Error("failed to update address book entry", "approval_id", approval.ID, "nickname", proposed.Nickname, "error", result.Error)
-			jsonErrorDetails(c, http.StatusInternalServerError, "failed to update address book entry", gin.H{"stage": "update_addressbook", "approval_id": approval.ID, "nickname": proposed.Nickname})
+			respondInternalError(c, "failed to update address book entry", result.Error, gin.H{"stage": "update_addressbook", "approval_id": approval.ID, "nickname": proposed.Nickname})
 			return
 		}
 		if result.RowsAffected == 0 {
@@ -359,8 +355,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		policy.Enabled = proposed.Enabled
 		policy.DailyLimitUSD = proposed.DailyLimitUSD
 		if err := h.db.Save(&policy).Error; err != nil {
-			slog.Error("failed to apply policy", "approval_id", approval.ID, "wallet_id", *approval.WalletID, "error", err)
-			jsonErrorDetails(c, http.StatusInternalServerError, "failed to apply policy", gin.H{"stage": "apply_policy", "approval_id": approval.ID})
+			respondInternalError(c, "failed to apply policy", err, gin.H{"stage": "apply_policy", "approval_id": approval.ID, "wallet_id": *approval.WalletID})
 			return
 		}
 		approverPasskeyID := passkeyUserIDFromCtx(c)
@@ -460,10 +455,23 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 			}
 			freshTx, buildErr := chain.RebuildETHTx(cfg.RPCURL, ethParams)
 			if buildErr != nil {
-				slog.Error("ETH tx rebuild failed", "approval_id", approval.ID, "error", buildErr)
-				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to refresh transaction params: "+buildErr.Error(), gin.H{
-					"stage": "rebuild_tx", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
-				})
+				reason := extractRevertReason(buildErr)
+				sanitized := sanitizeErrString(buildErr)
+				slog.Error("ETH tx rebuild failed",
+					"approval_id", approval.ID, "wallet_id", wallet.ID, "chain", wallet.Chain,
+					"rpc_host", chain.HostOnly(cfg.RPCURL),
+					"revert_reason", reason, "error", buildErr.Error())
+				details := gin.H{
+					"stage":       "rebuild_tx",
+					"approval_id": approval.ID,
+					"wallet_id":   wallet.ID,
+					"chain":       wallet.Chain,
+					"rpc_error":   sanitized,
+				}
+				if reason != "" {
+					details["revert_reason"] = reason
+				}
+				jsonErrorDetails(c, http.StatusUnprocessableEntity, "failed to refresh transaction params: "+sanitized, details)
 				return
 			}
 			msgBytes = freshTx.SigningHash
@@ -476,17 +484,23 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 	// Execute TEE signing now that approval is granted.
 	result, signErr := h.sdk.Sign(c.Request.Context(), msgBytes, wallet.KeyName)
 	if signErr != nil || !result.Success {
-		errMsg := "signing failed"
+		var rawMsg string
+		var category string
 		if signErr != nil {
-			errMsg = signErr.Error()
+			rawMsg = signErr.Error()
+			category = categorizeSigningError(signErr)
 		} else if result != nil {
-			errMsg = result.Error
+			rawMsg = result.Error
+			category = categorizeSigningError(errors.New(rawMsg))
 		}
-		slog.Error("TEE signing failed", "approval_id", approval.ID, "wallet_id", wallet.ID, "key", wallet.KeyName, "error", errMsg)
+		slog.Error("TEE signing failed",
+			"approval_id", approval.ID, "wallet_id", wallet.ID, "key", wallet.KeyName,
+			"category", category, "error", rawMsg)
 		h.db.Model(&approval).Update("status", "failed")
-		h.broadcastApproval(approval, "failed", "signing error: "+errMsg)
-		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed: "+errMsg, gin.H{
+		h.broadcastApproval(approval, "failed", "signing error: "+category)
+		jsonErrorDetails(c, http.StatusUnprocessableEntity, "signing failed", gin.H{
 			"stage": "signing", "approval_id": approval.ID, "wallet_id": wallet.ID, "chain": wallet.Chain,
+			"category": category,
 		})
 		return
 	}
@@ -564,8 +578,7 @@ func (h *ApprovalHandler) Approve(c *gin.Context) {
 		updates["tx_hash"] = txHash
 	}
 	if err := h.db.Model(&approval).Updates(updates).Error; err != nil {
-		slog.Error("update approval failed", "approval_id", approval.ID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "update approval failed", gin.H{"stage": "update_approval", "approval_id": approval.ID})
+		respondInternalError(c, "update approval failed", err, gin.H{"stage": "update_approval", "approval_id": approval.ID})
 		return
 	}
 	auditExtra := map[string]interface{}{"type": approval.ApprovalType}
@@ -654,7 +667,7 @@ func (h *ApprovalHandler) Reject(c *gin.Context) {
 
 	// Re-read approval under lock to prevent TOCTOU race
 	if err := h.db.First(&approval, approval.ID).Error; err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to reload approval")
+		respondInternalError(c, "failed to reload approval", err, gin.H{"stage": "reload_approval", "approval_id": approval.ID})
 		return
 	}
 
@@ -664,8 +677,7 @@ func (h *ApprovalHandler) Reject(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&approval).Update("status", "rejected").Error; err != nil {
-		slog.Error("reject approval update failed", "approval_id", approval.ID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "update failed", gin.H{"stage": "reject_approval", "approval_id": approval.ID})
+		respondInternalError(c, "update failed", err, gin.H{"stage": "reject_approval", "approval_id": approval.ID})
 		return
 	}
 	updateAuditByApprovalID(h.db, approval.ID, "rejected", map[string]interface{}{
@@ -755,8 +767,7 @@ func verifyFreshPasskeyParsed(sdkClient *sdk.Client, c *gin.Context, loginSessio
 	}
 	var user model.User
 	if err := db.First(&user, sessionUserID).Error; err != nil {
-		slog.Error("SECURITY: failed to load user for passkey verification", "user_id", sessionUserID, "error", err)
-		jsonErrorDetails(c, http.StatusInternalServerError, "failed to verify user identity", gin.H{"stage": "passkey_verify"})
+		respondInternalError(c, "failed to verify user identity", err, gin.H{"stage": "passkey_verify", "user_id": sessionUserID})
 		return false
 	}
 	res, err := sdkClient.PasskeyLoginVerifyAs(c.Request.Context(), loginSessionID, credBytes, user.PasskeyUserID)

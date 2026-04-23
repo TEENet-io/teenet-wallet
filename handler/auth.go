@@ -282,8 +282,7 @@ func (h *AuthHandler) PasskeyRegistrationVerify(c *gin.Context) {
 				jsonError(c, http.StatusConflict, "email already registered")
 				return
 			}
-			slog.Error("create user failed", "error", createErr)
-			jsonError(c, http.StatusInternalServerError, "failed to create user")
+			respondInternalError(c, "failed to create user", createErr, gin.H{"stage": "user_create"})
 		}
 		return
 	}
@@ -366,16 +365,14 @@ func (h *AuthHandler) PasskeyVerify(c *gin.Context) {
 					jsonError(c, http.StatusForbidden, "maximum number of users reached")
 					return
 				}
-				slog.Error("auto-create user failed", "passkey_user_id", passkeyUserID, "error", createErr)
-				jsonError(c, http.StatusInternalServerError, "failed to create user")
+				respondInternalError(c, "failed to create user", createErr, gin.H{"stage": "user_create", "passkey_user_id": passkeyUserID})
 				return
 			}
 		} else {
 			// no max check needed
 			user = model.User{Username: autoUsername, PasskeyUserID: uint(passkeyUserID)}
 			if err := h.db.Create(&user).Error; err != nil {
-				slog.Error("auto-create user failed", "passkey_user_id", passkeyUserID, "error", err)
-				jsonErrorDetails(c, http.StatusInternalServerError, "failed to create user", gin.H{"stage": "user_auto_create"})
+				respondInternalError(c, "failed to create user", err, gin.H{"stage": "user_auto_create", "passkey_user_id": passkeyUserID})
 				return
 			}
 		}
@@ -417,7 +414,7 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 	// Enforce per-user limit.
 	var count int64
 	if err := h.db.Model(&model.APIKey{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "apikey_count"})
+		respondInternalError(c, "db error", err, gin.H{"stage": "apikey_count"})
 		return
 	}
 	if count >= int64(h.maxAPIKeys) {
@@ -440,7 +437,7 @@ func (h *AuthHandler) GenerateAPIKey(c *gin.Context) {
 		Label:   label,
 	}
 	if err := h.db.Create(&apiKey).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "failed to save key", gin.H{"stage": "apikey_save"})
+		respondInternalError(c, "failed to save key", err, gin.H{"stage": "apikey_save"})
 		return
 	}
 	writeAuditCtx(h.db, c, "apikey_generate", "success", nil, map[string]interface{}{"prefix": prefix, "label": label})
@@ -462,7 +459,7 @@ func (h *AuthHandler) ListAPIKeys(c *gin.Context) {
 	}
 	var apiKeys []model.APIKey
 	if err := h.db.Where("user_id = ?", userID).Order("created_at asc").Find(&apiKeys).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "db error", gin.H{"stage": "apikey_list"})
+		respondInternalError(c, "db error", err, gin.H{"stage": "apikey_list"})
 		return
 	}
 	keys := []gin.H{}
@@ -500,8 +497,13 @@ func (h *AuthHandler) RenameAPIKey(c *gin.Context) {
 	}
 
 	oldLabel := apiKey.Label
+	if req.Label == oldLabel {
+		// No-op rename — skip DB write and audit entry to keep the log clean.
+		c.JSON(http.StatusOK, gin.H{"success": true, "label": req.Label})
+		return
+	}
 	if err := h.db.Model(&apiKey).Update("label", req.Label).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "rename failed", gin.H{"stage": "apikey_rename"})
+		respondInternalError(c, "rename failed", err, gin.H{"stage": "apikey_rename"})
 		return
 	}
 	writeAuditCtx(h.db, c, "apikey_rename", "success", nil, map[string]interface{}{
@@ -536,7 +538,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	// Load all wallets for this user.
 	var wallets []model.Wallet
 	if err := h.db.Where("user_id = ?", userID).Find(&wallets).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "failed to load wallets", gin.H{"stage": "account_delete"})
+		respondInternalError(c, "failed to load wallets", err, gin.H{"stage": "account_delete"})
 		return
 	}
 
@@ -555,7 +557,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	// Load user to get PasskeyUserID before deletion.
 	var user model.User
 	if err := h.db.First(&user, userID).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "failed to load user", gin.H{"stage": "account_delete"})
+		respondInternalError(c, "failed to load user", err, gin.H{"stage": "account_delete"})
 		return
 	}
 
@@ -592,7 +594,7 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 		}
 		return tx.Delete(&model.User{}, userID).Error
 	}); err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "failed to delete account", gin.H{"stage": "account_delete"})
+		respondInternalError(c, "failed to delete account", err, gin.H{"stage": "account_delete"})
 		return
 	}
 
@@ -645,7 +647,7 @@ func (h *AuthHandler) RevokeAPIKey(c *gin.Context) {
 	}
 
 	if err := h.db.Delete(&apiKey).Error; err != nil {
-		jsonErrorDetails(c, http.StatusInternalServerError, "revoke failed", gin.H{"stage": "apikey_revoke"})
+		respondInternalError(c, "revoke failed", err, gin.H{"stage": "apikey_revoke"})
 		return
 	}
 	writeAuditCtx(h.db, c, "apikey_revoke", "success", nil, map[string]interface{}{"prefix": prefix, "label": apiKey.Label})

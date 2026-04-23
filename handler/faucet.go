@@ -67,7 +67,7 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 		if err == gorm.ErrRecordNotFound {
 			jsonError(c, http.StatusNotFound, "wallet not found")
 		} else {
-			jsonErrorDetails(c, http.StatusInternalServerError, "database error", gin.H{"stage": "faucet_db_lookup"})
+			respondInternalError(c, "database error", err, gin.H{"stage": "faucet_db_lookup"})
 		}
 		return
 	}
@@ -87,9 +87,10 @@ func (h *FaucetHandler) Claim(c *gin.Context) {
 
 	resp, err := h.client.Post(h.faucetURL+"/api/claim", "application/json", bytes.NewReader(body))
 	if err != nil {
-		slog.Error("faucet request failed", "error", err)
+		slog.Error("faucet request failed", "chain", wallet.Chain, "error", err.Error())
 		jsonErrorDetails(c, http.StatusUnprocessableEntity, "faucet service unavailable", gin.H{
 			"stage": "faucet_request", "chain": wallet.Chain, "address": wallet.Address,
+			"reason": sanitizeErrString(err),
 		})
 		return
 	}

@@ -261,13 +261,22 @@ func HostOnly(rawURL string) string {
 	return u.Host
 }
 
-func jsonRPC(url string, payload interface{}) (map[string]interface{}, error) {
+func jsonRPC(endpoint string, payload interface{}) (map[string]interface{}, error) {
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := httpClient.Post(url, "application/json", bytes.NewReader(b))
+	resp, err := httpClient.Post(endpoint, "application/json", bytes.NewReader(b))
 	if err != nil {
+		// Go's net/http returns *url.Error on transport failures, whose
+		// Error() embeds the full URL — including any provider token in its
+		// path (e.g. QuickNode). Strip the URL here so the token can't leak
+		// through logs, traces, or HTTP responses further up the stack.
+		// HostOnly preserves just the hostname for diagnostic context.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return nil, fmt.Errorf("rpc request to %s failed: %w", HostOnly(ue.URL), ue.Err)
+		}
 		return nil, fmt.Errorf("rpc request failed: %w", err)
 	}
 	defer resp.Body.Close()

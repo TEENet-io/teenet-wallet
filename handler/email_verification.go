@@ -319,7 +319,7 @@ func (h *EmailVerificationHandler) SendCode(c *gin.Context) {
 		case errors.Is(err, ErrSMTPSend):
 			jsonError(c, http.StatusInternalServerError, "failed to send verification email")
 		default:
-			jsonError(c, http.StatusInternalServerError, err.Error())
+			respondInternalError(c, "failed to send verification code", err, gin.H{"stage": "send_code"})
 		}
 		return
 	}
@@ -357,7 +357,7 @@ func (h *EmailVerificationHandler) VerifyCode(c *gin.Context) {
 		case errors.Is(err, ErrAttemptsExhausted):
 			jsonError(c, http.StatusLocked, "too many failed attempts, please request a new code")
 		default:
-			jsonError(c, http.StatusInternalServerError, err.Error())
+			respondInternalError(c, "failed to verify code", err, gin.H{"stage": "verify_code"})
 		}
 		return
 	}

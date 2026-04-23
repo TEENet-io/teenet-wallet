@@ -176,3 +176,34 @@ func TestRPCFallback_BothFail_ErrorMentionsBoth(t *testing.T) {
 		t.Errorf("error message should mention primary + fallback, got: %s", msg)
 	}
 }
+
+// TestJSONRPC_StripsURLOnTransportFailure guards the chain-layer fix that
+// prevents provider tokens (embedded in RPC URL paths, e.g. QuickNode)
+// from leaking into err strings. Go's net/http returns *url.Error on
+// transport failures, whose Error() embeds the full URL verbatim — we
+// unwrap it and keep only the host.
+func TestJSONRPC_StripsURLOnTransportFailure(t *testing.T) {
+	// Reserve a port, close immediately → next request will hit
+	// "connection refused" at the transport layer (produces a *url.Error).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	base := srv.URL
+	srv.Close()
+	const secretToken = "SECRET_CHAIN_LAYER_TOKEN"
+	endpoint := base + "/" + secretToken + "/v1/"
+
+	_, err := jsonRPC(endpoint, map[string]interface{}{"jsonrpc": "2.0", "method": "eth_chainId", "id": 1})
+	if err == nil {
+		t.Fatal("expected transport error on closed server")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, secretToken) {
+		t.Fatalf("jsonRPC leaked provider token in err: %s", msg)
+	}
+	if strings.Contains(msg, endpoint) {
+		t.Fatalf("jsonRPC leaked full URL in err: %s", msg)
+	}
+	// Host-only form should still be present for diagnostics.
+	if !strings.Contains(msg, HostOnly(endpoint)) {
+		t.Errorf("expected host-only context %q in err, got: %s", HostOnly(endpoint), msg)
+	}
+}
