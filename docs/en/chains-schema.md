@@ -14,25 +14,41 @@
 | `chain_id` | No | uint64 | -- | EVM chain ID (e.g., 1 for mainnet, 11155111 for Sepolia). Ignored for Solana. |
 | `quicknode_network` | No | string | QuickNode network slug (e.g., `ethereum-sepolia`), or `-` for no subdomain (Ethereum Mainnet) | When set AND `QUICKNODE_ENDPOINT` + a token source (`QUICKNODE_TOKEN` or `QUICKNODE_TOKEN_KEY`) are configured, `rpc_url` is overridden at startup with `https://{endpoint}.{quicknode_network}.quiknode.pro/{token}/`. The `-` sentinel drops the network subdomain entirely — used by Ethereum Mainnet whose URL is `https://{endpoint}.quiknode.pro/{token}/`. Leave empty to keep the hardcoded `rpc_url`. See [configuration.md](./configuration.md#quicknode-rpc-overrides). |
 | `quicknode_path` | No | string | Path suffix (e.g., `/ext/bc/C/rpc`) | Appended after `{token}` in the QuickNode URL. Only used when `quicknode_network` is set. Required for chains whose RPC sits at a non-standard path — Avalanche C-Chain is the only one in the defaults. |
+| `testnet` | No | bool | `true` / omitted | Marks the chain as a test network. Required for every testnet entry when the public alpha deployment runs with `ALPHA_MODE=true`: the alpha gate removes any chain whose `testnet` is not `true` at startup. Mainnet entries leave this unset (defaults to `false`). |
 
 ## Default Chains
 
-The following chains are included in `chains.json` out of the box:
+`chains.json` ships with the full supported chain set. The **public alpha deployment** runs with `ALPHA_MODE=true`, which drops every non-testnet entry at startup, so end users see only testnet chains. Self-hosted or custom deployments that do not set `ALPHA_MODE` see every chain below.
+
+### Testnet Chains (alpha-enabled)
+
+Marked with `"testnet": true` in `chains.json`. These are the chains exposed to users during the public alpha.
+
+| Chain | Name (API) | Currency | Protocol | Curve | Family |
+|-------|------------|----------|----------|-------|--------|
+| Sepolia Testnet | `sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Optimism Sepolia Testnet | `optimism-sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Arbitrum Sepolia Testnet | `arbitrum-sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Polygon Amoy Testnet | `polygon-amoy` | POL | ECDSA | secp256k1 | EVM |
+| BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
+| Avalanche Fuji Testnet | `avalanche-fuji` | AVAX | ECDSA | secp256k1 | EVM |
+| Solana Devnet | `solana-devnet` | SOL | EdDSA | ed25519 | Solana |
+
+### Mainnet Chains (hidden by `ALPHA_MODE`)
+
+These are the same supported chain set, for non-alpha deployments. The public alpha removes them at startup; self-hosters that don't set `ALPHA_MODE` keep them.
 
 | Chain | Name (API) | Currency | Protocol | Curve | Family |
 |-------|------------|----------|----------|-------|--------|
 | Ethereum Mainnet | `ethereum` | ETH | ECDSA | secp256k1 | EVM |
 | Optimism Mainnet | `optimism` | ETH | ECDSA | secp256k1 | EVM |
-| Sepolia Testnet | `sepolia` | ETH | ECDSA | secp256k1 | EVM |
-| Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
-| BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
 | Arbitrum One | `arbitrum` | ETH | ECDSA | secp256k1 | EVM |
 | Base Mainnet | `base` | ETH | ECDSA | secp256k1 | EVM |
 | Polygon PoS | `polygon` | POL | ECDSA | secp256k1 | EVM |
 | BNB Smart Chain | `bsc` | BNB | ECDSA | secp256k1 | EVM |
 | Avalanche C-Chain | `avalanche` | AVAX | ECDSA | secp256k1 | EVM |
 | Solana Mainnet | `solana` | SOL | EdDSA | ed25519 | Solana |
-| Solana Devnet | `solana-devnet` | SOL | EdDSA | ed25519 | Solana |
 
 ## Common Token Contract Addresses
 

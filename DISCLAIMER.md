@@ -2,6 +2,15 @@
 
 **TEENet Wallet** is provided by **TEENet Technology (Hong Kong) Limited** ("TEENet") on an "as is" and "as available" basis. By using this software, you acknowledge and agree to the following:
 
+## Alpha Release
+
+TEENet Wallet is currently in **alpha**. Specifically:
+
+- **Testnet only.** The public alpha deployment runs with `ALPHA_MODE=true`, which hides every non-testnet chain at startup. Users can only create wallets on Sepolia, Optimism Sepolia, Arbitrum Sepolia, Base Sepolia, Polygon Amoy, BSC Testnet, Avalanche Fuji, and Solana Devnet. Mainnet chains are implemented in the codebase but filtered out during alpha; do **not** attempt to manage mainnet assets with the public alpha wallet. Mainnet will be re-enabled in a later release.
+- **Limited access.** Registration is capped at the **first 500 users** on a first-come, first-served basis. Once the cap is reached, new registrations are closed until TEENet opens additional cohorts.
+- **Expected breakage.** Alpha software may contain bugs, undergo breaking changes, have downtime, or lose non-essential state without notice. Do not rely on this software for production use.
+- **Feedback expected.** Users of the alpha are expected to report issues and accept that behavior, APIs, and storage layouts may change before general availability.
+
 ## No Warranty
 
 This software is experimental and distributed **without any warranty**, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. TEENet makes no guarantees regarding the reliability, availability, or security of the software.

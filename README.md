@@ -2,7 +2,8 @@
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE) 
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) 
-[![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange.svg)]()
+[![Alpha Release](https://img.shields.io/badge/Status-Alpha-orange.svg)]()
+[![Testnet Only](https://img.shields.io/badge/Network-Testnet_Only-blue.svg)]()
 
 ```text
 
@@ -29,7 +30,9 @@ A wallet your AI agent can use without handing over your assets. Your agent hand
 
 Open source. Hardware-enforced rules. Passkey approval.
 
-> **Disclaimer:** This software manages real cryptocurrency assets. Use at your own risk. The authors are not responsible for any loss of funds. Always test thoroughly on testnets before using with real assets.
+> **Alpha Release:** TEENet Wallet is in **alpha** and exposes **testnet chains only** to end users (Sepolia, Optimism Sepolia, Arbitrum Sepolia, Base Sepolia, Polygon Amoy, BSC Testnet, Avalanche Fuji, Solana Devnet). Mainnet chains are implemented and shipped in `chains.json`, but the public deployment runs with `ALPHA_MODE=true`, which hides them until the alpha cohort validates the system. Registration is capped at the **first 500 users** (first-come, first-served).
+>
+> **Disclaimer:** This software is experimental. Use at your own risk. The authors are not responsible for any loss of funds. See [DISCLAIMER.md](DISCLAIMER.md) for full terms.
 
 ## How It Works
 
@@ -42,7 +45,8 @@ Private keys are sharded across independent TEE nodes, never exported, and the h
 
 ## Features
 
-- **Multi-chain** -- Ethereum, Solana, Optimism, Arbitrum, Base, Polygon, BNB Chain, Avalanche, and custom EVM chains
+- **Alpha scope** -- the public deployment exposes 8 testnets (Sepolia, Optimism Sepolia, Arbitrum Sepolia, Base Sepolia, Polygon Amoy, BSC Testnet, Avalanche Fuji, Solana Devnet) via `ALPHA_MODE=true`; first 500 registrations, first-come, first-served
+- **Multi-chain** -- Ethereum, Optimism, Arbitrum, Base, Polygon, BNB Chain, Avalanche, Solana and their testnets; mainnet entries ship in `chains.json` and are re-enabled by clearing `ALPHA_MODE`
 - **Dual auth** -- API keys for AI agents and automation; Passkeys (WebAuthn) for human approval of high-value operations
 - **Smart contract security** -- contract whitelist + Passkey approval for all contract operations via API key
 - **Approval policies** -- USD-denominated thresholds, daily spend limits, real-time price feeds

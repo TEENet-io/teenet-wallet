@@ -1,5 +1,7 @@
 # 申请 TEENet 部署
 
+> **Alpha 说明：** 公开的 TEENet Wallet 目前处于 alpha，运行时带 `ALPHA_MODE=true`，启动阶段会把主网从链注册表里过滤掉，只剩 8 条测试网（Sepolia、Optimism Sepolia、Arbitrum Sepolia、Base Sepolia、Polygon Amoy、BSC Testnet、Avalanche Fuji、Solana Devnet）。主网链本身都写在 `chains.json` 里，功能完整，只是 alpha 开关把它们挡掉了。**通过本页申请的托管部署不受 alpha 链集合限制**——你自己的生产实例不开 `ALPHA_MODE`，可以用任意受支持的链，包括主网。
+
 如果你想在自己的基础设施上跑一个连接 mock 服务的钱包实例，参见 [快速开始](quick-start.md) 和 [安装与配置](installation.md)。这条路径适合本地开发、集成测试、内部评估——但它使用 mock 服务生成的确定性密钥，**不适用于真实资金**。
 
 本页讲的是另一件事：**在 TEENet 平台上部署生产实例**，由真实 TEE 节点持有密钥分片并在多个独立 enclave 之间完成门限签名。

@@ -29,8 +29,12 @@ const EXPLORER_BASE: Record<string, string> = {
   bsc: "https://bscscan.com",
   avalanche: "https://snowtrace.io",
   sepolia: "https://sepolia.etherscan.io",
+  "optimism-sepolia": "https://sepolia-optimism.etherscan.io",
+  "arbitrum-sepolia": "https://sepolia.arbiscan.io",
   "base-sepolia": "https://sepolia.basescan.org",
+  "polygon-amoy": "https://amoy.polygonscan.com",
   "bsc-testnet": "https://testnet.bscscan.com",
+  "avalanche-fuji": "https://testnet.snowtrace.io",
   solana: "https://solscan.io",
   "solana-devnet": "https://solscan.io",
 };

@@ -6,6 +6,27 @@ info:
     Private keys never leave TEE hardware -- they are split across distributed
     TEE-DAO nodes via threshold signing (FROST for Ed25519, GG20 for ECDSA).
 
+    ## Alpha Release
+
+    The public TEENet Wallet is currently in alpha:
+
+    - **Testnet only (gated by `ALPHA_MODE`).** The public deployment runs
+      with `ALPHA_MODE=true`, which at startup drops every chain whose
+      `testnet` field is not `true` from the registry. `GET /api/chains`
+      therefore returns 8 testnets (`sepolia`, `optimism-sepolia`,
+      `arbitrum-sepolia`, `base-sepolia`, `polygon-amoy`, `bsc-testnet`,
+      `avalanche-fuji`, `solana-devnet`). Mainnet chains (`ethereum`,
+      `optimism`, `arbitrum`, `base`, `polygon`, `bsc`, `avalanche`, `solana`)
+      are shipped in `chains.json` and fully supported by the API — they are
+      just filtered out during alpha. Clearing `ALPHA_MODE` re-enables them.
+    - **Registration cap.** Public registration is limited to the first 500
+      users on a first-come, first-served basis (`MAX_USERS`, default `500`).
+      Once the cap is reached, `POST /api/auth/passkey/register/verify` and
+      the passkey auto-create path return HTTP 403 with
+      `"maximum number of users reached"`.
+    - **Breaking changes expected.** API shapes, error fields, and storage
+      layouts may change before general availability.
+
     ## Authentication
 
     Two authentication modes are supported:

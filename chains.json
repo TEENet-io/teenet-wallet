@@ -27,7 +27,8 @@
     "currency": "ETH",
     "family": "evm",
     "rpc_url": "https://ethereum-sepolia-rpc.publicnode.com",
-    "quicknode_network": "ethereum-sepolia"
+    "quicknode_network": "ethereum-sepolia",
+    "testnet": true
   },
   {
     "name": "bsc-testnet",
@@ -37,7 +38,8 @@
     "currency": "tBNB",
     "family": "evm",
     "rpc_url": "https://bsc-testnet-rpc.publicnode.com",
-    "quicknode_network": "bsc-testnet"
+    "quicknode_network": "bsc-testnet",
+    "testnet": true
   },
   {
     "name": "solana-devnet",
@@ -47,7 +49,8 @@
     "currency": "SOL",
     "family": "solana",
     "rpc_url": "https://api.devnet.solana.com",
-    "quicknode_network": "solana-devnet"
+    "quicknode_network": "solana-devnet",
+    "testnet": true
   },
   {
     "name": "optimism",
@@ -60,6 +63,17 @@
     "quicknode_network": "optimism"
   },
   {
+    "name": "optimism-sepolia",
+    "label": "Optimism Sepolia Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://optimism-sepolia-rpc.publicnode.com",
+    "quicknode_network": "optimism-sepolia",
+    "testnet": true
+  },
+  {
     "name": "base-sepolia",
     "label": "Base Sepolia Testnet",
     "protocol": "ecdsa",
@@ -67,7 +81,8 @@
     "currency": "ETH",
     "family": "evm",
     "rpc_url": "https://sepolia.base.org",
-    "quicknode_network": "base-sepolia"
+    "quicknode_network": "base-sepolia",
+    "testnet": true
   },
   {
     "name": "arbitrum",
@@ -78,6 +93,17 @@
     "family": "evm",
     "rpc_url": "https://arbitrum-one-rpc.publicnode.com",
     "quicknode_network": "arbitrum-mainnet"
+  },
+  {
+    "name": "arbitrum-sepolia",
+    "label": "Arbitrum Sepolia Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "ETH",
+    "family": "evm",
+    "rpc_url": "https://arbitrum-sepolia-rpc.publicnode.com",
+    "quicknode_network": "arbitrum-sepolia",
+    "testnet": true
   },
   {
     "name": "base",
@@ -100,6 +126,17 @@
     "quicknode_network": "matic"
   },
   {
+    "name": "polygon-amoy",
+    "label": "Polygon Amoy Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "POL",
+    "family": "evm",
+    "rpc_url": "https://polygon-amoy-bor-rpc.publicnode.com",
+    "quicknode_network": "matic-amoy",
+    "testnet": true
+  },
+  {
     "name": "bsc",
     "label": "BNB Smart Chain",
     "protocol": "ecdsa",
@@ -119,5 +156,17 @@
     "rpc_url": "https://avalanche-c-chain-rpc.publicnode.com",
     "quicknode_network": "avalanche-mainnet",
     "quicknode_path": "/ext/bc/C/rpc"
+  },
+  {
+    "name": "avalanche-fuji",
+    "label": "Avalanche Fuji Testnet",
+    "protocol": "ecdsa",
+    "curve": "secp256k1",
+    "currency": "AVAX",
+    "family": "evm",
+    "rpc_url": "https://avalanche-fuji-c-chain-rpc.publicnode.com",
+    "quicknode_network": "avalanche-testnet",
+    "quicknode_path": "/ext/bc/C/rpc",
+    "testnet": true
   }
 ]

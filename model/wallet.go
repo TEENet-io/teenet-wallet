@@ -58,6 +58,9 @@ type ChainConfig struct {
 	// chains that don't terminate at `/{token}/` — e.g. Avalanche C-Chain needs
 	// `/ext/bc/C/rpc`. Leading slash optional.
 	QuickNodePath string `json:"quicknode_path,omitempty"`
+	// Testnet marks a chain as a test network. When the server is started with
+	// ALPHA_MODE=true, only chains with Testnet=true are kept in the registry.
+	Testnet bool `json:"testnet,omitempty"`
 }
 
 // chains is the active chain registry, loaded at startup.
@@ -101,15 +104,32 @@ func ChainsLen() int {
 	return len(chains)
 }
 
+// RemoveNonTestnetChains drops every chain whose Testnet flag is false from
+// the active registry and returns (removed, kept). Used by the alpha release
+// to enforce testnet-only operation while keeping chains.json as the full
+// capability list.
+func RemoveNonTestnetChains() (removed, kept int) {
+	chainsMu.Lock()
+	defer chainsMu.Unlock()
+	for name, cfg := range chains {
+		if !cfg.Testnet {
+			delete(chains, name)
+			removed++
+		}
+	}
+	kept = len(chains)
+	return
+}
+
 // defaultChains is the fallback when no chains.json is present.
 var defaultChains = []ChainConfig{
 	{Name: "ethereum", Label: "Ethereum Mainnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-rpc.publicnode.com"},
 	{Name: "solana", Label: "Solana Mainnet", Protocol: "eddsa", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.mainnet-beta.solana.com"},
-	{Name: "sepolia", Label: "Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-sepolia-rpc.publicnode.com"},
-	{Name: "bsc-testnet", Label: "BSC Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "tBNB", Family: "evm", RPCURL: "https://bsc-testnet-rpc.publicnode.com"},
-	{Name: "solana-devnet", Label: "Solana Devnet", Protocol: "eddsa", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.devnet.solana.com"},
+	{Name: "sepolia", Label: "Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://ethereum-sepolia-rpc.publicnode.com", Testnet: true},
+	{Name: "bsc-testnet", Label: "BSC Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "tBNB", Family: "evm", RPCURL: "https://bsc-testnet-rpc.publicnode.com", Testnet: true},
+	{Name: "solana-devnet", Label: "Solana Devnet", Protocol: "eddsa", Curve: "ed25519", Currency: "SOL", Family: "solana", RPCURL: "https://api.devnet.solana.com", Testnet: true},
 	{Name: "optimism", Label: "Optimism Mainnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://optimism-rpc.publicnode.com"},
-	{Name: "base-sepolia", Label: "Base Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://sepolia.base.org"},
+	{Name: "base-sepolia", Label: "Base Sepolia Testnet", Protocol: "ecdsa", Curve: "secp256k1", Currency: "ETH", Family: "evm", RPCURL: "https://sepolia.base.org", Testnet: true},
 }
 
 // LoadChains loads chain configuration from a JSON file.

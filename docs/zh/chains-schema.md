@@ -14,25 +14,41 @@
 | `chain_id` | 否 | uint64 | -- | EVM 链 ID（例如主网为 1，Sepolia 为 11155111）。Solana 忽略此字段。 |
 | `quicknode_network` | 否 | string | QuickNode network slug（例如 `ethereum-sepolia`），或 `-` 表示无子域（Ethereum Mainnet） | 配置后，且 `QUICKNODE_ENDPOINT` + token 源（`QUICKNODE_TOKEN` 或 `QUICKNODE_TOKEN_KEY`）齐全时，启动时 `rpc_url` 会被覆写为 `https://{endpoint}.{quicknode_network}.quiknode.pro/{token}/`。`-` 哨兵值表示不带 network 子域——Ethereum Mainnet 的 URL 形如 `https://{endpoint}.quiknode.pro/{token}/`。留空则保持写死的 `rpc_url`。详见 [configuration.md](./configuration.md#quicknode-rpc-覆写)。 |
 | `quicknode_path` | 否 | string | 路径后缀（例如 `/ext/bc/C/rpc`） | 拼接在 QuickNode URL 中的 `{token}` 之后。仅当 `quicknode_network` 设置时生效。非标准路径的链需要——默认配置里只有 Avalanche C-Chain 用到。 |
+| `testnet` | 否 | bool | `true` / 不填 | 标记该链为测试网。公开 alpha 部署启用 `ALPHA_MODE=true` 时，启动阶段会把 `testnet` 不为 `true` 的链全部从注册表里去掉，所以每条测试网都需要显式写 `"testnet": true`。主网不写此字段即可（默认 `false`）。 |
 
 ## 默认链
 
-以下链已包含在开箱即用的 `chains.json` 中：
+`chains.json` 收录完整的受支持链集合。**公开 alpha 部署**会开启 `ALPHA_MODE=true`，启动时把所有非测试网条目移除，终端用户只看到测试网。自建或定制部署不设置 `ALPHA_MODE` 就能看到下面所有链。
+
+### 测试网（alpha 启用）
+
+在 `chains.json` 中显式标记 `"testnet": true`。这也是 alpha 期间终端用户实际可选的链集合。
+
+| 链 | Name (API) | Currency | Protocol | Curve | Family |
+|-----|------------|----------|----------|-------|--------|
+| Sepolia Testnet | `sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Optimism Sepolia Testnet | `optimism-sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Arbitrum Sepolia Testnet | `arbitrum-sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
+| Polygon Amoy Testnet | `polygon-amoy` | POL | ECDSA | secp256k1 | EVM |
+| BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
+| Avalanche Fuji Testnet | `avalanche-fuji` | AVAX | ECDSA | secp256k1 | EVM |
+| Solana Devnet | `solana-devnet` | SOL | EdDSA | ed25519 | Solana |
+
+### 主网（`ALPHA_MODE` 下会被移除）
+
+面向非 alpha 部署的完整主网集合。公开 alpha 启动时会把这些条目删掉；不设 `ALPHA_MODE` 的自建部署保留。
 
 | 链 | Name (API) | Currency | Protocol | Curve | Family |
 |-----|------------|----------|----------|-------|--------|
 | Ethereum Mainnet | `ethereum` | ETH | ECDSA | secp256k1 | EVM |
 | Optimism Mainnet | `optimism` | ETH | ECDSA | secp256k1 | EVM |
-| Sepolia Testnet | `sepolia` | ETH | ECDSA | secp256k1 | EVM |
-| Base Sepolia Testnet | `base-sepolia` | ETH | ECDSA | secp256k1 | EVM |
-| BSC Testnet | `bsc-testnet` | tBNB | ECDSA | secp256k1 | EVM |
 | Arbitrum One | `arbitrum` | ETH | ECDSA | secp256k1 | EVM |
 | Base Mainnet | `base` | ETH | ECDSA | secp256k1 | EVM |
 | Polygon PoS | `polygon` | POL | ECDSA | secp256k1 | EVM |
 | BNB Smart Chain | `bsc` | BNB | ECDSA | secp256k1 | EVM |
 | Avalanche C-Chain | `avalanche` | AVAX | ECDSA | secp256k1 | EVM |
 | Solana Mainnet | `solana` | SOL | EdDSA | ed25519 | Solana |
-| Solana Devnet | `solana-devnet` | SOL | EdDSA | ed25519 | Solana |
 
 ## 常用代币合约地址
 

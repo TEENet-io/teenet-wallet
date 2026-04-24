@@ -1,5 +1,7 @@
 # Request a TEENet Deployment
 
+> **Alpha note:** The public TEENet Wallet is currently in alpha. The public deployment runs with `ALPHA_MODE=true`, which hides mainnet chains at startup and exposes only 8 testnets (Sepolia, Optimism Sepolia, Arbitrum Sepolia, Base Sepolia, Polygon Amoy, BSC Testnet, Avalanche Fuji, Solana Devnet). All mainnet chains live in `chains.json` and work the same way — they're just filtered out during alpha. **Managed deployments requested through this page are not constrained by the alpha chain set** — your own production instance runs without `ALPHA_MODE` and can use any supported chain, including mainnet.
+
 Running your own wallet instance on self-hosted infrastructure against the mock service is covered in [Quick Start](quick-start.md) and [Installation & Setup](installation.md). That path is useful for local development, integration testing, and internal evaluation — but it uses deterministic keys from the mock service and is **not safe for real funds**.
 
 This page is about **production deployment on the TEENet platform**, where real TEE nodes hold your key shares and perform threshold signing across independent enclaves.

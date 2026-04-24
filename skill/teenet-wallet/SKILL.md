@@ -16,6 +16,8 @@ metadata:
 
 # TEENet Wallet Skill
 
+> **Alpha release — testnet only.** The public alpha runs with `ALPHA_MODE=true`, which exposes only these 8 testnets: Sepolia, Optimism Sepolia, Arbitrum Sepolia, Base Sepolia, Polygon Amoy, BSC Testnet, Avalanche Fuji, Solana Devnet. Mainnet chains ship in `chains.json` but are hidden during alpha. Registration is capped at the first 500 users (first-come, first-served).
+
 Manage wallets through the wallet REST API. Private keys stay inside TEE hardware and are threshold-signed by secure nodes.
 
 ## Non-Negotiable Rules
@@ -60,6 +62,7 @@ Run this onboarding only when there is no wallet context and the user did not as
    - If none exist, continue.
 3. **List chains**: `GET /api/chains`
    - Ask the user which chain to start with.
+   - Alpha exposes testnet only — `/api/chains` should return 8 testnets: Sepolia, Optimism Sepolia, Arbitrum Sepolia, Base Sepolia, Polygon Amoy, BSC Testnet, Avalanche Fuji, Solana Devnet. If the user asks for a mainnet chain, tell them mainnet is hidden during alpha and offer the closest testnet equivalent.
    - If unsure, recommend Sepolia or Solana Devnet.
 4. **Create first wallet**: `POST /api/wallets`
    - Body: `{"chain":"<chain_name>","label":"<optional label>"}`
@@ -76,6 +79,8 @@ Skip onboarding when:
 - the user explicitly asks to skip setup
 
 If the user has no API key yet, send them to the Web UI to complete: email -> verification code -> Passkey registration -> generate API key.
+
+If registration returns `maximum number of users reached` (HTTP 403), the alpha 500-user cap is full. Tell the user alpha registration is closed and point them to the TEENet site for the waitlist or next cohort announcement — do not suggest workarounds.
 
 ## Wallet Selection
 
@@ -381,17 +386,13 @@ Base URLs:
 
 | Chain | Explorer |
 |-------|----------|
-| Ethereum | `https://etherscan.io` |
-| Optimism | `https://optimistic.etherscan.io` |
-| Arbitrum | `https://arbiscan.io` |
-| Base | `https://basescan.org` |
-| Polygon | `https://polygonscan.com` |
-| BSC | `https://bscscan.com` |
-| Avalanche | `https://snowtrace.io` |
 | Sepolia | `https://sepolia.etherscan.io` |
+| Optimism Sepolia | `https://sepolia-optimism.etherscan.io` |
+| Arbitrum Sepolia | `https://sepolia.arbiscan.io` |
 | Base Sepolia | `https://sepolia.basescan.org` |
+| Polygon Amoy | `https://amoy.polygonscan.com` |
 | BSC Testnet | `https://testnet.bscscan.com` |
-| Solana | `https://solscan.io` |
+| Avalanche Fuji | `https://testnet.snowtrace.io` |
 | Solana Devnet | `https://solscan.io` with `?cluster=devnet` |
 
 Formats:

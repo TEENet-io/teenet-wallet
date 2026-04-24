@@ -77,10 +77,25 @@ func main() {
 	maxWalletsPerUser      := envOrDefaultInt("MAX_WALLETS_PER_USER", 10)
 	maxAPIKeysPerUser      := envOrDefaultInt("MAX_API_KEYS_PER_USER", 10)
 	maxUsers               := envOrDefaultInt("MAX_USERS", 500)
+	alphaMode              := envOrDefaultBool("ALPHA_MODE", false)
 	approvalExpiry         := time.Duration(approvalExpiryMinutes) * time.Minute
 
 	// Load chain configuration.
 	model.LoadChains(chainsFile)
+
+	// ALPHA_MODE gates the public alpha deployment to testnet-only.
+	// chains.json is the full capability list; this filter drops any chain
+	// whose `testnet` field is not true, so /api/chains only exposes testnets
+	// and wallet creation for mainnet chains falls through to the existing
+	// "unsupported chain" error.
+	if alphaMode {
+		removed, kept := model.RemoveNonTestnetChains()
+		slog.Info("ALPHA_MODE enabled: non-testnet chains removed",
+			"chains_removed", removed, "chains_remaining", kept)
+		if kept == 0 {
+			slog.Warn("ALPHA_MODE left the chain registry empty — check that chains.json marks testnet chains with \"testnet\": true")
+		}
+	}
 
 	// Init SQLite DB.
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
@@ -471,6 +486,7 @@ func main() {
 		"base_url", baseURL,
 		"chains_file", chainsFile,
 		"chains_loaded", model.ChainsLen(),
+		"alpha_mode", alphaMode,
 		"approval_expiry_minutes", approvalExpiryMinutes,
 		"max_wallets_per_user", maxWalletsPerUser,
 		"max_api_keys_per_user", maxAPIKeysPerUser,
@@ -522,6 +538,17 @@ func envOrDefaultInt(key string, def int) int {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
+	}
+	return def
+}
+
+func envOrDefaultBool(key string, def bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch v {
+	case "1", "t", "true", "y", "yes", "on":
+		return true
+	case "0", "f", "false", "n", "no", "off":
+		return false
 	}
 	return def
 }
