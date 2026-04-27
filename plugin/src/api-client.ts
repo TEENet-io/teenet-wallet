@@ -337,16 +337,16 @@ export class WalletAPI {
 
   // ── Contracts ────────────────────────────────────────────────────────────
 
-  async listContracts(walletId: string): Promise<ContractEntry[]> {
+  async listContracts(chain: string): Promise<ContractEntry[]> {
     const data = await this.request<{ contracts: ContractEntry[] }>(
       "GET",
-      `/api/wallets/${walletId}/contracts`
+      `/api/chains/${chain}/contracts`
     );
     return data.contracts;
   }
 
   async addContract(
-    walletId: string,
+    chain: string,
     contractAddress: string,
     symbol?: string,
     decimals?: number,
@@ -358,19 +358,19 @@ export class WalletAPI {
     if (label !== undefined) body.label = label;
     return this.request<MutationResult>(
       "POST",
-      `/api/wallets/${walletId}/contracts`,
+      `/api/chains/${chain}/contracts`,
       body
     );
   }
 
   async updateContract(
-    walletId: string,
+    chain: string,
     contractId: number,
     updates: { label: string }
   ): Promise<MutationResult> {
     return this.request<MutationResult>(
       "PUT",
-      `/api/wallets/${walletId}/contracts/${contractId}`,
+      `/api/chains/${chain}/contracts/${contractId}`,
       updates
     );
   }

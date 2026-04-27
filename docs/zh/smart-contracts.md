@@ -4,14 +4,14 @@
 
 合约白名单是安全门控：所有合约调用（包括 ERC-20/SPL 代币转账）都必须先将目标合约/铸造地址/程序 ID 加入白名单。
 
-> **作用范围：** 白名单按 **用户 + 链** 划分,不按 wallet 划分。同一用户在同一条链上的所有 wallet **共享同一份白名单**,删除某个 wallet 也**不会**移除其白名单条目。URL 中的 wallet ID 仅用于推导所属链。
+> **作用范围：** 白名单按 **用户 + 链** 划分，与 wallet 无关。同一用户在同一条链上的所有 wallet **共享同一份白名单**；即便链上还没有任何 wallet，也可以管理该链的白名单。删除 wallet 不会移除其所在链的白名单条目。
 >
 > **作用边界：** 白名单只负责准入控制，只决定“能不能调用这个合约/程序”。它不会自动放行具体方法，也不会绕过 API Key 合约操作所需的 Passkey 审批。
 
 **列出白名单合约：**
 
 ```bash
-curl -s "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
+curl -s "${TEE_WALLET_URL}/api/chains/${CHAIN}/contracts" \
   -H "Authorization: Bearer ${API_KEY}"
 ```
 
@@ -19,7 +19,7 @@ curl -s "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
 
 ```bash
 # 通过 API Key 添加（创建待审批请求，返回 HTTP 202）
-curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
+curl -s -X POST "${TEE_WALLET_URL}/api/chains/${CHAIN}/contracts" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -29,6 +29,8 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
     "label": "USDC Stablecoin"
   }'
 ```
+
+`${CHAIN}` 是链名（如 `sepolia`、`base`、`solana-devnet`）。
 
 通过 API Key 添加返回 202，表示需要 Passkey 所有者审批：
 
@@ -46,7 +48,7 @@ curl -s -X POST "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts" \
 **更新白名单条目：**
 
 ```bash
-curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts/${CONTRACT_ID}" \
+curl -s -X PUT "${TEE_WALLET_URL}/api/chains/${CHAIN}/contracts/${CONTRACT_ID}" \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -59,7 +61,7 @@ curl -s -X PUT "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts/${CONTRACT_
 **删除白名单条目（仅 Passkey）：**
 
 ```bash
-curl -s -X DELETE "${TEE_WALLET_URL}/api/wallets/${WALLET_ID}/contracts/${CONTRACT_ID}" \
+curl -s -X DELETE "${TEE_WALLET_URL}/api/chains/${CHAIN}/contracts/${CONTRACT_ID}" \
   -H "Authorization: Bearer ps_session_token" \
   -H "X-CSRF-Token: csrf_token_value"
 ```

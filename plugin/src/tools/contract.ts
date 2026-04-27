@@ -14,24 +14,24 @@ export function registerContractTools(
 ) {
   registerTool({
     name: "teenet_wallet_list_contracts",
-    description: "List all whitelisted token contracts for a wallet (ERC-20 tokens or SPL mints).",
-    parameters: Type.Object({ wallet_id: Type.String({ description: "Wallet UUID" }) }),
-    async execute(_id: string, params: any) { return jsonResult(await api.listContracts(params.wallet_id)); },
+    description: "List all whitelisted token contracts on a chain (ERC-20 tokens or SPL mints). The whitelist is per (user, chain) — independent of any wallet.",
+    parameters: Type.Object({ chain: Type.String({ description: "Chain name (e.g. 'sepolia', 'base', 'solana-devnet')" }) }),
+    async execute(_id: string, params: any) { return jsonResult(await api.listContracts(params.chain)); },
   });
 
   registerTool((ctx: ToolContext) => ({
     name: "teenet_wallet_add_contract",
-    description: "Add a token contract to the wallet's whitelist. May return pending_approval if the operation requires Passkey approval.",
+    description: "Add a token contract to the chain's whitelist. The whitelist is per (user, chain) — no wallet required. May return pending_approval if the operation requires Passkey approval.",
     parameters: Type.Object({
-      wallet_id: Type.String({ description: "Wallet UUID" }),
+      chain: Type.String({ description: "Chain name (e.g. 'sepolia', 'base', 'solana-devnet')" }),
       contract_address: Type.String({ description: "Token contract address (ERC-20) or mint address (SPL)" }),
       symbol: Type.Optional(Type.String({ description: "Token symbol (e.g. USDC)" })),
       decimals: Type.Optional(Type.Number({ description: "Token decimals (e.g. 6 for USDC)" })),
       label: Type.Optional(Type.String({ description: "Optional human-readable label" })),
     }),
     async execute(_id: string, params: any) {
-      const result = await api.addContract(params.wallet_id, params.contract_address, params.symbol, params.decimals, params.label);
-      const context = `whitelist contract ${params.symbol || params.contract_address}${params.label ? ' (' + params.label + ')' : ''} on wallet ${params.wallet_id}`;
+      const result = await api.addContract(params.chain, params.contract_address, params.symbol, params.decimals, params.label);
+      const context = `whitelist contract ${params.symbol || params.contract_address}${params.label ? ' (' + params.label + ')' : ''} on ${params.chain}`;
       return approvalOrResult(result, getApprovalUrl, watcher, ctx?.sessionKey, context);
     },
   }));
@@ -40,12 +40,12 @@ export function registerContractTools(
     name: "teenet_wallet_update_contract",
     description: "Rename a whitelisted contract. Only the display label is editable; symbol and decimals are on-chain metadata and cannot be changed here. Applied immediately — no approval required.",
     parameters: Type.Object({
-      wallet_id: Type.String({ description: "Wallet UUID" }),
+      chain: Type.String({ description: "Chain name the contract was whitelisted on" }),
       contract_id: Type.Number({ description: "Contract whitelist entry ID" }),
       label: Type.String({ description: "New display label" }),
     }),
     async execute(_id: string, params: any) {
-      return jsonResult(await api.updateContract(params.wallet_id, params.contract_id, { label: params.label }));
+      return jsonResult(await api.updateContract(params.chain, params.contract_id, { label: params.label }));
     },
   });
 

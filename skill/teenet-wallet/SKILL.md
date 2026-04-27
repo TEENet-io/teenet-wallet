@@ -121,7 +121,7 @@ If a wallet has a label, show `label · shortened_address`.
 
 - **Native balance**: `GET /api/wallets/<id>/balance`
   - Returns native gas token only: ETH / SOL / etc.
-- **Whitelisted contracts**: `GET /api/wallets/<id>/contracts`
+- **Whitelisted contracts**: `GET /api/chains/<chain>/contracts`
 - **Read token balances on EVM**: `POST /api/wallets/<id>/call-read`
   - Body:
 
@@ -176,7 +176,7 @@ Also uses `POST /api/wallets/<id>/transfer`, but **must** include `token`:
 ```
 
 Rules:
-- first check whitelist via `GET /api/wallets/<id>/contracts`
+- first check whitelist via `GET /api/chains/<chain>/contracts` (the wallet's chain)
 - if not whitelisted, add it first
 - amount is in human units, not wei/lamports
 - on Solana, the backend auto-creates the recipient ATA if needed
@@ -190,9 +190,15 @@ Common testnet tokens:
 
 ### Contract Whitelist
 
-- **List**: `GET /api/wallets/<id>/contracts`
-- **Add**: `POST /api/wallets/<id>/contracts`
-- **Rename**: `PUT /api/wallets/<id>/contracts/<cid>` (label only)
+The whitelist is keyed per **(user, chain)** — independent of any wallet —
+so the chain-scoped routes are the canonical form. A user can manage the
+whitelist on a chain whether or not they own a wallet there.
+
+- **List**: `GET /api/chains/<chain>/contracts`
+- **Add**: `POST /api/chains/<chain>/contracts`
+- **Rename**: `PUT /api/chains/<chain>/contracts/<cid>` (label only)
+
+`<chain>` is the chain name (e.g. `sepolia`, `base`, `solana-devnet`).
 
 Add body:
 
@@ -214,7 +220,6 @@ they need to change):
 ```
 
 Rules:
-- whitelist is scoped per **user + chain**, not per wallet
 - API-key add creates a pending approval; passkey add applies immediately
 - rename (label update) applies immediately under **both** auth modes — no approval required, because the label is display-only and has no effect on transfer semantics
 - remove entries in the Web UI only

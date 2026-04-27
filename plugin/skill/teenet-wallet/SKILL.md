@@ -134,14 +134,18 @@ Common testnet tokens:
 
 ### Contract Whitelist
 
+The whitelist is keyed per **(user, chain)** — independent of any wallet —
+so all three tools take a `chain` argument (e.g. `sepolia`, `base`,
+`solana-devnet`). A user can manage the whitelist on a chain whether or
+not they own a wallet there.
+
 | Tool | Purpose |
 |------|---------|
-| `teenet_wallet_list_contracts` | List whitelisted contracts/tokens |
-| `teenet_wallet_add_contract` | Whitelist a token/contract (needs approval) |
+| `teenet_wallet_list_contracts` | List whitelisted contracts/tokens on a chain |
+| `teenet_wallet_add_contract` | Whitelist a token/contract on a chain (needs approval) |
 | `teenet_wallet_update_contract` | Rename a whitelisted contract (label only; applied immediately, no approval) |
 
 Rules:
-- whitelist is scoped per **user + chain**, not per wallet
 - remove entries in the Web UI only
 - applies to EVM token contracts, Solana mints, and Solana program IDs
 

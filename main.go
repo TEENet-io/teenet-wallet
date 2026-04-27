@@ -402,11 +402,18 @@ func main() {
 	passkeyOnly.PATCH("/auth/apikey", authH.RenameAPIKey)
 
 	// Contract whitelist (dual-auth for read, Passkey-only for write).
+	// Two route shapes share one handler:
+	//   /api/chains/:chain/...     — preferred, matches the (user, chain) data model
+	//   /api/wallets/:id/...       — legacy, kept for the agent SDK / skill docs
 	contractH := handler.NewContractHandler(db, sdkClient, baseURL, approvalExpiry)
 	auth.GET("/wallets/:id/contracts", contractH.ListContracts)
 	auth.POST("/wallets/:id/contracts", contractH.AddContract)           // passkey: direct; apikey: pending approval
 	auth.PUT("/wallets/:id/contracts/:cid", contractH.UpdateContract)    // passkey: direct; apikey: pending approval
 	passkeyOnly.DELETE("/wallets/:id/contracts/:cid", contractH.DeleteContract)
+	auth.GET("/chains/:chain/contracts", contractH.ListContractsByChain)
+	auth.POST("/chains/:chain/contracts", contractH.AddContractByChain)
+	auth.PUT("/chains/:chain/contracts/:cid", contractH.UpdateContractByChain)
+	passkeyOnly.DELETE("/chains/:chain/contracts/:cid", contractH.DeleteContractByChain)
 
 	// Address book (dual-auth for read/add/update, Passkey-only for delete).
 	abH := handler.NewAddressBookHandler(db, sdkClient, baseURL, approvalExpiry)

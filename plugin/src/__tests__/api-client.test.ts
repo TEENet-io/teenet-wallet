@@ -127,9 +127,9 @@ describe("WalletAPI", () => {
 
     try {
       const api = new WalletAPI({ apiUrl: server.url, apiKey: "ocw_test" });
-      await api.updateContract("wallet-xyz", 42, { label: "renamed" });
+      await api.updateContract("sepolia", 42, { label: "renamed" });
       assert.equal(receivedMethod, "PUT");
-      assert.equal(receivedPath, "/api/wallets/wallet-xyz/contracts/42");
+      assert.equal(receivedPath, "/api/chains/sepolia/contracts/42");
       const body = JSON.parse(receivedBody);
       assert.deepEqual(Object.keys(body).sort(), ["label"]);
       assert.equal(body.label, "renamed");

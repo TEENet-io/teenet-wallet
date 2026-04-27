@@ -6,7 +6,7 @@
 |---------------|-------|----------|
 | `insufficient funds` | Wallet balance too low for the transfer plus gas | Check balance with `GET /api/wallets/:id/balance`. For ETH transfers, allow approximately 0.0005 ETH for gas. |
 | `daily spend limit exceeded` | Cumulative USD spend for the day has reached the daily limit | Wait until UTC midnight for the limit to reset, or adjust the policy via Passkey. |
-| `contract not whitelisted` | The contract address, token mint, or program ID is not in the wallet's whitelist | Add it via `POST /api/wallets/:id/contracts` (API key creates a pending approval) or through the web UI for instant approval. |
+| `contract not whitelisted` | The contract address, token mint, or program ID is not in the chain's whitelist | Add it via `POST /api/chains/:chain/contracts` (API key creates a pending approval) or through the web UI for instant approval. |
 | `contract operations require passkey approval` | Contract call via API key requires human confirmation | The wallet owner must approve the pending request via Passkey in the web UI. |
 | `wallet is not ready` | The wallet is still in the `creating` state (DKG in progress) | Wait 1-2 minutes for ECDSA key generation to complete, then retry. |
 | `invalid API key` | The provided API key is not valid or has been revoked | Verify the `Authorization` header value. Generate a new key if needed. |

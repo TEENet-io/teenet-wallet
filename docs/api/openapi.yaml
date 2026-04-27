@@ -120,6 +120,14 @@ components:
         type: integer
       description: Allowed contract record ID
       example: 42
+    ChainName:
+      name: chain
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Chain name (e.g. `sepolia`, `base`, `solana-devnet`).
+      example: "sepolia"
     ApprovalId:
       name: id
       in: path
@@ -1924,15 +1932,17 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   # ──────────────────────── Contracts ────────────────────────
-  /api/wallets/{id}/contracts:
+  # The whitelist is keyed per (user, chain) — independent of any wallet.
+  # Manage it on any configured chain whether or not a wallet exists there.
+  /api/chains/{chain}/contracts:
     get:
       tags: [Contracts]
-      summary: List whitelisted contracts
+      summary: List whitelisted contracts on a chain
       operationId: listContracts
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/ChainName"
       responses:
         "200":
           description: Contract list
@@ -1954,25 +1964,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "404":
-          description: Wallet not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
 
     post:
       tags: [Contracts]
-      summary: Add a contract to the whitelist
+      summary: Add a contract to the chain's whitelist
       description: |
-        Whitelists a contract address for a wallet.
+        Whitelists a contract address on a chain. No wallet required —
+        the whitelist is keyed per (user, chain).
         - **Passkey session**: applied immediately (requires fresh credential).
         - **API key**: creates a pending approval for the Passkey owner to review.
       operationId: addContract
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/ChainName"
         - $ref: "#/components/parameters/CSRFToken"
       requestBody:
         required: true
@@ -2055,7 +2060,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /api/wallets/{id}/contracts/{cid}:
+  /api/chains/{chain}/contracts/{cid}:
     put:
       tags: [Contracts]
       summary: Rename a whitelisted contract
@@ -2073,7 +2078,7 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/ChainName"
         - $ref: "#/components/parameters/ContractId"
         - $ref: "#/components/parameters/CSRFToken"
       requestBody:
@@ -2127,7 +2132,7 @@ paths:
       security:
         - PasskeySession: []
       parameters:
-        - $ref: "#/components/parameters/WalletId"
+        - $ref: "#/components/parameters/ChainName"
         - $ref: "#/components/parameters/ContractId"
         - $ref: "#/components/parameters/CSRFToken"
       requestBody:

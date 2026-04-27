@@ -48,6 +48,10 @@ func mockETHRPCServer(t *testing.T) *httptest.Server {
 			result = "0x1" // mainnet
 		case "eth_estimateGas":
 			result = "0xEA60" // 60000 gas
+		case "eth_getBalance":
+			// 1000 ETH — large enough to satisfy any pre-flight balance check
+			// the wallet handler does before approval/policy logic kicks in.
+			result = "0x3635c9adc5dea00000"
 		default:
 			result = nil
 		}
@@ -81,6 +85,8 @@ func mockETHRPCServerEstimateRevert(t *testing.T, revertMsg string) *httptest.Se
 			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": "0x1"})
 		case "eth_estimateGas":
 			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "error": map[string]interface{}{"code": 3, "message": "execution reverted: " + revertMsg}})
+		case "eth_getBalance":
+			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": "0x3635c9adc5dea00000"}) // 1000 ETH
 		default:
 			json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": 1, "result": nil})
 		}
@@ -110,6 +116,12 @@ func mockSOLRPCServer(t *testing.T) *httptest.Server {
 					"blockhash":            "11111111111111111111111111111111",
 					"lastValidBlockHeight": 9999,
 				},
+			}
+		case "getBalance":
+			// 1000 SOL = 1e12 lamports — sufficient for any pre-flight balance check.
+			result = map[string]interface{}{
+				"context": map[string]interface{}{"slot": 1234},
+				"value":   1000000000000,
 			}
 		default:
 			result = nil

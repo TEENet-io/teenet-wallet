@@ -4,21 +4,21 @@
 
 Before calling any smart contract, the contract address (EVM), token mint (SPL), or program ID (Solana) must be added to the contract whitelist.
 
-> **Scope:** the whitelist is **per user + chain**, not per wallet. All wallets you own on the same chain share a single whitelist, and deleting a wallet does **not** remove its whitelist entries. The wallet ID in the URL is only used to derive the chain.
+> **Scope:** the whitelist is **per user + chain**, not per wallet. All wallets you own on the same chain share a single whitelist, and you can manage a chain's whitelist whether or not you own a wallet there. Deleting a wallet does **not** remove its chain's whitelist entries.
 >
 > **Role:** the whitelist is admission control only. It decides whether a contract or program can be called at all. It does not auto-approve methods or bypass Passkey approval for API-key-initiated contract operations.
 
 **List whitelisted contracts:**
 
 ```bash
-curl -s ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts \
+curl -s ${TEE_WALLET_URL}/api/chains/CHAIN/contracts \
   -H "Authorization: Bearer ${API_KEY}"
 ```
 
 **Add a contract via API key** (creates a pending approval):
 
 ```bash
-curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts \
+curl -s -X POST ${TEE_WALLET_URL}/api/chains/CHAIN/contracts \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -28,6 +28,8 @@ curl -s -X POST ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts \
     "label": "USD Coin"
   }'
 ```
+
+`CHAIN` is the chain name (e.g. `sepolia`, `base`, `solana-devnet`).
 
 A `202` response means the request needs Passkey approval:
 
@@ -47,7 +49,7 @@ The same endpoint returns `201` when called with a Passkey session, and the cont
 **Update a contract configuration:**
 
 ```bash
-curl -s -X PUT ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
+curl -s -X PUT ${TEE_WALLET_URL}/api/chains/CHAIN/contracts/CONTRACT_ID \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"label": "USDC v2", "symbol": "USDC", "decimals": 6}'
@@ -56,7 +58,7 @@ curl -s -X PUT ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
 **Remove a contract** (Passkey only):
 
 ```bash
-curl -s -X DELETE ${TEE_WALLET_URL}/api/wallets/WALLET_ID/contracts/CONTRACT_ID \
+curl -s -X DELETE ${TEE_WALLET_URL}/api/chains/CHAIN/contracts/CONTRACT_ID \
   -H "Authorization: Bearer ps_${SESSION_TOKEN}" \
   -H "X-CSRF-Token: ${CSRF_TOKEN}"
 ```

@@ -684,6 +684,17 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 		return
 	}
 
+	// Native amount that must be available for this transfer (in the
+	// chain's smallest unit — wei or lamports). Set per branch below;
+	// nil means "skip the pre-check" (e.g. unsupported family path).
+	// For native transfers this is value + max gas/fee. For token
+	// transfers value is 0 — we only verify the wallet has enough
+	// native to cover gas/fee (token-balance checks are separate).
+	var nativeRequired *big.Int
+	// gasOnly distinguishes the user-facing message: token transfers
+	// fail with "insufficient ETH for gas", not "insufficient USDC".
+	var gasOnly bool
+
 	switch chainCfg.Family {
 	case "evm":
 		// Serialize EVM fetch-nonce → sign → broadcast for this address so
@@ -751,6 +762,8 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 				currency = strings.ToUpper(req.Token.Symbol)
 			}
 			txType = "erc20_transfer"
+			nativeRequired = ethGasCost(txData.Params)
+			gasOnly = true
 		} else {
 			txData, err := chain.BuildETHTx(rpcURL, wallet.Address, req.To, amount)
 			if err != nil {
@@ -767,6 +780,8 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txParamsJSON = string(b)
 			currency = chainCfg.Currency
+			valueWei, _ := new(big.Int).SetString(txData.Params.Value, 10)
+			nativeRequired = new(big.Int).Add(valueWei, ethGasCost(txData.Params))
 		}
 
 	case "solana":
@@ -817,6 +832,8 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txType = "spl_transfer"
 			tokenContractAddr = mintAddr
+			nativeRequired = new(big.Int).SetUint64(solBaselineFeeLamports)
+			gasOnly = true
 		} else {
 			if _, err := chain.Base58Decode(req.To); err != nil {
 				jsonError(c, http.StatusBadRequest, "invalid Solana address")
@@ -843,11 +860,30 @@ func (h *WalletHandler) Transfer(c *gin.Context) {
 			}
 			txParamsJSON = string(b)
 			currency = chainCfg.Currency
+			nativeRequired = new(big.Int).SetUint64(lamports + solBaselineFeeLamports)
 		}
 
 	default:
 		jsonError(c, http.StatusBadRequest, "unsupported chain: "+wallet.Chain)
 		return
+	}
+
+	// Pre-flight native-balance check. Catches "have 0 ETH for gas" or
+	// "transferring more than I own" synchronously, before the request
+	// gets routed into the approval queue (where it would otherwise sit
+	// pending until a user approves a transaction destined to fail at
+	// broadcast). RPC error → log and fall through; downstream broadcast
+	// will surface its own error and we don't want a flaky RPC to block
+	// transfers on its own.
+	if nativeRequired != nil {
+		if err := preflightNativeBalance(chainCfg, wallet.Address, rpcURL, nativeRequired, gasOnly); err != nil {
+			var insuf *insufficientNativeError
+			if errors.As(err, &insuf) {
+				jsonError(c, http.StatusBadRequest, insuf.Error())
+				return
+			}
+			slog.Warn("balance pre-check skipped: RPC error", "wallet_id", wallet.ID, "chain", wallet.Chain, "error", err)
+		}
 	}
 
 	txContext := map[string]interface{}{
@@ -1596,4 +1632,70 @@ func buildApprovalMessage(txCtx map[string]interface{}, wallet model.Wallet) str
 		return fmt.Sprintf("ERC-20 transfer %s %s from %s to %s (contract: %s) requires approval", amount, currency, from, to, contract)
 	}
 	return fmt.Sprintf("Transfer %s %s from %s to %s requires approval", amount, currency, from, to)
+}
+
+// ── Pre-flight balance check ────────────────────────────────────────────────
+
+// solBaselineFeeLamports is the conservative per-signature baseline used
+// when sizing the SOL native-balance pre-check. Real fees vary with
+// priority fees, but 5000 covers the default no-priority case and that
+// is enough to catch "wallet has 0 SOL" without false positives.
+const solBaselineFeeLamports uint64 = 5000
+
+// ethGasCost returns the worst-case wei cost for a tx (gasLimit *
+// maxFeePerGas, ignoring priority-fee refund). Returns zero on parse
+// failure so the caller still gets a usable big.Int.
+func ethGasCost(p chain.ETHTxParams) *big.Int {
+	maxFee, ok := new(big.Int).SetString(p.MaxFeePerGas, 10)
+	if !ok {
+		return new(big.Int)
+	}
+	return new(big.Int).Mul(maxFee, new(big.Int).SetUint64(p.GasLimit))
+}
+
+// insufficientNativeError carries a user-facing message describing how
+// short the wallet is. Returned by preflightNativeBalance when the
+// on-chain balance is below requirement; everything else (RPC errors,
+// parse failures) is returned as a plain error so the caller can choose
+// to ignore it.
+type insufficientNativeError struct{ msg string }
+
+func (e *insufficientNativeError) Error() string { return e.msg }
+
+// preflightNativeBalance compares the wallet's on-chain native balance
+// against `required` (in the chain's smallest unit — wei or lamports).
+// gasOnly switches the user-facing message between value+gas and
+// gas-only failure modes.
+func preflightNativeBalance(chainCfg model.ChainConfig, walletAddr, rpcURL string, required *big.Int, gasOnly bool) error {
+	bal, balErr := chain.GetBalance(chainCfg.Family, walletAddr, rpcURL, chainCfg.Name, chainCfg.Currency)
+	if balErr != nil {
+		return balErr
+	}
+	have, ok := new(big.Int).SetString(bal.Raw, 10)
+	if !ok {
+		return fmt.Errorf("balance pre-check: parse balance %q", bal.Raw)
+	}
+	if have.Cmp(required) >= 0 {
+		return nil
+	}
+	var divisor *big.Float
+	switch chainCfg.Family {
+	case "evm":
+		divisor = new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	case "solana":
+		divisor = new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(9), nil))
+	default:
+		divisor = big.NewFloat(1)
+	}
+	haveStr := new(big.Float).Quo(new(big.Float).SetInt(have), divisor).Text('f', 8)
+	needStr := new(big.Float).Quo(new(big.Float).SetInt(required), divisor).Text('f', 8)
+	cur := chainCfg.Currency
+	if gasOnly {
+		return &insufficientNativeError{
+			msg: fmt.Sprintf("insufficient %s for gas: have %s, need %s", cur, haveStr, needStr),
+		}
+	}
+	return &insufficientNativeError{
+		msg: fmt.Sprintf("insufficient balance: have %s %s, need %s %s (value + gas)", haveStr, cur, needStr, cur),
+	}
 }

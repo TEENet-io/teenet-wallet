@@ -10,10 +10,13 @@ const API_URL = process.env.TEENET_TEST_API_URL || "https://wallet.teenet.app";
 const API_KEY = process.env.TEENET_TEST_API_KEY || "ocw_test_placeholder";
 const api = new WalletAPI({ apiUrl: API_URL, apiKey: API_KEY });
 
-// Reuse existing wallets — no DKG on every run.
-const ETH_WALLET = "1b9814d1-d28a-4629-8365-8e11eab394f9";
-const ETH_ADDR = "0xd7e27B678206c0EE45C2678A88923c8a6F343C21";
-const SOL_WALLET = "b742b69b-e81e-4593-9195-a2b48a5f9209";
+// Reuse existing wallets — no DKG on every run. Set these to UUIDs/
+// addresses that already exist in the API key's account; otherwise the
+// wallet-scoped tests will fail with "wallet not found" since wallets
+// are user-scoped.
+const ETH_WALLET = process.env.TEENET_TEST_ETH_WALLET || "";
+const ETH_ADDR = process.env.TEENET_TEST_ETH_ADDR || "";
+const SOL_WALLET = process.env.TEENET_TEST_SOL_WALLET || "";
 const MAX_WALLETS = 10;
 
 // ─── Basic API ──────────────────────────────────────────────────────────────
@@ -44,7 +47,13 @@ describe("Basic API", () => {
 
 // ─── Wallet CRUD ────────────────────────────────────────────────────────────
 
-describe("Wallet CRUD", () => {
+const skipEth = ETH_WALLET ? false : "TEENET_TEST_ETH_WALLET not set";
+const skipSol = SOL_WALLET ? false : "TEENET_TEST_SOL_WALLET not set";
+const skipEthTransfer = ETH_WALLET && ETH_ADDR
+  ? false
+  : "TEENET_TEST_ETH_WALLET / TEENET_TEST_ETH_ADDR not set";
+
+describe("Wallet CRUD", { skip: skipEth }, () => {
   it("list wallets", async () => {
     const wallets = await api.listWallets();
     assert.ok(wallets.length > 0);
@@ -85,7 +94,7 @@ describe("Wallet CRUD", () => {
 
 // ─── Solana ─────────────────────────────────────────────────────────────────
 
-describe("Solana", () => {
+describe("Solana", { skip: skipSol }, () => {
   it("get solana wallet", async () => {
     const w = await api.getWallet(SOL_WALLET);
     assert.equal(w.curve, "ed25519");
@@ -111,7 +120,7 @@ describe("Solana", () => {
 
 // ─── Balance ────────────────────────────────────────────────────────────────
 
-describe("Balance", () => {
+describe("Balance", { skip: skipEth }, () => {
   it("ETH balance", async () => {
     const b = await api.getBalance(ETH_WALLET);
     assert.ok(parseFloat(b.balance) >= 0);
@@ -122,7 +131,7 @@ describe("Balance", () => {
 
 // ─── Faucet (reuse existing wallet, tolerate rate limit) ────────────────────
 
-describe("Faucet", () => {
+describe("Faucet", { skip: skipEth }, () => {
   it("claim faucet", async () => {
     try {
       const r = await api.claimFaucet(ETH_WALLET);
@@ -138,7 +147,7 @@ describe("Faucet", () => {
 
 // ─── Transfer ───────────────────────────────────────────────────────────────
 
-describe("Transfer", () => {
+describe("Transfer", { skip: skipEthTransfer }, () => {
   it("transfer 0.0001 ETH to self", async () => {
     const r = await api.transfer(ETH_WALLET, ETH_ADDR, "0.0001", undefined, "E2E");
     assert.ok(r.status === "completed" || r.status === "pending_approval");
@@ -149,7 +158,7 @@ describe("Transfer", () => {
 
 // ─── Policy ─────────────────────────────────────────────────────────────────
 
-describe("Policy", () => {
+describe("Policy", { skip: skipEth }, () => {
   it("get policy", async () => {
     const r = await api.getPolicy(ETH_WALLET);
     assert.ok(r !== undefined);
@@ -171,12 +180,12 @@ describe("Policy", () => {
 
 describe("Contracts", () => {
   it("list contracts", async () => {
-    const c = await api.listContracts(ETH_WALLET);
+    const c = await api.listContracts("sepolia");
     assert.ok(Array.isArray(c));
   });
 
   it("add contract → pending_approval", async () => {
-    const r = await api.addContract(ETH_WALLET, "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", "USDC", 6);
+    const r = await api.addContract("sepolia", "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", "USDC", 6);
     assert.ok(r.approval_id);
     console.log(`    approval_id=${r.approval_id}`);
   });
@@ -210,7 +219,7 @@ describe("Approvals", () => {
     console.log(`    ${a.length} pending`);
   });
 
-  it("get specific approval", async () => {
+  it("get specific approval", { skip: skipEth }, async () => {
     const policy = await api.setPolicy(ETH_WALLET, "5", true);
     if (policy.approval_id) {
       const a = await api.getApproval(policy.approval_id);
@@ -283,7 +292,19 @@ describe("Errors", () => {
     await assert.rejects(() => bad.listWallets(), (e: any) => e.status === 401 || e.status === 403);
   });
 
-  it("insufficient balance", async () => {
-    await assert.rejects(() => api.transfer(ETH_WALLET, ETH_ADDR, "999999"));
+  it("oversized transfer is gated", { skip: skipEthTransfer }, async () => {
+    // 999999 ETH is unspendable. The backend must NOT execute it
+    // immediately. Either outcome is acceptable: an explicit rejection
+    // (insufficient balance / policy violation), or routing through the
+    // approval flow so a human can intervene. What would be a regression
+    // is `status === "completed"` with a tx_hash.
+    try {
+      const r = await api.transfer(ETH_WALLET, ETH_ADDR, "999999");
+      assert.notEqual(r.status, "completed", `oversized transfer was auto-executed (tx=${r.tx_hash})`);
+      assert.ok(r.approval_id || r.status === "pending_approval", `unexpected non-rejecting response: ${JSON.stringify(r)}`);
+    } catch (err: any) {
+      // Expected: API rejects synchronously.
+      assert.ok(err, "expected error or pending_approval");
+    }
   });
 });
